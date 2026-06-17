@@ -1,0 +1,78 @@
+import type { ScanResult, TradeResult, Settings, ChatMessage } from "./types";
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+  }
+  return data as T;
+}
+
+/** Strip the data-URL prefix and return { base64, mediaType }. */
+export function splitDataUrl(dataUrl: string): { base64: string; mediaType: string } {
+  const match = /^data:(.+);base64,(.*)$/.exec(dataUrl);
+  if (!match) throw new Error("Could not read image data.");
+  return { mediaType: match[1], base64: match[2] };
+}
+
+export function scanCard(dataUrl: string, settings: Settings): Promise<ScanResult> {
+  const { base64, mediaType } = splitDataUrl(dataUrl);
+  return postJson<ScanResult>("/api/scan", { imageBase64: base64, mediaType, settings });
+}
+
+export function evaluateTrade(
+  yourSide: string,
+  theirSide: string,
+  settings: Settings
+): Promise<TradeResult> {
+  return postJson<TradeResult>("/api/trade", { yourSide, theirSide, settings });
+}
+
+/** Streamed chat. Calls onDelta for each text chunk; resolves when done. */
+export async function streamChat(
+  messages: ChatMessage[],
+  settings: Settings,
+  cardContext: unknown,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, settings, cardContext }),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Chat failed (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+    for (const block of events) {
+      const lines = block.split("\n");
+      const eventLine = lines.find((l) => l.startsWith("event: "));
+      const dataLine = lines.find((l) => l.startsWith("data: "));
+      if (!eventLine || !dataLine) continue;
+      const event = eventLine.slice(7).trim();
+      const data = JSON.parse(dataLine.slice(6));
+      if (event === "delta") onDelta(data.text as string);
+      else if (event === "error") throw new Error(data.message || "Chat error");
+    }
+  }
+}
