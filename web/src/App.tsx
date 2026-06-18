@@ -48,7 +48,42 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const refreshingRef = useRef(false);
+
+  function toast(msg: string) {
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t, { id, msg }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
+  }
+
+  function exportData() {
+    const data = { version: 1, exportedAt: Date.now(), settings, saved, wishlist };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `card-scanner-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast("Backup downloaded");
+  }
+
+  function importData(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const d = JSON.parse(reader.result as string);
+        if (d.settings) setSettings({ ...defaultSettings, ...d.settings });
+        if (Array.isArray(d.saved)) setSaved(d.saved);
+        if (Array.isArray(d.wishlist)) setWishlist(d.wishlist);
+        toast("Data imported");
+      } catch {
+        toast("Couldn't read that backup file");
+      }
+    };
+    reader.readAsText(file);
+  }
 
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(BINDER_KEY, JSON.stringify(saved)); }, [saved]);
@@ -63,6 +98,7 @@ export default function App() {
       { id: uid(), savedAt: Date.now(), thumbnail: frontDataUrl || "", result, lastRefreshedAt: Date.now(), previousMid: null },
       ...prev,
     ]);
+    toast(`Saved ${result.player || "card"} to binder`);
   }
 
   function wishToBinder(item: WishItem) {
@@ -216,13 +252,19 @@ export default function App() {
           adding={adding}
         />
       )}
-      {view === "settings" && <SettingsView settings={settings} onChange={setSettings} />}
+      {view === "settings" && (
+        <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} />
+      )}
 
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 Ask a question</button>
 
       {chatOpen && (
         <ChatDrawer settings={settings} cardContext={lastResult} onClose={() => setChatOpen(false)} />
       )}
+
+      <div className="toasts">
+        {toasts.map((t) => <div className="toast" key={t.id}>{t.msg}</div>)}
+      </div>
     </div>
   );
 }

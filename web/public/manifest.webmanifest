@@ -1,0 +1,14 @@
+{
+  "name": "Card·Scanner — AI card appraiser",
+  "short_name": "CardScanner",
+  "description": "Scan trading cards for value, stats, condition flaws, and fair trades.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1320",
+  "theme_color": "#0e1320",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

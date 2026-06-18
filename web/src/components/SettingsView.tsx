@@ -1,12 +1,16 @@
+import { useRef } from "react";
 import type { Settings } from "../types";
 import { CATEGORIES, BLOCKABLE_CATEGORIES, LANGUAGES } from "../types";
 
 interface Props {
   settings: Settings;
   onChange: (s: Settings) => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
 }
 
-export default function SettingsView({ settings, onChange }: Props) {
+export default function SettingsView({ settings, onChange, onExport, onImport }: Props) {
+  const importRef = useRef<HTMLInputElement>(null);
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     onChange({ ...settings, [key]: value });
   }
@@ -185,10 +189,31 @@ export default function SettingsView({ settings, onChange }: Props) {
         />
       </label>
 
-      <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+      <p className="muted" style={{ fontSize: 13 }}>
         Tip: block specific brands or set names here in plain English — e.g. “never recommend
         anything from Panini.”
       </p>
+
+      <h3 style={{ marginTop: 18 }}>Backup &amp; restore</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Your binder, wishlist, and settings live in this browser. Export a backup file to move them
+        to another device or keep them safe.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn secondary small" onClick={onExport}>⬇ Export backup</button>
+        <button className="btn secondary small" onClick={() => importRef.current?.click()}>⬆ Import backup</button>
+        <input
+          ref={importRef}
+          type="file"
+          accept="application/json"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onImport(f);
+            e.target.value = "";
+          }}
+        />
+      </div>
     </div>
   );
 }
