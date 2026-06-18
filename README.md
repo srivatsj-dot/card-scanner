@@ -79,7 +79,14 @@ web/      Vite + React UI
 
 - **Scanning** uses Gemini vision with a JSON **structured output**
   (`responseSchema`), so results parse reliably.
-- **Chat** is **streamed** token-by-token over Server-Sent Events.
+- **Live data:** Google Search **grounding** is on by default, so player
+  outlook and values reflect current form and recent sales — not the model's
+  early-2025 training cutoff. Scans/trades run as two quick passes (grounded
+  research → structured formatting) since Gemini can't combine search with
+  strict JSON in one call. Disable with `CARD_SCANNER_GROUNDING=false` in
+  `.env` (faster, one fewer call, but stale knowledge).
+- **Chat** is **streamed** token-by-token over Server-Sent Events, also with
+  live grounding.
 
 Want a different model? Set `CARD_SCANNER_MODEL` in `.env` (e.g.
 `gemini-2.0-flash`). To switch providers entirely (Groq, Mistral, OpenRouter),

@@ -19,12 +19,23 @@ app.use(express.json({ limit: "25mb" }));
 
 const PORT = Number(process.env.PORT) || 8787;
 
+// Google Search grounding gives the model live data (current player form,
+// recent sale prices) instead of its early-2025 training knowledge. On by
+// default; set CARD_SCANNER_GROUNDING=false to disable (one fewer API call).
+const USE_GROUNDING = process.env.CARD_SCANNER_GROUNDING !== "false";
+
 const ALLOWED_MEDIA = new Set([
   "image/jpeg",
   "image/png",
   "image/gif",
   "image/webp",
 ]);
+
+type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function apiKeyGuard(res: Response): boolean {
   if (!hasApiKey) {
@@ -61,8 +72,55 @@ function parseJson<T>(text: string | undefined): T {
   return JSON.parse(cleaned) as T;
 }
 
+/** Pass 1: free-text analysis with live Google Search grounding. */
+async function groundedResearch(systemInstruction: string, parts: Part[]): Promise<string> {
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents: [{ role: "user", parts }],
+    config: {
+      systemInstruction:
+        systemInstruction +
+        `\n\nToday's date is ${today()}. Use Google Search to verify the subject's CURRENT form/standing and the card's CURRENT market value before you judge outlook or price — do not rely on memory for anything time-sensitive. Write a thorough plain-text analysis covering every point you'll later need.`,
+      tools: [{ googleSearch: {} }],
+    },
+  });
+  const text = response.text;
+  if (!text) throw new Error("The model returned an empty response.");
+  return text;
+}
+
+/** Pass 2: reshape a free-text analysis into the structured schema (no new facts). */
+async function structure<T>(systemInstruction: string, analysis: string, schema: unknown): Promise<T> {
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents:
+      "Convert the following analysis into the required JSON. Use only facts present in the analysis; do not invent new details.\n\n" +
+      analysis,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: schema as any,
+    },
+  });
+  return parseJson<T>(response.text);
+}
+
+/** Single-pass structured generation (used when grounding is disabled). */
+async function structuredDirect<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents: [{ role: "user", parts }],
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: schema as any,
+    },
+  });
+  return parseJson<T>(response.text);
+}
+
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, provider: "google-gemini", model: MODEL, hasApiKey });
+  res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey });
 });
 
 // --- Scan a card image -----------------------------------------------------
@@ -84,26 +142,30 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     return;
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { inlineData: { mimeType: mediaType, data: imageBase64 } },
-            { text: "Scan this trading card and return the full structured analysis." },
-          ],
-        },
-      ],
-      config: {
-        systemInstruction: scanSystemPrompt(settings || {}),
-        responseMimeType: "application/json",
-        responseSchema: scanSchema as any,
-      },
-    });
+  const sys = scanSystemPrompt(settings || {});
+  const imagePart: Part = { inlineData: { mimeType: mediaType, data: imageBase64 } };
 
-    res.json(parseJson(response.text));
+  try {
+    let result;
+    if (USE_GROUNDING) {
+      const analysis = await groundedResearch(sys, [
+        imagePart,
+        {
+          text:
+            "Identify this exact trading card (subject, set, year, card number, parallel, serial number, special edition). " +
+            "Then research the subject's current form/standing and recent comparable sale prices for this specific card. " +
+            "Summarize everything needed: value range, hidden insights, current outlook, and good comparable cards to trade toward.",
+        },
+      ]);
+      result = await structure(sys, analysis, scanSchema);
+    } else {
+      result = await structuredDirect(
+        sys,
+        [imagePart, { text: "Scan this trading card and return the full structured analysis." }],
+        scanSchema
+      );
+    }
+    res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -125,27 +187,27 @@ app.post("/api/trade", async (req: Request, res: Response) => {
     return;
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents:
-        `Evaluate this trade.\n\nWhat I give up (my side):\n${yourSide}\n\n` +
-        `What I receive (their side):\n${theirSide}`,
-      config: {
-        systemInstruction: tradeSystemPrompt(settings || {}),
-        responseMimeType: "application/json",
-        responseSchema: tradeSchema as any,
-      },
-    });
+  const sys = tradeSystemPrompt(settings || {});
+  const prompt =
+    `Evaluate this trade.\n\nWhat I give up (my side):\n${yourSide}\n\n` +
+    `What I receive (their side):\n${theirSide}`;
 
-    res.json(parseJson(response.text));
+  try {
+    let result;
+    if (USE_GROUNDING) {
+      const analysis = await groundedResearch(sys, [{ text: prompt }]);
+      result = await structure(sys, analysis, tradeSchema);
+    } else {
+      result = await structuredDirect(sys, [{ text: prompt }], tradeSchema);
+    }
+    res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
   }
 });
 
-// --- Streaming chat --------------------------------------------------------
+// --- Streaming chat (with live grounding) ----------------------------------
 app.post("/api/chat", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
 
@@ -178,7 +240,10 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         parts: [{ text: m.content }],
       })),
       config: {
-        systemInstruction: chatSystemPrompt(settings || {}, cardContext),
+        systemInstruction:
+          chatSystemPrompt(settings || {}, cardContext) +
+          `\n\nToday's date is ${today()}. When a question depends on current form, news, or prices, use Google Search rather than memory.`,
+        ...(USE_GROUNDING ? { tools: [{ googleSearch: {} }] } : {}),
       },
     });
 
@@ -197,7 +262,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`card-scanner API listening on http://localhost:${PORT}`);
-  console.log(`  provider: google-gemini  model: ${MODEL}`);
+  console.log(`  provider: google-gemini  model: ${MODEL}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
