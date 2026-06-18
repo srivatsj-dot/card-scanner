@@ -1,6 +1,7 @@
 export interface Settings {
   customInstructions: string;
   liveData: boolean;
+  language: string;
   minValue: number | null;
   maxValue: number | null;
   excludeMinorLeague: boolean;
@@ -27,9 +28,34 @@ export const CATEGORIES = [
 // Categories that can be blocked (everything except "Any").
 export const BLOCKABLE_CATEGORIES = CATEGORIES.filter((c) => c !== "Any");
 
+// Top ~20 most-spoken languages for translated results.
+export const LANGUAGES = [
+  "English",
+  "Mandarin Chinese",
+  "Hindi",
+  "Spanish",
+  "Arabic",
+  "French",
+  "Bengali",
+  "Portuguese",
+  "Russian",
+  "Indonesian",
+  "Japanese",
+  "German",
+  "Korean",
+  "Vietnamese",
+  "Turkish",
+  "Italian",
+  "Thai",
+  "Polish",
+  "Ukrainian",
+  "Dutch",
+] as const;
+
 export const defaultSettings: Settings = {
   customInstructions: "",
   liveData: true,
+  language: "English",
   minValue: null,
   maxValue: null,
   excludeMinorLeague: false,
@@ -108,6 +134,18 @@ export interface SavedCard {
   savedAt: number;
   thumbnail: string; // small JPEG data URL
   result: ScanResult;
+  lastRefreshedAt?: number; // when the value was last auto-refreshed
+  previousMid?: number | null; // prior mid value, to show ▲/▼ change
+}
+
+/** A card on the wishlist (wanted, with an estimated price). */
+export interface WishItem {
+  id: string;
+  addedAt: number;
+  text: string; // what the user typed
+  result?: ScanResult; // looked-up details/value
+  lastRefreshedAt?: number;
+  previousMid?: number | null;
 }
 
 export interface TradeResult {

@@ -1,6 +1,7 @@
 export interface Settings {
   customInstructions?: string;
   liveData?: boolean;
+  language?: string;
   minValue?: number | null;
   maxValue?: number | null;
   excludeMinorLeague?: boolean;
@@ -26,6 +27,14 @@ export function buildConstraints(settings: Settings): string {
   const lines: string[] = [];
   const currency = settings.currency || "USD";
   lines.push(`Report monetary values in ${currency}.`);
+
+  const lang = settings.language?.trim();
+  if (lang && lang.toLowerCase() !== "english") {
+    lines.push(
+      `LANGUAGE: Write ALL human-readable text (every summary, note, reason, verdict, label, and description) in ${lang}. ` +
+        `BUT keep these machine fields as exact English lowercase tokens, untranslated: "playerOutlook.trend" (one of rising, stable, declining, unknown) and "fairness" (one of fair, favors_you, favors_them, lopsided).`
+    );
+  }
 
   if (settings.sport && settings.sport.trim()) {
     lines.push(`The collector mainly follows: ${settings.sport.trim()}. Prefer trade ideas in that area when reasonable.`);

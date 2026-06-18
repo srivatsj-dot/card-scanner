@@ -22,6 +22,22 @@ export function makeThumbnail(dataUrl: string, max = 280): Promise<string> {
   });
 }
 
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function money(n: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: n >= 100 ? 0 : 2,
+    }).format(n);
+  } catch {
+    return `${currency} ${Math.round(n)}`;
+  }
+}
+
 import type { ScanResult } from "./types";
 
 /** Build a short text description of a saved card for the trade tool. */

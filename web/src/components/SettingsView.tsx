@@ -1,5 +1,5 @@
 import type { Settings } from "../types";
-import { CATEGORIES, BLOCKABLE_CATEGORIES } from "../types";
+import { CATEGORIES, BLOCKABLE_CATEGORIES, LANGUAGES } from "../types";
 
 interface Props {
   settings: Settings;
@@ -48,6 +48,15 @@ export default function SettingsView({ settings, onChange }: Props) {
           </select>
         </label>
       </div>
+
+      <label className="field">
+        <span>Results language</span>
+        <select value={settings.language} onChange={(e) => set("language", e.target.value)}>
+          {LANGUAGES.map((l) => (
+            <option key={l} value={l}>{l}</option>
+          ))}
+        </select>
+      </label>
 
       <div className="grid2">
         <label className="field">

@@ -89,11 +89,24 @@ button, input, textarea, select {
 
 .nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 4px;
+}
+
+.binder-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+.binder-controls select,
+.binder-controls input {
+  width: auto;
 }
 .nav button {
   background: transparent;
