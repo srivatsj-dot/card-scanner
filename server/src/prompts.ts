@@ -91,7 +91,9 @@ export function askSystemPrompt(settings: Settings): string {
 export function tradeSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +
-    `\n\nYou are evaluating whether a proposed trade is fair. Each side may contain MULTIPLE cards and/or photos of cards — identify any card shown in an image. "Your side" is everything the collector gives up; "their side" is everything they receive. Value each side as a package. Weigh estimated value AND forward-looking factors (player trajectory, scarcity, condition). For "fairness", use exactly one of: fair, favors_you, favors_them, lopsided ("favors_you" means the collector comes out ahead).` +
+    `\n\nYou are evaluating whether a proposed trade is fair. Each side may contain MULTIPLE cards and/or photos of cards — identify any card shown in an image. "Your side" is everything the collector GIVES UP (it leaves their collection — a cost). "Their side" is everything the collector RECEIVES (a gain). Value each side as a package, weighing estimated value AND forward-looking factors (player trajectory, scarcity, condition).` +
+    `\n\nDIRECTION IS CRITICAL AND EASY TO GET WRONG. A trade favors the collector ("favors_you") ONLY when what they RECEIVE (their side) is worth MORE than what they GIVE UP (your side) — i.e. they come out ahead. If they give up more than they receive, it "favors_them" (a bad deal for the collector), even when the card they're giving up is the better/more famous card. Worked example: giving up a $30 refractor to receive a $1 base card means the collector LOSES about $29 — that is "favors_them" (or "lopsided"), NEVER "favors_you".` +
+    `\n\nChoose "fairness" from exactly: fair (values roughly even), favors_you (collector gains clear value), favors_them (collector loses clear value), lopsided (very unequal in either direction). Make verdict, valueGapNote, reasoning, and suggestions all consistent with this direction — if the collector is overpaying, say so plainly and advise against it.` +
     buildConstraints(settings)
   );
 }
