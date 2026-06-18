@@ -3,6 +3,7 @@ import type { SavedCard } from "../types";
 import { money } from "../utils";
 import { makeT } from "../i18n";
 import ResultCard from "./ResultCard";
+import Sparkline from "./Sparkline";
 
 interface Props {
   saved: SavedCard[];
@@ -145,6 +146,11 @@ export default function BinderView({ saved, lang, onRemove, onClear, onRefresh, 
                 <div className="value-big" style={{ fontSize: 20 }}>
                   {money(r.estimatedValue.mid, r.estimatedValue.currency)}
                 </div>
+                {s.history && s.history.length >= 2 && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+                    <Sparkline points={s.history.map((h) => h.mid)} />
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
                   <button className="btn ghost small" onClick={() => setOpenId(open ? null : s.id)}>
                     {open ? "Hide" : "View"}

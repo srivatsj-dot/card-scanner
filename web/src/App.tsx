@@ -103,8 +103,17 @@ export default function App() {
   }, [settings.language]);
 
   function saveCard(result: ScanResult, frontDataUrl: string | undefined) {
+    const now = Date.now();
     setSaved((prev) => [
-      { id: uid(), savedAt: Date.now(), thumbnail: frontDataUrl || "", result, lastRefreshedAt: Date.now(), previousMid: null },
+      {
+        id: uid(),
+        savedAt: now,
+        thumbnail: frontDataUrl || "",
+        result,
+        lastRefreshedAt: now,
+        previousMid: null,
+        history: [{ t: now, mid: result.estimatedValue.mid }],
+      },
       ...prev,
     ]);
     toast(`Saved ${result.player || "card"} to binder`);
@@ -144,6 +153,7 @@ export default function App() {
     const stale = (t?: number) => force || !t || Date.now() - t > DAY_MS;
     let budget = force ? Infinity : AUTO_CAP;
     let first = true;
+    const movers: string[] = [];
     try {
       for (const card of saved) {
         if (budget <= 0) break;
@@ -153,10 +163,22 @@ export default function App() {
           if (!first) await sleep(REFRESH_GAP_MS);
           first = false;
           const fresh = await searchCard(describeCard(card.result), settings);
+          const prevMid = card.result.estimatedValue.mid;
+          const newMid = fresh.estimatedValue.mid;
+          if (prevMid > 0 && Math.abs(newMid - prevMid) / prevMid >= 0.15) {
+            movers.push(`${card.result.player || "A card"} ${newMid >= prevMid ? "▲" : "▼"}`);
+          }
+          const at = Date.now();
           setSaved((prev) =>
             prev.map((c) =>
               c.id === card.id
-                ? { ...c, previousMid: c.result.estimatedValue.mid, result: fresh, lastRefreshedAt: Date.now() }
+                ? {
+                    ...c,
+                    previousMid: c.result.estimatedValue.mid,
+                    result: fresh,
+                    lastRefreshedAt: at,
+                    history: [...(c.history || [{ t: c.savedAt, mid: c.result.estimatedValue.mid }]), { t: at, mid: newMid }].slice(-60),
+                  }
                 : c
             )
           );
@@ -182,6 +204,9 @@ export default function App() {
         } catch (e) {
           if (isRateLimit(e)) return;
         }
+      }
+      if (movers.length > 0) {
+        toast(`📈 ${movers.length} card${movers.length > 1 ? "s" : ""} moved 15%+: ${movers.slice(0, 3).join(", ")}`);
       }
     } finally {
       refreshingRef.current = false;

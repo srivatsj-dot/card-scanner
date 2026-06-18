@@ -143,6 +143,7 @@ export interface SavedCard {
   result: ScanResult;
   lastRefreshedAt?: number; // when the value was last auto-refreshed
   previousMid?: number | null; // prior mid value, to show ▲/▼ change
+  history?: { t: number; mid: number }[]; // value points over time, for the chart
 }
 
 /** A card on the wishlist (wanted, with an estimated price). */
