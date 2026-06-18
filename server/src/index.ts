@@ -85,33 +85,20 @@ const ANALYZE_TEMPERATURE = 0.2;
 const NO_THINKING = { thinkingBudget: 0 } as const;
 const MAX_OUTPUT = 8192;
 
-/** Call Gemini, retrying briefly on transient 429s to smooth free-tier bursts. */
-async function generate(params: Parameters<typeof ai.models.generateContent>[0]) {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      return await ai.models.generateContent(params);
-    } catch (err) {
-      lastErr = err;
-      if (err instanceof ApiError && err.status === 429 && attempt < 2) {
-        await sleep((attempt + 1) * 2000); // 2s, then 4s
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastErr;
-}
+// Try the configured model first (best accuracy), then fall back to flash-lite
+// which has a separate, more generous free-tier quota. Lets a rate-limited
+// request still complete instead of erroring.
+export const MODELS = Array.from(new Set([MODEL, "gemini-2.5-flash-lite"]));
+
+const isRateLimit = (err: unknown) => err instanceof ApiError && err.status === 429;
 
 /**
  * Single grounded call that returns JSON. Google Search grounding can't be
  * combined with responseSchema, so we ask for JSON in the prompt and parse it.
- * Uses a plain (non-retrying) call so a rate limit degrades quickly to the
- * non-grounded path in analyze().
  */
-async function groundedJson<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+async function groundedJson<T>(model: string, systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
   const response = await ai.models.generateContent({
-    model: MODEL,
+    model,
     contents: [{ role: "user", parts }],
     config: {
       temperature: ANALYZE_TEMPERATURE,
@@ -129,15 +116,14 @@ async function groundedJson<T>(systemInstruction: string, parts: Part[], schema:
   try {
     return parseJson<T>(text);
   } catch {
-    // Rare: grounded output wasn't clean JSON — reshape it with a schema pass.
-    return structure<T>(systemInstruction, text, schema);
+    return structure<T>(model, systemInstruction, text, schema);
   }
 }
 
 /** Reshape free text into the structured schema (fallback / non-grounded helper). */
-async function structure<T>(systemInstruction: string, analysis: string, schema: unknown): Promise<T> {
-  const response = await generate({
-    model: MODEL,
+async function structure<T>(model: string, systemInstruction: string, analysis: string, schema: unknown): Promise<T> {
+  const response = await ai.models.generateContent({
+    model,
     contents:
       "Convert the following analysis into the required JSON. Use only facts present in the analysis; do not invent new details.\n\n" +
       analysis,
@@ -154,9 +140,9 @@ async function structure<T>(systemInstruction: string, analysis: string, schema:
 }
 
 /** Single-pass structured generation, no grounding. */
-async function structuredDirect<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
-  const response = await generate({
-    model: MODEL,
+async function structuredDirect<T>(model: string, systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+  const response = await ai.models.generateContent({
+    model,
     contents: [{ role: "user", parts }],
     config: {
       temperature: ANALYZE_TEMPERATURE,
@@ -171,19 +157,28 @@ async function structuredDirect<T>(systemInstruction: string, parts: Part[], sch
 }
 
 /**
- * Produce a structured result, preferring live grounding but degrading
- * gracefully: if grounding is rate-limited or unavailable, fall back to a
- * plain structured call so the user still gets an answer.
+ * Produce a structured result, preferring live grounding and the best model,
+ * but degrading gracefully: a non-429 grounding failure drops grounding on the
+ * same model; a rate limit moves on to the next (higher-quota) model.
  */
 async function analyze<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
-  if (!USE_GROUNDING) return structuredDirect<T>(systemInstruction, parts, schema);
-  try {
-    return await groundedJson<T>(systemInstruction, parts, schema);
-  } catch {
-    // Grounding rate-limited, unavailable, or empty — retry without it so the
-    // user still gets a result.
-    return structuredDirect<T>(systemInstruction, parts, schema);
+  let lastErr: unknown;
+  for (const model of MODELS) {
+    try {
+      if (!USE_GROUNDING) return await structuredDirect<T>(model, systemInstruction, parts, schema);
+      try {
+        return await groundedJson<T>(model, systemInstruction, parts, schema);
+      } catch (err) {
+        if (isRateLimit(err)) throw err; // let the model-fallback loop handle it
+        return await structuredDirect<T>(model, systemInstruction, parts, schema); // empty/grounding issue
+      }
+    } catch (err) {
+      lastErr = err;
+      if (isRateLimit(err)) continue; // try the next model's separate quota
+      throw err;
+    }
   }
+  throw lastErr;
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -335,9 +330,9 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     chatSystemPrompt(settings || {}, cardContext) +
     `\n\nToday's date is ${today()}. When a question depends on current form, news, or prices, use Google Search rather than memory.`;
 
-  const openStream = (grounded: boolean) =>
+  const openStream = (model: string, grounded: boolean) =>
     ai.models.generateContentStream({
-      model: MODEL,
+      model,
       contents,
       config: {
         maxOutputTokens: MAX_OUTPUT,
@@ -347,15 +342,31 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       },
     });
 
-  try {
-    let stream;
-    try {
-      stream = await openStream(USE_GROUNDING);
-    } catch (err) {
-      // Grounding rate-limited/unavailable — fall back to a plain stream.
-      if (USE_GROUNDING && err instanceof ApiError) stream = await openStream(false);
-      else throw err;
+  // Open a stream, preferring grounding + the best model, with the same
+  // fallbacks as analyze(): drop grounding on a non-429 failure, move to the
+  // next (higher-quota) model on a rate limit.
+  async function openWithFallback() {
+    let lastErr: unknown;
+    for (const model of MODELS) {
+      try {
+        if (!USE_GROUNDING) return await openStream(model, false);
+        try {
+          return await openStream(model, true);
+        } catch (err) {
+          if (isRateLimit(err)) throw err;
+          return await openStream(model, false);
+        }
+      } catch (err) {
+        lastErr = err;
+        if (isRateLimit(err)) continue;
+        throw err;
+      }
     }
+    throw lastErr;
+  }
+
+  try {
+    const stream = await openWithFallback();
 
     for await (const chunk of stream) {
       const text = chunk.text;
@@ -372,7 +383,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`card-scanner API listening on http://localhost:${PORT}`);
-  console.log(`  provider: google-gemini  model: ${MODEL}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
+  console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }

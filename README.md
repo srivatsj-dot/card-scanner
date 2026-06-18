@@ -89,12 +89,14 @@ web/      Vite + React UI
   read-it-literally, verify-with-search, prefer-"unknown"-over-guessing prompt.
   The default model `gemini-2.5-flash` is the sharpest free option for reading
   cards.
-- **Rate limits:** the free tier has per-minute/day caps (and grounding has its
-  own, lower cap). The server retries briefly on 429 and, if a grounded call is
-  rate-limited, **automatically falls back to a non-grounded call** so you still
-  get a result. If you hit limits a lot, `CARD_SCANNER_MODEL=gemini-2.5-flash-lite`
-  has higher limits (less accurate), or `CARD_SCANNER_GROUNDING=false` skips the
-  search quota.
+- **Rate limits & fallback:** the free tier has per-minute/day caps (and
+  grounding has its own, lower cap). To stay reliable, each request tries
+  `gemini-2.5-flash` first, then **automatically falls back to
+  `gemini-2.5-flash-lite`** (a separate quota pool) on a 429, and drops
+  grounding if that's what's capped — so a rate-limited request still completes
+  (just a touch less sharp) instead of erroring. Set `CARD_SCANNER_GROUNDING=false`
+  to skip the search quota entirely, or enable billing on the Google project for
+  much higher limits.
 - **Chat** is **streamed** token-by-token over Server-Sent Events, also with
   live grounding.
 
