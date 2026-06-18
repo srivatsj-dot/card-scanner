@@ -84,7 +84,7 @@ async function generate(params: Parameters<typeof ai.models.generateContent>[0])
     } catch (err) {
       lastErr = err;
       if (err instanceof ApiError && err.status === 429 && attempt < 2) {
-        await sleep((attempt + 1) * 4000); // 4s, then 8s
+        await sleep((attempt + 1) * 2000); // 2s, then 4s
         continue;
       }
       throw err;
@@ -96,10 +96,11 @@ async function generate(params: Parameters<typeof ai.models.generateContent>[0])
 /**
  * Single grounded call that returns JSON. Google Search grounding can't be
  * combined with responseSchema, so we ask for JSON in the prompt and parse it.
- * If parsing fails, we fall back to one structuring call (still cheap, rare).
+ * Uses a plain (non-retrying) call so a rate limit degrades quickly to the
+ * non-grounded path in analyze().
  */
 async function groundedJson<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
-  const response = await generate({
+  const response = await ai.models.generateContent({
     model: MODEL,
     contents: [{ role: "user", parts }],
     config: {
@@ -136,7 +137,7 @@ async function structure<T>(systemInstruction: string, analysis: string, schema:
   return parseJson<T>(response.text);
 }
 
-/** Single-pass structured generation (used when grounding is disabled). */
+/** Single-pass structured generation, no grounding. */
 async function structuredDirect<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
   const response = await generate({
     model: MODEL,
@@ -148,6 +149,24 @@ async function structuredDirect<T>(systemInstruction: string, parts: Part[], sch
     },
   });
   return parseJson<T>(response.text);
+}
+
+/**
+ * Produce a structured result, preferring live grounding but degrading
+ * gracefully: if grounding is rate-limited or unavailable, fall back to a
+ * plain structured call so the user still gets an answer.
+ */
+async function analyze<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+  if (!USE_GROUNDING) return structuredDirect<T>(systemInstruction, parts, schema);
+  try {
+    return await groundedJson<T>(systemInstruction, parts, schema);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      // Grounding quota hit (or grounding unavailable) — retry without it.
+      return structuredDirect<T>(systemInstruction, parts, schema);
+    }
+    throw err;
+  }
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -185,10 +204,7 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   ];
 
   try {
-    const result = USE_GROUNDING
-      ? await groundedJson(sys, scanParts, scanSchema)
-      : await structuredDirect(sys, scanParts, scanSchema);
-    res.json(result);
+    res.json(await analyze(sys, scanParts, scanSchema));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -248,10 +264,7 @@ app.post("/api/trade", async (req: Request, res: Response) => {
         { text: "I want to trade away the following card(s). Tell me what I should ask for in return." },
         ...sideToParts("Cards I'm giving away", giving),
       ];
-      const result = USE_GROUNDING
-        ? await groundedJson(sys, parts, askSchema)
-        : await structuredDirect(sys, parts, askSchema);
-      res.json(result);
+      res.json(await analyze(sys, parts, askSchema));
       return;
     }
 
@@ -266,10 +279,7 @@ app.post("/api/trade", async (req: Request, res: Response) => {
       ...sideToParts("Cards I give up (my side)", giving),
       ...sideToParts("Cards I receive (their side)", receiving),
     ];
-    const result = USE_GROUNDING
-      ? await groundedJson(sys, parts, tradeSchema)
-      : await structuredDirect(sys, parts, tradeSchema);
-    res.json(result);
+    res.json(await analyze(sys, parts, tradeSchema));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -300,21 +310,33 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  try {
-    const stream = await ai.models.generateContentStream({
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+  const systemInstruction =
+    chatSystemPrompt(settings || {}, cardContext) +
+    `\n\nToday's date is ${today()}. When a question depends on current form, news, or prices, use Google Search rather than memory.`;
+
+  const openStream = (grounded: boolean) =>
+    ai.models.generateContentStream({
       model: MODEL,
-      // Gemini uses "model" for the assistant role.
-      contents: messages.map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      })),
+      contents,
       config: {
-        systemInstruction:
-          chatSystemPrompt(settings || {}, cardContext) +
-          `\n\nToday's date is ${today()}. When a question depends on current form, news, or prices, use Google Search rather than memory.`,
-        ...(USE_GROUNDING ? { tools: [{ googleSearch: {} }] } : {}),
+        systemInstruction,
+        ...(grounded ? { tools: [{ googleSearch: {} }] } : {}),
       },
     });
+
+  try {
+    let stream;
+    try {
+      stream = await openStream(USE_GROUNDING);
+    } catch (err) {
+      // Grounding rate-limited/unavailable — fall back to a plain stream.
+      if (USE_GROUNDING && err instanceof ApiError) stream = await openStream(false);
+      else throw err;
+    }
 
     for await (const chunk of stream) {
       const text = chunk.text;

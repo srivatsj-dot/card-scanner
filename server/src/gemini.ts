@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Default to a free-tier, vision-capable Gemini model.
-export const MODEL = process.env.CARD_SCANNER_MODEL || "gemini-2.5-flash";
+// Default to a free-tier, vision-capable Gemini model. flash-lite has the most
+// generous free-tier rate limits; override with CARD_SCANNER_MODEL.
+export const MODEL = process.env.CARD_SCANNER_MODEL || "gemini-2.5-flash-lite";
 
 const apiKey =
   process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
