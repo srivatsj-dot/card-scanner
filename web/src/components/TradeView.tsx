@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { Settings, TradeResult, AskResult, CardEntry, SavedCard } from "../types";
 import { evaluateTrade, suggestAsks } from "../api";
 import { describeCard } from "../utils";
+import { makeT } from "../i18n";
 import CameraModal from "./CameraModal";
 import BinderPicker from "./BinderPicker";
 
@@ -158,6 +159,7 @@ export default function TradeView({ settings, saved }: { settings: Settings; sav
   const [loading, setLoading] = useState<"" | "fair" | "ask">("");
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState<{ side: "your" | "their"; id: number } | null>(null);
+  const t = makeT(settings.language);
 
   function applyPick(card: SavedCard) {
     if (!picking) return;
@@ -202,7 +204,7 @@ export default function TradeView({ settings, saved }: { settings: Settings; sav
   return (
     <div>
       <div className="card">
-        <h2>Trade tool</h2>
+        <h2>{t("trade.title")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Add the cards on each side — type them, snap a photo, or pull one from your binder. You
           can add multiple cards per side (e.g. Schwarber + Marte). Then check if a trade is fair,

@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { ScanResult, Settings } from "../types";
 import { scanCard } from "../api";
 import { makeThumbnail, money, sleep } from "../utils";
+import { makeT } from "../i18n";
 import CameraModal from "./CameraModal";
 
 interface Props {
@@ -25,6 +26,7 @@ export default function BulkView({ settings, onSave }: Props) {
   const [running, setRunning] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const t = makeT(settings.language);
 
   function addImage(dataUrl: string) {
     setRows((prev) => [...prev, { id: rid++, dataUrl, status: "pending" }]);
@@ -82,7 +84,7 @@ export default function BulkView({ settings, onSave }: Props) {
   return (
     <div>
       <div className="card">
-        <h2>Bulk scan</h2>
+        <h2>{t("bulk.title")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Scan a whole stack at once — add a photo of <strong>each</strong> card (one per card), then
           scan them all. Great for cataloguing a binder page. Saves your free-tier quota by spacing

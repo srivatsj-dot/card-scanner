@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import type { SavedCard } from "../types";
 import { money } from "../utils";
+import { makeT } from "../i18n";
 import ResultCard from "./ResultCard";
 
 interface Props {
   saved: SavedCard[];
+  lang: string;
   onRemove: (id: string) => void;
   onClear: () => void;
   onRefresh: () => void;
@@ -26,7 +28,8 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing }: Props) {
+export default function BinderView({ saved, lang, onRemove, onClear, onRefresh, refreshing }: Props) {
+  const t = makeT(lang);
   const [openId, setOpenId] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("recent");
   const [sportFilter, setSportFilter] = useState("All");
@@ -64,7 +67,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
   if (saved.length === 0) {
     return (
       <div className="card">
-        <h2>Your binder</h2>
+        <h2>{t("binder.title")}</h2>
         <p className="muted" style={{ marginBottom: 0 }}>
           No saved cards yet. Scan or search a card and tap <strong>★ Save to binder</strong> to keep
           it here with a running total value that auto-updates daily.
@@ -80,7 +83,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
     <div>
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0 }}>Your binder</h2>
+          <h2 style={{ margin: 0 }}>{t("binder.title")}</h2>
           <div style={{ textAlign: "right" }}>
             <div className="value-big">{money(total, currency)}</div>
             <div className="muted" style={{ fontSize: 12 }}>

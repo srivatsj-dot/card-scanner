@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { ScanResult, Settings } from "../types";
 import { scanCard } from "../api";
 import { makeThumbnail } from "../utils";
+import { makeT } from "../i18n";
 import ResultCard from "./ResultCard";
 import CameraModal from "./CameraModal";
 
@@ -21,6 +22,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
   const [showCamera, setShowCamera] = useState(false);
   const [saved, setSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const t = makeT(settings.language);
 
   function addImage(dataUrl: string) {
     setImages((prev) => (prev.length >= MAX_IMAGES ? prev : [...prev, dataUrl]));
@@ -66,7 +68,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
   return (
     <div>
       <div className="card">
-        <h2>Scan a card</h2>
+        <h2>{t("scan.title")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Add up to {MAX_IMAGES} photos of the <strong>same</strong> card — front, back, and an
           angled shot help read serial numbers and spot refractors/parallels. Works for Pokémon,
@@ -160,7 +162,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
             <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span className="muted" style={{ fontSize: 14 }}>Keep this in your collection?</span>
               <button className="btn" onClick={save} disabled={saved}>
-                {saved ? "✓ Saved to binder" : "★ Save to binder"}
+                {saved ? t("btn.saved") : t("btn.save")}
               </button>
             </div>
           )}

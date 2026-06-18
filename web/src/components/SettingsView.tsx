@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { Settings } from "../types";
-import { CATEGORIES, BLOCKABLE_CATEGORIES, LANGUAGES } from "../types";
+import { CATEGORIES, BLOCKABLE_CATEGORIES } from "../types";
+import { LANGS, makeT } from "../i18n";
 
 interface Props {
   settings: Settings;
@@ -11,6 +12,7 @@ interface Props {
 
 export default function SettingsView({ settings, onChange, onExport, onImport }: Props) {
   const importRef = useRef<HTMLInputElement>(null);
+  const t = makeT(settings.language);
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     onChange({ ...settings, [key]: value });
   }
@@ -25,7 +27,7 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
 
   return (
     <div className="card">
-      <h2>Settings &amp; filters</h2>
+      <h2>{t("settings.title")}</h2>
       <p className="muted" style={{ marginTop: 0 }}>
         These apply to every scan and trade. They're saved in your browser.
       </p>
@@ -54,10 +56,10 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
       </div>
 
       <label className="field">
-        <span>Results language</span>
+        <span>Language (app &amp; results)</span>
         <select value={settings.language} onChange={(e) => set("language", e.target.value)}>
-          {LANGUAGES.map((l) => (
-            <option key={l} value={l}>{l}</option>
+          {LANGS.map((l) => (
+            <option key={l.code} value={l.name}>{l.native}</option>
           ))}
         </select>
       </label>

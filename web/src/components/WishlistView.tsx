@@ -1,10 +1,12 @@
 import { useState } from "react";
 import type { WishItem } from "../types";
 import { money } from "../utils";
+import { makeT } from "../i18n";
 import ResultCard from "./ResultCard";
 
 interface Props {
   wishlist: WishItem[];
+  lang: string;
   onAdd: (text: string) => void;
   onRemove: (id: string) => void;
   onAddToBinder: (item: WishItem) => void;
@@ -26,7 +28,8 @@ function ChangeBadge({ item }: { item: WishItem }) {
   );
 }
 
-export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder, onRefresh, refreshing, adding }: Props) {
+export default function WishlistView({ wishlist, lang, onAdd, onRemove, onAddToBinder, onRefresh, refreshing, adding }: Props) {
+  const t = makeT(lang);
   const [text, setText] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -43,7 +46,7 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
   return (
     <div>
       <div className="card">
-        <h2>Wishlist</h2>
+        <h2>{t("wishlist.title")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Cards you want. Add one and we'll look up its current price; prices auto-update daily.
         </p>

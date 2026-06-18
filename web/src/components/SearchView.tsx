@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ScanResult, Settings } from "../types";
 import { searchCard } from "../api";
+import { makeT } from "../i18n";
 import ResultCard from "./ResultCard";
 
 interface Props {
@@ -15,6 +16,7 @@ export default function SearchView({ settings, result, onResult, onSave }: Props
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const t = makeT(settings.language);
 
   async function run() {
     if (!text.trim()) return;
@@ -33,7 +35,7 @@ export default function SearchView({ settings, result, onResult, onSave }: Props
   return (
     <div>
       <div className="card">
-        <h2>Search cards</h2>
+        <h2>{t("search.title")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           No photo? Just describe the card — player/subject, set, year, parallel, serial — and get
           the same value, stats, and trade ideas.
@@ -64,7 +66,7 @@ export default function SearchView({ settings, result, onResult, onSave }: Props
                 onClick={() => { onSave(result, undefined); setSaved(true); }}
                 disabled={saved}
               >
-                {saved ? "✓ Saved to binder" : "★ Save to binder"}
+                {saved ? t("btn.saved") : t("btn.save")}
               </button>
             </div>
           )}
