@@ -64,6 +64,13 @@ export default function App() {
     ]);
   }
 
+  function wishToBinder(item: WishItem) {
+    if (!item.result) return;
+    saveCard(item.result, undefined);
+    setWishlist((prev) => prev.filter((w) => w.id !== item.id));
+    setView("binder");
+  }
+
   async function addWish(text: string) {
     const id = uid();
     setWishlist((prev) => [{ id, addedAt: Date.now(), text }, ...prev]);
@@ -78,16 +85,27 @@ export default function App() {
     }
   }
 
-  // Refresh saved + wishlist prices. force=true ignores the 24h freshness check.
+  // Refresh saved + wishlist prices. force=true ignores the 24h freshness check
+  // and refreshes everything. Auto runs are gentle: capped count, spaced out, so
+  // they don't burn the free-tier quota that foreground scans need.
+  const REFRESH_GAP_MS = 6000; // ~10/min — under the flash free-tier limit
+  const AUTO_CAP = 5; // at most a few per auto run; the rest catch up later
+
   async function refreshAll(force: boolean) {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
     const stale = (t?: number) => force || !t || Date.now() - t > DAY_MS;
+    let budget = force ? Infinity : AUTO_CAP;
+    let first = true;
     try {
       for (const card of saved) {
+        if (budget <= 0) break;
         if (!stale(card.lastRefreshedAt)) continue;
+        budget--;
         try {
+          if (!first) await sleep(REFRESH_GAP_MS);
+          first = false;
           const fresh = await searchCard(describeCard(card.result), settings);
           setSaved((prev) =>
             prev.map((c) =>
@@ -96,14 +114,17 @@ export default function App() {
                 : c
             )
           );
-          await sleep(700);
         } catch (e) {
-          if (isRateLimit(e)) return; // back off; try again next load/manual
+          if (isRateLimit(e)) return; // back off; catch up next load/manual
         }
       }
       for (const w of wishlist) {
+        if (budget <= 0) break;
         if (!stale(w.lastRefreshedAt)) continue;
+        budget--;
         try {
+          if (!first) await sleep(REFRESH_GAP_MS);
+          first = false;
           const fresh = await searchCard(w.result ? describeCard(w.result) : w.text, settings);
           setWishlist((prev) =>
             prev.map((x) =>
@@ -112,7 +133,6 @@ export default function App() {
                 : x
             )
           );
-          await sleep(700);
         } catch (e) {
           if (isRateLimit(e)) return;
         }
@@ -123,8 +143,14 @@ export default function App() {
     }
   }
 
-  // Auto price-refresh on load (skips anything updated within the last 24h).
+  // Auto price-refresh: at most once an hour per device, only if enabled, and
+  // only for items older than 24h. Stamp the time first so reloads don't re-burst.
   useEffect(() => {
+    if (settings.autoRefresh === false) return;
+    const KEY = "card-scanner-last-auto-refresh";
+    const last = Number(localStorage.getItem(KEY) || 0);
+    if (Date.now() - last < 60 * 60 * 1000) return;
+    localStorage.setItem(KEY, String(Date.now()));
     refreshAll(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -181,6 +207,7 @@ export default function App() {
           wishlist={wishlist}
           onAdd={addWish}
           onRemove={(id) => setWishlist((prev) => prev.filter((w) => w.id !== id))}
+          onAddToBinder={wishToBinder}
           onRefresh={() => refreshAll(true)}
           refreshing={refreshing}
           adding={adding}

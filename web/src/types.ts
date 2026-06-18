@@ -1,6 +1,7 @@
 export interface Settings {
   customInstructions: string;
   liveData: boolean;
+  autoRefresh: boolean;
   language: string;
   minValue: number | null;
   maxValue: number | null;
@@ -55,6 +56,7 @@ export const LANGUAGES = [
 export const defaultSettings: Settings = {
   customInstructions: "",
   liveData: true,
+  autoRefresh: true,
   language: "English",
   minValue: null,
   maxValue: null,

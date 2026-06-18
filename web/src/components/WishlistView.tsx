@@ -7,6 +7,7 @@ interface Props {
   wishlist: WishItem[];
   onAdd: (text: string) => void;
   onRemove: (id: string) => void;
+  onAddToBinder: (item: WishItem) => void;
   onRefresh: () => void;
   refreshing: boolean;
   adding: boolean;
@@ -25,7 +26,7 @@ function ChangeBadge({ item }: { item: WishItem }) {
   );
 }
 
-export default function WishlistView({ wishlist, onAdd, onRemove, onRefresh, refreshing, adding }: Props) {
+export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder, onRefresh, refreshing, adding }: Props) {
   const [text, setText] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -100,10 +101,19 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onRefresh, ref
                     {money(r.estimatedValue.mid, r.estimatedValue.currency)}
                   </div>
                 )}
-                <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+                <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
                   {r && (
                     <button className="btn ghost small" onClick={() => setOpenId(open ? null : w.id)}>
                       {open ? "Hide" : "View"}
+                    </button>
+                  )}
+                  {r && (
+                    <button
+                      className="btn secondary small"
+                      onClick={() => onAddToBinder(w)}
+                      title="Got it — move to your binder"
+                    >
+                      ★ Got it → binder
                     </button>
                   )}
                   <button className="btn ghost small" onClick={() => onRemove(w.id)}>Remove</button>

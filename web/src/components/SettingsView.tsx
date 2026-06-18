@@ -93,6 +93,18 @@ export default function SettingsView({ settings, onChange }: Props) {
         </span>
       </label>
 
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={settings.autoRefresh}
+          onChange={(e) => set("autoRefresh", e.target.checked)}
+        />
+        Auto-refresh binder &amp; wishlist prices daily
+        <span className="muted" style={{ fontSize: 12 }}>
+          &nbsp;— turn off to save quota; you can still refresh manually
+        </span>
+      </label>
+
       <label className="field">
         <span>Trade style</span>
         <select
