@@ -24,6 +24,20 @@ export const scanSchema = {
     specialEdition: { ...nullableStr, description: "Rookie, autograph, relic/patch, serial-numbered, short print, etc." },
     serialNumber: { ...nullableStr, description: "Serial numbering printed on the card, e.g. '12/99'." },
     estimatedCondition: { ...nullableStr, description: "Rough condition guess from a single photo." },
+    conditionReport: {
+      type: "OBJECT",
+      description: "Condition assessment from the photo(s).",
+      properties: {
+        grade: { ...STR, description: "Overall condition label, e.g. 'Near Mint', 'EX', 'Played' (estimate)." },
+        flaws: {
+          type: "ARRAY",
+          description: "Specific visible condition issues: corner whitening, edge chipping, surface scratches, print lines, off-centering, creases, gloss loss. Empty if none visible.",
+          items: STR,
+        },
+        summary: { ...STR, description: "One-line condition summary, noting if photos limit confidence." },
+      },
+      required: ["grade", "flaws", "summary"],
+    },
     estimatedValue: {
       type: "OBJECT",
       properties: {
@@ -110,6 +124,7 @@ export const scanSchema = {
     "specialEdition",
     "serialNumber",
     "estimatedCondition",
+    "conditionReport",
     "estimatedValue",
     "rating",
     "hiddenInsights",

@@ -83,6 +83,11 @@ export interface ScanResult {
   specialEdition: string | null;
   serialNumber: string | null;
   estimatedCondition: string | null;
+  conditionReport: {
+    grade: string;
+    flaws: string[];
+    summary: string;
+  };
   estimatedValue: {
     low: number;
     mid: number;

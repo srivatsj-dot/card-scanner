@@ -103,6 +103,25 @@ export default function ResultCard({ result }: { result: ScanResult }) {
         <p style={{ marginBottom: 0 }} className="muted">{result.generalAssessment}</p>
       </div>
 
+      {result.conditionReport && (
+        <div className="card">
+          <h3>Condition &amp; flaws</h3>
+          <div style={{ marginBottom: 8 }}>
+            <span className="pill">{result.conditionReport.grade}</span>
+          </div>
+          {result.conditionReport.flaws.length > 0 ? (
+            <ul style={{ marginTop: 0 }}>
+              {result.conditionReport.flaws.map((f, i) => (
+                <li key={i} className="warn">{f}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>No obvious flaws spotted in the photo.</p>
+          )}
+          <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>{result.conditionReport.summary}</p>
+        </div>
+      )}
+
       {result.hiddenInsights.length > 0 && (
         <div className="card">
           <h3>Stats you might not notice</h3>
