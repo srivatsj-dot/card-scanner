@@ -81,10 +81,13 @@ web/      Vite + React UI
   (`responseSchema`), so results parse reliably.
 - **Live data:** Google Search **grounding** is on by default, so player
   outlook and values reflect current form and recent sales — not the model's
-  early-2025 training cutoff. Scans/trades run as two quick passes (grounded
-  research → structured formatting) since Gemini can't combine search with
-  strict JSON in one call. Disable with `CARD_SCANNER_GROUNDING=false` in
-  `.env` (faster, one fewer call, but stale knowledge).
+  early-2025 training cutoff. Each scan/trade is a **single** grounded call
+  (JSON requested in the prompt, since Gemini can't combine search with strict
+  schema), with a fallback reshape only if the JSON is malformed. Disable with
+  `CARD_SCANNER_GROUNDING=false` in `.env` for stale-but-faster results.
+- **Rate limits:** the free tier has per-minute/day caps; the server retries
+  briefly on 429. If you hit limits often, set
+  `CARD_SCANNER_MODEL=gemini-2.5-flash-lite` in `.env` for higher free quota.
 - **Chat** is **streamed** token-by-token over Server-Sent Events, also with
   live grounding.
 

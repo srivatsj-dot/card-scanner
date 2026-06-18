@@ -73,26 +73,56 @@ function parseJson<T>(text: string | undefined): T {
   return JSON.parse(cleaned) as T;
 }
 
-/** Pass 1: free-text analysis with live Google Search grounding. */
-async function groundedResearch(systemInstruction: string, parts: Part[]): Promise<string> {
-  const response = await ai.models.generateContent({
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Call Gemini, retrying briefly on transient 429s to smooth free-tier bursts. */
+async function generate(params: Parameters<typeof ai.models.generateContent>[0]) {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (err) {
+      lastErr = err;
+      if (err instanceof ApiError && err.status === 429 && attempt < 2) {
+        await sleep((attempt + 1) * 4000); // 4s, then 8s
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Single grounded call that returns JSON. Google Search grounding can't be
+ * combined with responseSchema, so we ask for JSON in the prompt and parse it.
+ * If parsing fails, we fall back to one structuring call (still cheap, rare).
+ */
+async function groundedJson<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+  const response = await generate({
     model: MODEL,
     contents: [{ role: "user", parts }],
     config: {
       systemInstruction:
         systemInstruction +
-        `\n\nToday's date is ${today()}. Use Google Search to verify the subject's CURRENT form/standing and the card's CURRENT market value before you judge outlook or price — do not rely on memory for anything time-sensitive. Write a thorough plain-text analysis covering every point you'll later need.`,
+        `\n\nToday's date is ${today()}. Use Google Search to verify the subject's CURRENT form/standing and the card's CURRENT market value — do not rely on memory for anything time-sensitive.` +
+        `\n\nRespond with ONLY a single JSON object (no markdown fences, no commentary) conforming to this JSON schema:\n${JSON.stringify(schema)}`,
       tools: [{ googleSearch: {} }],
     },
   });
   const text = response.text;
   if (!text) throw new Error("The model returned an empty response.");
-  return text;
+  try {
+    return parseJson<T>(text);
+  } catch {
+    // Rare: grounded output wasn't clean JSON — reshape it with a schema pass.
+    return structure<T>(systemInstruction, text, schema);
+  }
 }
 
-/** Pass 2: reshape a free-text analysis into the structured schema (no new facts). */
+/** Reshape free text into the structured schema (fallback / non-grounded helper). */
 async function structure<T>(systemInstruction: string, analysis: string, schema: unknown): Promise<T> {
-  const response = await ai.models.generateContent({
+  const response = await generate({
     model: MODEL,
     contents:
       "Convert the following analysis into the required JSON. Use only facts present in the analysis; do not invent new details.\n\n" +
@@ -108,7 +138,7 @@ async function structure<T>(systemInstruction: string, analysis: string, schema:
 
 /** Single-pass structured generation (used when grounding is disabled). */
 async function structuredDirect<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
-  const response = await ai.models.generateContent({
+  const response = await generate({
     model: MODEL,
     contents: [{ role: "user", parts }],
     config: {
@@ -145,27 +175,19 @@ app.post("/api/scan", async (req: Request, res: Response) => {
 
   const sys = scanSystemPrompt(settings || {});
   const imagePart: Part = { inlineData: { mimeType: mediaType, data: imageBase64 } };
+  const scanParts: Part[] = [
+    imagePart,
+    {
+      text:
+        "Identify this exact trading card (subject, set, year, card number, parallel, serial number, special edition), " +
+        "then research current value and the subject's current form, and return the full structured analysis.",
+    },
+  ];
 
   try {
-    let result;
-    if (USE_GROUNDING) {
-      const analysis = await groundedResearch(sys, [
-        imagePart,
-        {
-          text:
-            "Identify this exact trading card (subject, set, year, card number, parallel, serial number, special edition). " +
-            "Then research the subject's current form/standing and recent comparable sale prices for this specific card. " +
-            "Summarize everything needed: value range, hidden insights, current outlook, and good comparable cards to trade toward.",
-        },
-      ]);
-      result = await structure(sys, analysis, scanSchema);
-    } else {
-      result = await structuredDirect(
-        sys,
-        [imagePart, { text: "Scan this trading card and return the full structured analysis." }],
-        scanSchema
-      );
-    }
+    const result = USE_GROUNDING
+      ? await groundedJson(sys, scanParts, scanSchema)
+      : await structuredDirect(sys, scanParts, scanSchema);
     res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);
@@ -227,7 +249,7 @@ app.post("/api/trade", async (req: Request, res: Response) => {
         ...sideToParts("Cards I'm giving away", giving),
       ];
       const result = USE_GROUNDING
-        ? await structure(sys, await groundedResearch(sys, parts), askSchema)
+        ? await groundedJson(sys, parts, askSchema)
         : await structuredDirect(sys, parts, askSchema);
       res.json(result);
       return;
@@ -245,7 +267,7 @@ app.post("/api/trade", async (req: Request, res: Response) => {
       ...sideToParts("Cards I receive (their side)", receiving),
     ];
     const result = USE_GROUNDING
-      ? await structure(sys, await groundedResearch(sys, parts), tradeSchema)
+      ? await groundedJson(sys, parts, tradeSchema)
       : await structuredDirect(sys, parts, tradeSchema);
     res.json(result);
   } catch (err) {
