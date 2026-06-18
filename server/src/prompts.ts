@@ -1,5 +1,6 @@
 export interface Settings {
   customInstructions?: string;
+  liveData?: boolean;
   minValue?: number | null;
   maxValue?: number | null;
   excludeMinorLeague?: boolean;

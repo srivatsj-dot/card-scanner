@@ -72,6 +72,18 @@ export default function SettingsView({ settings, onChange }: Props) {
         </label>
       </div>
 
+      <label className="toggle" style={{ marginTop: 6 }}>
+        <input
+          type="checkbox"
+          checked={settings.liveData}
+          onChange={(e) => set("liveData", e.target.checked)}
+        />
+        Use live web data for current prices &amp; player form
+        <span className="muted" style={{ fontSize: 12 }}>
+          &nbsp;— turn off if you keep hitting free-tier rate limits (faster, fewer calls)
+        </span>
+      </label>
+
       <label className="field">
         <span>Trade style</span>
         <select

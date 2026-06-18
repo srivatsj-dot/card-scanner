@@ -15,18 +15,27 @@
 
 /* Light theme overrides (data-theme on <html>) */
 :root[data-theme="light"] {
-  --bg: #eef1f6;
+  --bg: #f2f4f8;
   --panel: #ffffff;
-  --panel-2: #f3f5f9;
-  --line: #dde2ea;
-  --text: #1b2231;
-  --muted: #5d6a7e;
-  --gold: #b07d12;
-  --green: #1f9d57;
-  --red: #d23b3b;
-  --blue: #2f6fe0;
-  --shadow: 0 8px 24px rgba(20, 30, 60, 0.1);
+  --panel-2: #eef1f6;
+  --line: #d8deea;
+  --text: #141922;
+  --muted: #5a6678;
+  --gold: #9a6a07;
+  --green: #157a44;
+  --red: #c62f2f;
+  --blue: #2563eb;
+  --shadow: 0 6px 20px rgba(20, 30, 60, 0.08);
 }
+/* Light-mode contrast fixes for elements that assume dark text-on-accent */
+:root[data-theme="light"] .bubble.user { color: #ffffff; }
+:root[data-theme="light"] .error-box {
+  background: #fdecec;
+  border-color: #f0b4b4;
+  color: #8a1f1f;
+}
+:root[data-theme="light"] .pill { background: var(--panel-2); }
+:root[data-theme="light"] .img-label { background: rgba(0, 0, 0, 0.65); }
 
 * { box-sizing: border-box; }
 

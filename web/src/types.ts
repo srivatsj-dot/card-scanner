@@ -1,5 +1,6 @@
 export interface Settings {
   customInstructions: string;
+  liveData: boolean;
   minValue: number | null;
   maxValue: number | null;
   excludeMinorLeague: boolean;
@@ -28,6 +29,7 @@ export const BLOCKABLE_CATEGORIES = CATEGORIES.filter((c) => c !== "Any");
 
 export const defaultSettings: Settings = {
   customInstructions: "",
+  liveData: true,
   minValue: null,
   maxValue: null,
   excludeMinorLeague: false,

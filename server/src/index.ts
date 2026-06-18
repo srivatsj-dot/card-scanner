@@ -92,6 +92,10 @@ export const MODELS = Array.from(new Set([MODEL, "gemini-2.5-flash-lite"]));
 
 const isRateLimit = (err: unknown) => err instanceof ApiError && err.status === 429;
 
+// Grounding is on when the server default is on AND the user hasn't turned off
+// "live data" in settings. Lets users cut quota usage without restarting.
+const groundedFor = (settings?: Settings) => USE_GROUNDING && settings?.liveData !== false;
+
 /**
  * Single grounded call that returns JSON. Google Search grounding can't be
  * combined with responseSchema, so we ask for JSON in the prompt and parse it.
@@ -161,11 +165,11 @@ async function structuredDirect<T>(model: string, systemInstruction: string, par
  * but degrading gracefully: a non-429 grounding failure drops grounding on the
  * same model; a rate limit moves on to the next (higher-quota) model.
  */
-async function analyze<T>(systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+async function analyze<T>(systemInstruction: string, parts: Part[], schema: unknown, grounded: boolean): Promise<T> {
   let lastErr: unknown;
   for (const model of MODELS) {
     try {
-      if (!USE_GROUNDING) return await structuredDirect<T>(model, systemInstruction, parts, schema);
+      if (!grounded) return await structuredDirect<T>(model, systemInstruction, parts, schema);
       try {
         return await groundedJson<T>(model, systemInstruction, parts, schema);
       } catch (err) {
@@ -234,7 +238,7 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   ];
 
   try {
-    res.json(await analyze(sys, scanParts, scanSchema));
+    res.json(await analyze(sys, scanParts, scanSchema, groundedFor(settings)));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -294,7 +298,7 @@ app.post("/api/trade", async (req: Request, res: Response) => {
         { text: "I want to trade away the following card(s). Tell me what I should ask for in return." },
         ...sideToParts("Cards I'm giving away", giving),
       ];
-      res.json(await analyze(sys, parts, askSchema));
+      res.json(await analyze(sys, parts, askSchema, groundedFor(settings)));
       return;
     }
 
@@ -309,7 +313,7 @@ app.post("/api/trade", async (req: Request, res: Response) => {
       ...sideToParts("Cards I give up (my side)", giving),
       ...sideToParts("Cards I receive (their side)", receiving),
     ];
-    res.json(await analyze(sys, parts, tradeSchema));
+    res.json(await analyze(sys, parts, tradeSchema, groundedFor(settings)));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -363,11 +367,12 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   // Open a stream, preferring grounding + the best model, with the same
   // fallbacks as analyze(): drop grounding on a non-429 failure, move to the
   // next (higher-quota) model on a rate limit.
+  const grounded = groundedFor(settings);
   async function openWithFallback() {
     let lastErr: unknown;
     for (const model of MODELS) {
       try {
-        if (!USE_GROUNDING) return await openStream(model, false);
+        if (!grounded) return await openStream(model, false);
         try {
           return await openStream(model, true);
         } catch (err) {
