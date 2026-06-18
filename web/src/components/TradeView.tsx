@@ -1,6 +1,10 @@
-import { useState } from "react";
-import type { Settings, TradeResult } from "../types";
-import { evaluateTrade } from "../api";
+import { useRef, useState } from "react";
+import type { Settings, TradeResult, AskResult, CardEntry } from "../types";
+import { evaluateTrade, suggestAsks } from "../api";
+import CameraModal from "./CameraModal";
+
+let nextId = 1;
+const newEntry = (): CardEntry => ({ id: nextId++, text: "" });
 
 function fairnessPill(f: string) {
   switch (f) {
@@ -12,93 +16,258 @@ function fairnessPill(f: string) {
   }
 }
 
+function likelihoodPill(l: string) {
+  const t = l.toLowerCase();
+  if (t.includes("high")) return <span className="pill green">{l}</span>;
+  if (t.includes("stretch") || t.includes("low")) return <span className="pill red">{l}</span>;
+  return <span className="pill blue">{l}</span>;
+}
+
+/** One editable card row: a text field plus an optional photo (camera/upload). */
+function CardRow({
+  entry,
+  index,
+  placeholder,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  entry: CardEntry;
+  index: number;
+  placeholder: string;
+  onChange: (e: CardEntry) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  const [showCamera, setShowCamera] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function readFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => onChange({ ...entry, dataUrl: reader.result as string });
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div className="card-row">
+      {entry.dataUrl ? (
+        <img className="thumb" src={entry.dataUrl} alt={`card ${index + 1}`} />
+      ) : (
+        <div className="thumb placeholder">{index + 1}</div>
+      )}
+      <div style={{ flex: 1 }}>
+        <input
+          type="text"
+          value={entry.text}
+          placeholder={placeholder}
+          onChange={(e) => onChange({ ...entry, text: e.target.value })}
+        />
+        <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+          <button className="btn ghost small" onClick={() => setShowCamera(true)}>
+            📸 {entry.dataUrl ? "Retake" : "Photo"}
+          </button>
+          <button className="btn ghost small" onClick={() => fileRef.current?.click()}>Upload</button>
+          {entry.dataUrl && (
+            <button className="btn ghost small" onClick={() => onChange({ ...entry, dataUrl: undefined })}>
+              Remove photo
+            </button>
+          )}
+          {canRemove && (
+            <button className="btn ghost small" onClick={onRemove} style={{ marginLeft: "auto" }}>
+              ✕ Remove card
+            </button>
+          )}
+        </div>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) readFile(f);
+          e.target.value = "";
+        }}
+      />
+      {showCamera && (
+        <CameraModal
+          onCapture={(d) => onChange({ ...entry, dataUrl: d })}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function Side({
+  title,
+  hint,
+  entries,
+  setEntries,
+  placeholder,
+}: {
+  title: string;
+  hint: string;
+  entries: CardEntry[];
+  setEntries: (e: CardEntry[]) => void;
+  placeholder: string;
+}) {
+  function update(id: number, e: CardEntry) {
+    setEntries(entries.map((x) => (x.id === id ? e : x)));
+  }
+  return (
+    <div className="card">
+      <h3>{title}</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>{hint}</p>
+      {entries.map((entry, i) => (
+        <CardRow
+          key={entry.id}
+          entry={entry}
+          index={i}
+          placeholder={placeholder}
+          canRemove={entries.length > 1}
+          onChange={(e) => update(entry.id, e)}
+          onRemove={() => setEntries(entries.filter((x) => x.id !== entry.id))}
+        />
+      ))}
+      <button className="btn secondary small" onClick={() => setEntries([...entries, newEntry()])}>
+        + Add another card
+      </button>
+    </div>
+  );
+}
+
 export default function TradeView({ settings }: { settings: Settings }) {
-  const [yourSide, setYourSide] = useState("");
-  const [theirSide, setTheirSide] = useState("");
-  const [result, setResult] = useState<TradeResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
+  const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
+  const [trade, setTrade] = useState<TradeResult | null>(null);
+  const [ask, setAsk] = useState<AskResult | null>(null);
+  const [loading, setLoading] = useState<"" | "fair" | "ask">("");
   const [error, setError] = useState<string | null>(null);
 
-  async function check() {
-    setLoading(true);
+  const hasGiving = yourSide.some((e) => e.text.trim() || e.dataUrl);
+  const hasReceiving = theirSide.some((e) => e.text.trim() || e.dataUrl);
+
+  async function checkFair() {
+    setLoading("fair");
     setError(null);
+    setAsk(null);
     try {
-      const r = await evaluateTrade(yourSide, theirSide, settings);
-      setResult(r);
+      setTrade(await evaluateTrade(yourSide, theirSide, settings));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Trade check failed.");
     } finally {
-      setLoading(false);
+      setLoading("");
+    }
+  }
+
+  async function whatToAsk() {
+    setLoading("ask");
+    setError(null);
+    setTrade(null);
+    try {
+      setAsk(await suggestAsks(yourSide, settings));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suggestion failed.");
+    } finally {
+      setLoading("");
     }
   }
 
   return (
     <div>
       <div className="card">
-        <h2>Is this trade fair?</h2>
+        <h2>Trade tool</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Describe each side in plain English — list the cards, players, years, parallels, and any
-          serial numbering you know.
+          Add the cards on each side — type them or snap a photo. You can add multiple cards per
+          side (e.g. Schwarber + Marte). Then check if a trade is fair, or ask what you should get
+          back for the cards you're giving.
         </p>
-        <div className="grid2">
-          <label className="field">
-            <span>You give up</span>
-            <textarea
-              value={yourSide}
-              placeholder="e.g. 2016 Topps Chrome Kyle Schwarber rookie auto /150"
-              onChange={(e) => setYourSide(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>You receive</span>
-            <textarea
-              value={theirSide}
-              placeholder="e.g. 2018 Bowman Chrome Julio Rodriguez prospect refractor"
-              onChange={(e) => setTheirSide(e.target.value)}
-            />
-          </label>
+      </div>
+
+      <div className="grid2">
+        <Side
+          title="You give up"
+          hint="The card(s) you'd send."
+          entries={yourSide}
+          setEntries={setYourSide}
+          placeholder="e.g. 2016 Topps Chrome Kyle Schwarber RC auto /150"
+        />
+        <Side
+          title="You receive (optional)"
+          hint="Fill in for a fairness check, or leave blank and ask what to request."
+          entries={theirSide}
+          setEntries={setTheirSide}
+          placeholder="e.g. 2018 Bowman Chrome Julio Rodríguez refractor"
+        />
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn" onClick={checkFair} disabled={!!loading || !hasGiving || !hasReceiving}>
+            {loading === "fair" ? <><span className="spinner" />Evaluating…</> : "Is this fair?"}
+          </button>
+          <button className="btn secondary" onClick={whatToAsk} disabled={!!loading || !hasGiving}>
+            {loading === "ask" ? <><span className="spinner" />Thinking…</> : "What should I ask for?"}
+          </button>
         </div>
-        <button className="btn" onClick={check} disabled={loading || !yourSide.trim() || !theirSide.trim()}>
-          {loading ? <><span className="spinner" />Evaluating…</> : "Check fairness"}
-        </button>
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
       </div>
 
-      {result && (
-        <div className="card" style={{ marginTop: 16 }}>
+      {trade && (
+        <div className="card">
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            {fairnessPill(result.fairness)}
-            <h2 style={{ margin: 0 }}>{result.verdict}</h2>
+            {fairnessPill(trade.fairness)}
+            <h2 style={{ margin: 0 }}>{trade.verdict}</h2>
           </div>
-
           <div className="grid2" style={{ marginTop: 14 }}>
             <div>
               <h3>Your side</h3>
               <div className="value-big" style={{ fontSize: 22 }}>
-                {settings.currency} {result.yourSide.valueLow}–{result.yourSide.valueHigh}
+                {settings.currency} {trade.yourSide.valueLow}–{trade.yourSide.valueHigh}
               </div>
-              <p className="muted" style={{ fontSize: 14 }}>{result.yourSide.notes}</p>
+              <p className="muted" style={{ fontSize: 14 }}>{trade.yourSide.notes}</p>
             </div>
             <div>
               <h3>Their side</h3>
               <div className="value-big" style={{ fontSize: 22 }}>
-                {settings.currency} {result.theirSide.valueLow}–{result.theirSide.valueHigh}
+                {settings.currency} {trade.theirSide.valueLow}–{trade.theirSide.valueHigh}
               </div>
-              <p className="muted" style={{ fontSize: 14 }}>{result.theirSide.notes}</p>
+              <p className="muted" style={{ fontSize: 14 }}>{trade.theirSide.notes}</p>
             </div>
           </div>
-
-          <p style={{ fontWeight: 600 }}>{result.valueGapNote}</p>
-          <p>{result.reasoning}</p>
-
-          {result.suggestions.length > 0 && (
+          <p style={{ fontWeight: 600 }}>{trade.valueGapNote}</p>
+          <p>{trade.reasoning}</p>
+          {trade.suggestions.length > 0 && (
             <>
               <h3>How to even it out</h3>
               <ul style={{ marginTop: 0 }}>
-                {result.suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                {trade.suggestions.map((s, i) => <li key={i}>{s}</li>)}
               </ul>
             </>
           )}
+        </div>
+      )}
+
+      {ask && (
+        <div className="card">
+          <h2 style={{ marginBottom: 4 }}>What to ask for</h2>
+          <p className="muted" style={{ marginTop: 0 }}>{ask.givingValueNote}</p>
+          {ask.targets.map((t, i) => (
+            <div className="trade-rec" key={i}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                <div className="name">{t.player}</div>
+                {likelihoodPill(t.likelihood)}
+              </div>
+              <div className="sub">
+                {t.cardSuggestion}
+                {t.estimatedValue ? ` · ${t.estimatedValue}` : ""}
+              </div>
+              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{t.reason}</div>
+            </div>
+          ))}
+          {ask.note && <p className="muted" style={{ fontSize: 14 }}>{ask.note}</p>}
         </div>
       )}
     </div>

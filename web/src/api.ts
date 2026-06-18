@@ -1,4 +1,4 @@
-import type { ScanResult, TradeResult, Settings, ChatMessage } from "./types";
+import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry } from "./types";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -25,12 +25,41 @@ export function scanCard(dataUrl: string, settings: Settings): Promise<ScanResul
   return postJson<ScanResult>("/api/scan", { imageBase64: base64, mediaType, settings });
 }
 
+/** Convert UI card entries into the server's {text, imageBase64, mediaType} shape. */
+function entriesToServer(entries: CardEntry[]) {
+  return entries
+    .filter((e) => e.text.trim() || e.dataUrl)
+    .map((e) => {
+      const out: { text?: string; imageBase64?: string; mediaType?: string } = {};
+      if (e.text.trim()) out.text = e.text.trim();
+      if (e.dataUrl) {
+        const { base64, mediaType } = splitDataUrl(e.dataUrl);
+        out.imageBase64 = base64;
+        out.mediaType = mediaType;
+      }
+      return out;
+    });
+}
+
 export function evaluateTrade(
-  yourSide: string,
-  theirSide: string,
+  yourSide: CardEntry[],
+  theirSide: CardEntry[],
   settings: Settings
 ): Promise<TradeResult> {
-  return postJson<TradeResult>("/api/trade", { yourSide, theirSide, settings });
+  return postJson<TradeResult>("/api/trade", {
+    mode: "fairness",
+    yourSide: entriesToServer(yourSide),
+    theirSide: entriesToServer(theirSide),
+    settings,
+  });
+}
+
+export function suggestAsks(yourSide: CardEntry[], settings: Settings): Promise<AskResult> {
+  return postJson<AskResult>("/api/trade", {
+    mode: "suggest",
+    yourSide: entriesToServer(yourSide),
+    settings,
+  });
 }
 
 /** Streamed chat. Calls onDelta for each text chunk; resolves when done. */

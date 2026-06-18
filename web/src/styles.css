@@ -320,3 +320,57 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .iconbtn { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 20px; }
 
 .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 35; }
+
+/* Camera modal */
+.cam-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: grid; place-items: center;
+  z-index: 60; padding: 16px;
+}
+.cam-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  width: min(560px, 96vw);
+  box-shadow: var(--shadow);
+}
+.cam-video {
+  width: 100%;
+  border-radius: 10px;
+  background: #000;
+  display: block;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+.cam-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: center; }
+
+/* Small buttons */
+.btn.small { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
+
+/* Trade card rows */
+.card-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+}
+.card-row:last-of-type { border-bottom: none; }
+.thumb {
+  width: 56px; height: 78px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: #000;
+  flex: 0 0 auto;
+}
+.thumb.placeholder {
+  display: grid; place-items: center;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+}

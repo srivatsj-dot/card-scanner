@@ -56,8 +56,33 @@ export interface ScanResult {
     reason: string;
     comparableValue: string;
   }[];
+  similarValueTargets: {
+    player: string;
+    cardSuggestion: string;
+    estimatedValue: string;
+    reason: string;
+  }[];
   generalAssessment: string;
   warnings: string[];
+}
+
+/** One card on a side of a trade: a description and/or a captured photo. */
+export interface CardEntry {
+  id: number;
+  text: string;
+  dataUrl?: string; // data: URL of a photo, if attached
+}
+
+export interface AskResult {
+  givingValueNote: string;
+  targets: {
+    player: string;
+    cardSuggestion: string;
+    estimatedValue: string;
+    reason: string;
+    likelihood: string;
+  }[];
+  note: string;
 }
 
 export interface TradeResult {

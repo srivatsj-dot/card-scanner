@@ -131,6 +131,26 @@ export default function ResultCard({ result }: { result: ScanResult }) {
         </div>
       )}
 
+      {result.similarValueTargets?.length > 0 && (
+        <div className="card">
+          <h3>Similar value — what to ask for</h3>
+          <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
+            If you traded this card away, these are fair same-value asks the other side would likely
+            accept.
+          </p>
+          {result.similarValueTargets.map((t, i) => (
+            <div className="trade-rec" key={i}>
+              <div className="name">{t.player}</div>
+              <div className="sub">
+                {t.cardSuggestion}
+                {t.estimatedValue ? ` · ${t.estimatedValue}` : ""}
+              </div>
+              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{t.reason}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {result.warnings.length > 0 && (
         <div className="card">
           <h3>Heads up</h3>

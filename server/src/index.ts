@@ -4,10 +4,11 @@ import cors from "cors";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
-import { scanSchema, tradeSchema } from "./schemas.js";
+import { scanSchema, tradeSchema, askSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
   tradeSystemPrompt,
+  askSystemPrompt,
   chatSystemPrompt,
   type Settings,
 } from "./prompts.js";
@@ -172,34 +173,80 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   }
 });
 
-// --- Evaluate a proposed trade --------------------------------------------
+// A card on one side of a trade: a text description and/or a photo.
+interface CardEntry {
+  text?: string;
+  imageBase64?: string;
+  mediaType?: string;
+}
+
+function entryHasContent(e: CardEntry): boolean {
+  return Boolean(e.text?.trim() || (e.imageBase64 && e.mediaType));
+}
+
+/** Turn a side's card entries into Gemini content parts under a heading. */
+function sideToParts(heading: string, entries: CardEntry[]): Part[] {
+  const parts: Part[] = [{ text: `\n${heading}:` }];
+  if (entries.length === 0) {
+    parts.push({ text: "(none specified)" });
+    return parts;
+  }
+  entries.forEach((e, i) => {
+    parts.push({ text: `Card ${i + 1}:${e.text?.trim() ? " " + e.text.trim() : " (see photo)"}` });
+    if (e.imageBase64 && e.mediaType && ALLOWED_MEDIA.has(e.mediaType)) {
+      parts.push({ inlineData: { mimeType: e.mediaType, data: e.imageBase64 } });
+    }
+  });
+  return parts;
+}
+
+// --- Evaluate a trade, or suggest what to ask for --------------------------
 app.post("/api/trade", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
 
-  const { yourSide, theirSide, settings } = req.body as {
-    yourSide?: string;
-    theirSide?: string;
+  const { mode, yourSide, theirSide, settings } = req.body as {
+    mode?: "fairness" | "suggest";
+    yourSide?: CardEntry[];
+    theirSide?: CardEntry[];
     settings?: Settings;
   };
 
-  if (!yourSide?.trim() || !theirSide?.trim()) {
-    res.status(400).json({ error: "Describe both sides of the trade." });
+  const giving = (yourSide || []).filter(entryHasContent);
+  const receiving = (theirSide || []).filter(entryHasContent);
+
+  if (giving.length === 0) {
+    res.status(400).json({ error: "Add at least one card you're giving up." });
     return;
   }
 
-  const sys = tradeSystemPrompt(settings || {});
-  const prompt =
-    `Evaluate this trade.\n\nWhat I give up (my side):\n${yourSide}\n\n` +
-    `What I receive (their side):\n${theirSide}`;
-
   try {
-    let result;
-    if (USE_GROUNDING) {
-      const analysis = await groundedResearch(sys, [{ text: prompt }]);
-      result = await structure(sys, analysis, tradeSchema);
-    } else {
-      result = await structuredDirect(sys, [{ text: prompt }], tradeSchema);
+    if (mode === "suggest") {
+      const sys = askSystemPrompt(settings || {});
+      const parts: Part[] = [
+        { text: "I want to trade away the following card(s). Tell me what I should ask for in return." },
+        ...sideToParts("Cards I'm giving away", giving),
+      ];
+      const result = USE_GROUNDING
+        ? await structure(sys, await groundedResearch(sys, parts), askSchema)
+        : await structuredDirect(sys, parts, askSchema);
+      res.json(result);
+      return;
     }
+
+    // Default: fairness check (needs both sides).
+    if (receiving.length === 0) {
+      res.status(400).json({ error: "Add at least one card on the other side, or use “What should I ask for?”." });
+      return;
+    }
+    const sys = tradeSystemPrompt(settings || {});
+    const parts: Part[] = [
+      { text: "Evaluate whether this trade is fair." },
+      ...sideToParts("Cards I give up (my side)", giving),
+      ...sideToParts("Cards I receive (their side)", receiving),
+    ];
+    const result = USE_GROUNDING
+      ? await structure(sys, await groundedResearch(sys, parts), tradeSchema)
+      : await structuredDirect(sys, parts, tradeSchema);
     res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);

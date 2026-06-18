@@ -46,7 +46,15 @@ export function buildConstraints(settings: Settings): string {
 export function scanSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +
-    `\n\nWhen you analyze the card image, fill every field. If you genuinely cannot read a detail from the photo, use null and add a note in "warnings". For "recommendedTrades", suggest 2-4 comparable cards/players that respect the collector's filters. For "playerOutlook.trend", use exactly one of: rising, stable, declining, unknown.` +
+    `\n\nWhen you analyze the card image, fill every field. If you genuinely cannot read a detail from the photo, use null and add a note in "warnings". For "recommendedTrades", suggest 2-4 comparable cards/players worth chasing (upgrades or hot names). For "similarValueTargets", suggest 2-4 cards of SIMILAR value the collector could realistically ask for in return if they traded this card away — fair 1-for-1 swaps the other side would accept. Both lists must respect the collector's filters. For "playerOutlook.trend", use exactly one of: rising, stable, declining, unknown.` +
+    buildConstraints(settings)
+  );
+}
+
+export function askSystemPrompt(settings: Settings): string {
+  return (
+    APPRAISER_ROLE +
+    `\n\nThe collector is giving up the card(s) below and wants to know what to ASK FOR in return. Estimate the combined value of what they're giving, then suggest realistic cards of similar total value that the other side would likely accept. Rate each suggestion's likelihood (high, medium, or a stretch). Respect the collector's filters.` +
     buildConstraints(settings)
   );
 }
@@ -54,7 +62,7 @@ export function scanSystemPrompt(settings: Settings): string {
 export function tradeSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +
-    `\n\nYou are evaluating whether a proposed trade is fair. "Your side" is what the collector gives up; "their side" is what they receive. Weigh estimated value AND forward-looking factors (player trajectory, scarcity, condition). For "fairness", use exactly one of: fair, favors_you, favors_them, lopsided ("favors_you" means the collector comes out ahead).` +
+    `\n\nYou are evaluating whether a proposed trade is fair. Each side may contain MULTIPLE cards and/or photos of cards — identify any card shown in an image. "Your side" is everything the collector gives up; "their side" is everything they receive. Value each side as a package. Weigh estimated value AND forward-looking factors (player trajectory, scarcity, condition). For "fairness", use exactly one of: fair, favors_you, favors_them, lopsided ("favors_you" means the collector comes out ahead).` +
     buildConstraints(settings)
   );
 }

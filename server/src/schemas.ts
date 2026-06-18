@@ -63,7 +63,7 @@ export const scanSchema = {
     },
     recommendedTrades: {
       type: "ARRAY",
-      description: "Comparable cards/players worth trading toward, respecting the user's filters.",
+      description: "Comparable cards/players worth trading toward (upgrades or hot names), respecting the user's filters.",
       items: {
         type: "OBJECT",
         properties: {
@@ -73,6 +73,21 @@ export const scanSchema = {
           comparableValue: { ...STR, description: "Rough value range to expect." },
         },
         required: ["player", "cardSuggestion", "reason", "comparableValue"],
+      },
+    },
+    similarValueTargets: {
+      type: "ARRAY",
+      description:
+        "If the collector traded THIS card away, realistic SAME-VALUE cards to ask for in return that the other side would likely accept (fair 1-for-1 swaps). Respect the user's filters.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          player: STR,
+          cardSuggestion: { ...STR, description: "Specific card to ask for." },
+          estimatedValue: { ...STR, description: "Rough value range, close to this card's value." },
+          reason: { ...STR, description: "Why it's a fair, acceptable ask." },
+        },
+        required: ["player", "cardSuggestion", "estimatedValue", "reason"],
       },
     },
     generalAssessment: { ...STR, description: "Plain-language overall take on the card." },
@@ -100,6 +115,7 @@ export const scanSchema = {
     "hiddenInsights",
     "playerOutlook",
     "recommendedTrades",
+    "similarValueTargets",
     "generalAssessment",
     "warnings",
   ],
@@ -129,4 +145,30 @@ export const tradeSchema = {
     },
   },
   required: ["fairness", "verdict", "yourSide", "theirSide", "valueGapNote", "reasoning", "suggestions"],
+} as const;
+
+// "What should I ask for?" — given the cards the collector is giving up,
+// suggest fair same-value cards the other side would likely accept.
+export const askSchema = {
+  type: "OBJECT",
+  properties: {
+    givingValueNote: { ...STR, description: "Combined estimated value of everything the collector is giving up." },
+    targets: {
+      type: "ARRAY",
+      description: "Cards to ask for in return — realistic, similar total value, likely to be accepted. Respect the user's filters.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          player: STR,
+          cardSuggestion: { ...STR, description: "Specific card(s) to ask for." },
+          estimatedValue: { ...STR, description: "Rough value range." },
+          reason: STR,
+          likelihood: { ...STR, description: "How likely the other side accepts: high, medium, or a stretch." },
+        },
+        required: ["player", "cardSuggestion", "estimatedValue", "reason", "likelihood"],
+      },
+    },
+    note: { ...STR, description: "Any caveats or strategy for making the ask." },
+  },
+  required: ["givingValueNote", "targets", "note"],
 } as const;
