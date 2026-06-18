@@ -185,31 +185,49 @@ app.get("/api/health", (_req: Request, res: Response) => {
   res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey });
 });
 
-// --- Scan a card image -----------------------------------------------------
+// --- Scan a card (one or more photos: front, back, angled) -----------------
 app.post("/api/scan", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
 
-  const { imageBase64, mediaType, settings } = req.body as {
-    imageBase64?: string;
+  const body = req.body as {
+    images?: { imageBase64: string; mediaType: string }[];
+    imageBase64?: string; // legacy single-image support
     mediaType?: string;
     settings?: Settings;
   };
+  const settings = body.settings;
 
-  if (!imageBase64 || !mediaType) {
-    res.status(400).json({ error: "imageBase64 and mediaType are required." });
+  // Accept either the new images[] array or a single legacy image.
+  const images =
+    body.images && body.images.length > 0
+      ? body.images
+      : body.imageBase64 && body.mediaType
+      ? [{ imageBase64: body.imageBase64, mediaType: body.mediaType }]
+      : [];
+
+  if (images.length === 0) {
+    res.status(400).json({ error: "At least one image is required." });
     return;
   }
-  if (!ALLOWED_MEDIA.has(mediaType)) {
-    res.status(400).json({ error: `Unsupported image type: ${mediaType}` });
+  const bad = images.find((im) => !ALLOWED_MEDIA.has(im.mediaType));
+  if (bad) {
+    res.status(400).json({ error: `Unsupported image type: ${bad.mediaType}` });
     return;
   }
 
   const sys = scanSystemPrompt(settings || {});
-  const imagePart: Part = { inlineData: { mimeType: mediaType, data: imageBase64 } };
+  const imageParts: Part[] = images.map((im) => ({
+    inlineData: { mimeType: im.mediaType, data: im.imageBase64 },
+  }));
+  const intro =
+    images.length > 1
+      ? `These ${images.length} photos are of the SAME single card (e.g. front, back, and/or angled shots). Use ALL of them together — the back and angled shots often reveal the card number, set, serial numbering, and whether a parallel/refractor finish is present. `
+      : "";
   const scanParts: Part[] = [
-    imagePart,
+    ...imageParts,
     {
       text:
+        intro +
         "Identify this exact trading card (subject, set, year, card number, parallel, serial number, special edition), " +
         "then research current value and the subject's current form, and return the full structured analysis.",
     },

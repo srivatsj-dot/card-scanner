@@ -20,9 +20,12 @@ export function splitDataUrl(dataUrl: string): { base64: string; mediaType: stri
   return { mediaType: match[1], base64: match[2] };
 }
 
-export function scanCard(dataUrl: string, settings: Settings): Promise<ScanResult> {
-  const { base64, mediaType } = splitDataUrl(dataUrl);
-  return postJson<ScanResult>("/api/scan", { imageBase64: base64, mediaType, settings });
+export function scanCard(dataUrls: string[], settings: Settings): Promise<ScanResult> {
+  const images = dataUrls.map((d) => {
+    const { base64, mediaType } = splitDataUrl(d);
+    return { imageBase64: base64, mediaType };
+  });
+  return postJson<ScanResult>("/api/scan", { images, settings });
 }
 
 /** Convert UI card entries into the server's {text, imageBase64, mediaType} shape. */

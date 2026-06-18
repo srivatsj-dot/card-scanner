@@ -13,6 +13,21 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
+/* Light theme overrides (data-theme on <html>) */
+:root[data-theme="light"] {
+  --bg: #eef1f6;
+  --panel: #ffffff;
+  --panel-2: #f3f5f9;
+  --line: #dde2ea;
+  --text: #1b2231;
+  --muted: #5d6a7e;
+  --gold: #b07d12;
+  --green: #1f9d57;
+  --red: #d23b3b;
+  --blue: #2f6fe0;
+  --shadow: 0 8px 24px rgba(20, 30, 60, 0.1);
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -21,6 +36,9 @@ body {
   color: var(--text);
   font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   -webkit-font-smoothing: antialiased;
+}
+:root[data-theme="light"] body {
+  background: radial-gradient(1200px 600px at 80% -10%, #e6ecf8 0%, var(--bg) 55%);
 }
 
 button, input, textarea, select {
@@ -250,6 +268,44 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .trade-rec .sub { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; color: var(--gold); margin: 2px 0 8px; }
 
 .warn { color: var(--red); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; }
+
+.theme-toggle {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  width: 38px; height: 38px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Multi-image scan strip */
+.img-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.img-slot { position: relative; }
+.img-slot img {
+  width: 96px; height: 132px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #000;
+  display: block;
+}
+.img-label {
+  position: absolute; left: 6px; bottom: 6px;
+  background: rgba(0,0,0,0.6); color: #fff;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px; padding: 1px 7px; border-radius: 999px;
+}
+.img-remove {
+  position: absolute; top: -8px; right: -8px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--red); color: #fff; border: none;
+  cursor: pointer; font-size: 14px; line-height: 1;
+}
+
+/* Binder row */
+.binder-row { display: flex; gap: 14px; align-items: center; }
+.binder-row .thumb { width: 64px; height: 88px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {

@@ -98,6 +98,16 @@ export interface AskResult {
   note: string;
 }
 
+export type Theme = "dark" | "light";
+
+/** A scan saved to the local binder. */
+export interface SavedCard {
+  id: string;
+  savedAt: number;
+  thumbnail: string; // small JPEG data URL
+  result: ScanResult;
+}
+
 export interface TradeResult {
   fairness: "fair" | "favors_you" | "favors_them" | "lopsided" | string;
   verdict: string;
