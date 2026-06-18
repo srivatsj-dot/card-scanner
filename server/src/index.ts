@@ -79,6 +79,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // consistent extraction than the default sampling.
 const ANALYZE_TEMPERATURE = 0.2;
 
+// gemini-2.5-flash has "thinking" on by default; combined with grounding it can
+// spend the whole output budget on hidden thoughts and return empty text.
+// Disable thinking for these structured calls and give a generous output cap.
+const NO_THINKING = { thinkingBudget: 0 } as const;
+const MAX_OUTPUT = 8192;
+
 /** Call Gemini, retrying briefly on transient 429s to smooth free-tier bursts. */
 async function generate(params: Parameters<typeof ai.models.generateContent>[0]) {
   let lastErr: unknown;
@@ -109,6 +115,8 @@ async function groundedJson<T>(systemInstruction: string, parts: Part[], schema:
     contents: [{ role: "user", parts }],
     config: {
       temperature: ANALYZE_TEMPERATURE,
+      maxOutputTokens: MAX_OUTPUT,
+      thinkingConfig: NO_THINKING,
       systemInstruction:
         systemInstruction +
         `\n\nToday's date is ${today()}. Use Google Search to verify the subject's CURRENT form/standing and the card's CURRENT market value — do not rely on memory for anything time-sensitive.` +
@@ -135,6 +143,8 @@ async function structure<T>(systemInstruction: string, analysis: string, schema:
       analysis,
     config: {
       temperature: ANALYZE_TEMPERATURE,
+      maxOutputTokens: MAX_OUTPUT,
+      thinkingConfig: NO_THINKING,
       systemInstruction,
       responseMimeType: "application/json",
       responseSchema: schema as any,
@@ -150,6 +160,8 @@ async function structuredDirect<T>(systemInstruction: string, parts: Part[], sch
     contents: [{ role: "user", parts }],
     config: {
       temperature: ANALYZE_TEMPERATURE,
+      maxOutputTokens: MAX_OUTPUT,
+      thinkingConfig: NO_THINKING,
       systemInstruction,
       responseMimeType: "application/json",
       responseSchema: schema as any,
@@ -167,12 +179,10 @@ async function analyze<T>(systemInstruction: string, parts: Part[], schema: unkn
   if (!USE_GROUNDING) return structuredDirect<T>(systemInstruction, parts, schema);
   try {
     return await groundedJson<T>(systemInstruction, parts, schema);
-  } catch (err) {
-    if (err instanceof ApiError) {
-      // Grounding quota hit (or grounding unavailable) — retry without it.
-      return structuredDirect<T>(systemInstruction, parts, schema);
-    }
-    throw err;
+  } catch {
+    // Grounding rate-limited, unavailable, or empty — retry without it so the
+    // user still gets a result.
+    return structuredDirect<T>(systemInstruction, parts, schema);
   }
 }
 
@@ -330,6 +340,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       model: MODEL,
       contents,
       config: {
+        maxOutputTokens: MAX_OUTPUT,
+        thinkingConfig: NO_THINKING,
         systemInstruction,
         ...(grounded ? { tools: [{ googleSearch: {} }] } : {}),
       },
