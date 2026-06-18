@@ -1,8 +1,13 @@
 export interface Settings {
   customInstructions?: string;
   minValue?: number | null;
+  maxValue?: number | null;
   excludeMinorLeague?: boolean;
   excludeRookies?: boolean;
+  sameKindOnly?: boolean;
+  gradedOnly?: boolean;
+  blockedCategories?: string[];
+  holdHorizon?: "any" | "flip" | "long";
   sport?: string;
   currency?: string;
 }
@@ -29,11 +34,34 @@ export function buildConstraints(settings: Settings): string {
       `FILTER: Do not recommend any trade target worth less than ${settings.minValue} ${currency}. Drop anything below that floor.`
     );
   }
+  if (typeof settings.maxValue === "number" && settings.maxValue > 0) {
+    lines.push(
+      `FILTER: Do not recommend any trade target worth more than ${settings.maxValue} ${currency}.`
+    );
+  }
+  if (settings.sameKindOnly) {
+    lines.push(
+      `FILTER: Only recommend cards of the SAME category as the card in question (e.g. a baseball card → only baseball cards; a Pokémon card → only Pokémon).`
+    );
+  }
+  if (Array.isArray(settings.blockedCategories) && settings.blockedCategories.length > 0) {
+    lines.push(
+      `FILTER: Never recommend cards from these categories: ${settings.blockedCategories.join(", ")}.`
+    );
+  }
+  if (settings.gradedOnly) {
+    lines.push(`FILTER: Only recommend professionally graded/slabbed cards (PSA, BGS, SGC, or CGC).`);
+  }
   if (settings.excludeMinorLeague) {
     lines.push(`FILTER: Exclude minor-league players and unproven prospects from trade recommendations.`);
   }
   if (settings.excludeRookies) {
     lines.push(`FILTER: Exclude rookie-card recommendations; favor established veterans.`);
+  }
+  if (settings.holdHorizon === "flip") {
+    lines.push(`Prefer cards good for short-term flips: liquid, currently trending, easy to move.`);
+  } else if (settings.holdHorizon === "long") {
+    lines.push(`Prefer long-term holds: stable, blue-chip names likely to retain or grow value.`);
   }
   if (settings.customInstructions && settings.customInstructions.trim()) {
     lines.push(`Collector's custom instructions (follow these): ${settings.customInstructions.trim()}`);

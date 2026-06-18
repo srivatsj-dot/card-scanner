@@ -95,9 +95,12 @@ export default function CameraModal({ onCapture, onClose }: Props) {
         {error ? (
           <div className="error-box">{error}</div>
         ) : (
-          <div className={`cam-stage ${portrait ? "portrait" : "landscape"}`}>
+          <div
+            className={`cam-stage ${portrait ? "portrait" : "landscape"}`}
+            onClick={() => videoRef.current?.play().then(() => setReady(true)).catch(() => {})}
+          >
             <video ref={videoRef} autoPlay playsInline muted className="cam-video" />
-            {!ready && <div className="cam-hint muted">Starting camera…</div>}
+            {!ready && <div className="cam-hint muted">Starting camera… (tap if it stays black)</div>}
           </div>
         )}
 

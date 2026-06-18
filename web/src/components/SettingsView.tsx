@@ -1,5 +1,5 @@
 import type { Settings } from "../types";
-import { CATEGORIES } from "../types";
+import { CATEGORIES, BLOCKABLE_CATEGORIES } from "../types";
 
 interface Props {
   settings: Settings;
@@ -11,11 +11,19 @@ export default function SettingsView({ settings, onChange }: Props) {
     onChange({ ...settings, [key]: value });
   }
 
+  function toggleBlocked(cat: string) {
+    const has = settings.blockedCategories.includes(cat);
+    set(
+      "blockedCategories",
+      has ? settings.blockedCategories.filter((c) => c !== cat) : [...settings.blockedCategories, cat]
+    );
+  }
+
   return (
     <div className="card">
       <h2>Settings &amp; filters</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        These apply to every scan and trade check. They're saved in your browser.
+        These apply to every scan and trade. They're saved in your browser.
       </p>
 
       <div className="grid2">
@@ -41,17 +49,58 @@ export default function SettingsView({ settings, onChange }: Props) {
         </label>
       </div>
 
+      <div className="grid2">
+        <label className="field">
+          <span>Min trade value (per card)</span>
+          <input
+            type="number"
+            min={0}
+            placeholder="e.g. 150 — blank for none"
+            value={settings.minValue ?? ""}
+            onChange={(e) => set("minValue", e.target.value === "" ? null : Number(e.target.value))}
+          />
+        </label>
+        <label className="field">
+          <span>Max trade value (per card)</span>
+          <input
+            type="number"
+            min={0}
+            placeholder="blank for none"
+            value={settings.maxValue ?? ""}
+            onChange={(e) => set("maxValue", e.target.value === "" ? null : Number(e.target.value))}
+          />
+        </label>
+      </div>
+
       <label className="field">
-        <span>Don't recommend trades worth less than (per card)</span>
-        <input
-          type="number"
-          min={0}
-          placeholder="e.g. 150 — leave blank for no minimum"
-          value={settings.minValue ?? ""}
-          onChange={(e) => set("minValue", e.target.value === "" ? null : Number(e.target.value))}
-        />
+        <span>Trade style</span>
+        <select
+          value={settings.holdHorizon}
+          onChange={(e) => set("holdHorizon", e.target.value as Settings["holdHorizon"])}
+        >
+          <option value="any">No preference</option>
+          <option value="flip">Short-term flips (liquid, trending now)</option>
+          <option value="long">Long-term holds (blue-chip, stable)</option>
+        </select>
       </label>
 
+      <h3 style={{ marginTop: 18 }}>Recommendation rules</h3>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={settings.sameKindOnly}
+          onChange={(e) => set("sameKindOnly", e.target.checked)}
+        />
+        Only suggest cards of the <strong>same kind</strong> as the card (e.g. baseball → baseball)
+      </label>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={settings.gradedOnly}
+          onChange={(e) => set("gradedOnly", e.target.checked)}
+        />
+        Only suggest graded / slabbed cards (PSA, BGS, SGC, CGC)
+      </label>
       <label className="toggle">
         <input
           type="checkbox"
@@ -60,7 +109,6 @@ export default function SettingsView({ settings, onChange }: Props) {
         />
         Don't suggest minor-league players or unproven prospects
       </label>
-
       <label className="toggle">
         <input
           type="checkbox"
@@ -70,24 +118,43 @@ export default function SettingsView({ settings, onChange }: Props) {
         Skip rookie cards — favor established veterans
       </label>
 
-      <label className="field" style={{ marginTop: 8 }}>
+      <h3 style={{ marginTop: 18 }}>Block card types</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Never recommend cards from the categories you check.
+      </p>
+      <div className="chips">
+        {BLOCKABLE_CATEGORIES.map((c) => {
+          const active = settings.blockedCategories.includes(c);
+          return (
+            <button
+              key={c}
+              type="button"
+              className={`chip ${active ? "blocked" : ""}`}
+              onClick={() => toggleBlocked(c)}
+            >
+              {active ? "🚫 " : ""}{c}
+            </button>
+          );
+        })}
+      </div>
+
+      <label className="field" style={{ marginTop: 18 }}>
         <span>Custom instructions</span>
         <textarea
           value={settings.customInstructions}
           placeholder={
             "Anything else for the appraiser. Examples:\n" +
-            "• Don't recommend Panini cards\n" +
-            "• Block Topps Chrome\n" +
-            "• Only suggest players on contending teams\n" +
-            "• Focus on long-term holds, not flips"
+            "• Never recommend Panini or Donruss cards\n" +
+            "• Only players on contending teams\n" +
+            "• Prefer numbered parallels"
           }
           onChange={(e) => set("customInstructions", e.target.value)}
         />
       </label>
 
       <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
-        Tip: you can block brands or set names here in plain English — e.g. “never recommend
-        anything from Panini or Donruss.”
+        Tip: block specific brands or set names here in plain English — e.g. “never recommend
+        anything from Panini.”
       </p>
     </div>
   );

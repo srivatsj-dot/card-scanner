@@ -1,8 +1,13 @@
 export interface Settings {
   customInstructions: string;
   minValue: number | null;
+  maxValue: number | null;
   excludeMinorLeague: boolean;
   excludeRookies: boolean;
+  sameKindOnly: boolean;
+  gradedOnly: boolean;
+  blockedCategories: string[];
+  holdHorizon: "any" | "flip" | "long";
   sport: string; // preferred category; "" means any
   currency: string;
 }
@@ -18,11 +23,19 @@ export const CATEGORIES = [
   "Hockey",
 ] as const;
 
+// Categories that can be blocked (everything except "Any").
+export const BLOCKABLE_CATEGORIES = CATEGORIES.filter((c) => c !== "Any");
+
 export const defaultSettings: Settings = {
   customInstructions: "",
   minValue: null,
+  maxValue: null,
   excludeMinorLeague: false,
   excludeRookies: false,
+  sameKindOnly: false,
+  gradedOnly: false,
+  blockedCategories: [],
+  holdHorizon: "any",
   sport: "",
   currency: "USD",
 };
