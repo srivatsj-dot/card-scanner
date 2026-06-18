@@ -1,99 +1,85 @@
-// JSON schemas for Claude structured outputs.
-// Structured outputs require `additionalProperties: false` on every object and
-// do not support numeric/length constraints, so we keep these plain.
+// Response schemas in Gemini's `responseSchema` format (OpenAPI-subset).
+// Gemini does not support `additionalProperties` or union types, so nullable
+// fields use `nullable: true` with a single type.
+
+const STR = { type: "STRING" } as const;
+const NUM = { type: "NUMBER" } as const;
+const nullableStr = { type: "STRING", nullable: true } as const;
 
 export const scanSchema = {
-  type: "object",
-  additionalProperties: false,
+  type: "OBJECT",
   properties: {
     identified: {
-      type: "boolean",
+      type: "BOOLEAN",
       description: "Whether a trading card was confidently identified in the image.",
     },
-    player: { type: ["string", "null"], description: "Player or subject name." },
-    sport: { type: ["string", "null"], description: "Sport or category, e.g. Baseball, Basketball, Pokemon." },
-    team: { type: ["string", "null"] },
-    year: { type: ["string", "null"] },
-    manufacturer: { type: ["string", "null"], description: "e.g. Topps, Panini, Bowman, Upper Deck." },
-    setName: { type: ["string", "null"], description: "Set / product name." },
-    cardNumber: { type: ["string", "null"] },
-    parallel: {
-      type: ["string", "null"],
-      description: "Parallel, refractor, or color variant if visible (e.g. 'Gold /50', 'Prizm Silver').",
-    },
-    specialEdition: {
-      type: ["string", "null"],
-      description: "Notable special edition: rookie card, autograph, relic/patch, serial-numbered, short print, etc.",
-    },
-    serialNumber: { type: ["string", "null"], description: "Serial numbering if printed on the card, e.g. '12/99'." },
-    estimatedCondition: {
-      type: ["string", "null"],
-      description: "Rough condition estimate from the photo (e.g. 'Near Mint', 'Played'). Note this is a guess from a single image.",
-    },
+    player: { ...nullableStr, description: "Player or subject name." },
+    sport: { ...nullableStr, description: "Category, e.g. Baseball, Basketball, Pokémon, Soccer, Cricket." },
+    team: nullableStr,
+    year: nullableStr,
+    manufacturer: { ...nullableStr, description: "e.g. Topps, Panini, Bowman, Upper Deck." },
+    setName: { ...nullableStr, description: "Set / product name." },
+    cardNumber: nullableStr,
+    parallel: { ...nullableStr, description: "Parallel, refractor, or color variant if visible (e.g. 'Gold /50')." },
+    specialEdition: { ...nullableStr, description: "Rookie, autograph, relic/patch, serial-numbered, short print, etc." },
+    serialNumber: { ...nullableStr, description: "Serial numbering printed on the card, e.g. '12/99'." },
+    estimatedCondition: { ...nullableStr, description: "Rough condition guess from a single photo." },
     estimatedValue: {
-      type: "object",
-      additionalProperties: false,
+      type: "OBJECT",
       properties: {
-        low: { type: "number" },
-        mid: { type: "number" },
-        high: { type: "number" },
-        currency: { type: "string" },
-        note: { type: "string", description: "What drives the value and how confident the estimate is." },
+        low: NUM,
+        mid: NUM,
+        high: NUM,
+        currency: STR,
+        note: { ...STR, description: "What drives the value and how confident the estimate is." },
       },
       required: ["low", "mid", "high", "currency", "note"],
     },
     rating: {
-      type: "object",
-      additionalProperties: false,
+      type: "OBJECT",
       properties: {
-        score: { type: "number", description: "Overall desirability 0-100." },
-        label: { type: "string", description: "Short verdict, e.g. 'Strong hold', 'Speculative'." },
-        summary: { type: "string", description: "One or two sentences on how good this card is overall." },
+        score: { ...NUM, description: "Overall desirability 0-100." },
+        label: { ...STR, description: "Short verdict, e.g. 'Strong hold'." },
+        summary: { ...STR, description: "One or two sentences on how good this card is overall." },
       },
       required: ["score", "label", "summary"],
     },
     hiddenInsights: {
-      type: "array",
-      description: "Non-obvious stats or facts a casual collector might miss (print runs, population reports, why a parallel matters, etc.).",
+      type: "ARRAY",
+      description: "Non-obvious stats or facts a casual collector might miss.",
       items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          label: { type: "string" },
-          detail: { type: "string" },
-        },
+        type: "OBJECT",
+        properties: { label: STR, detail: STR },
         required: ["label", "detail"],
       },
     },
     playerOutlook: {
-      type: "object",
-      additionalProperties: false,
+      type: "OBJECT",
       properties: {
-        trend: { type: "string", description: "One of: rising, stable, declining, unknown." },
-        summary: { type: "string", description: "How the player/subject is doing and what it means for this card." },
+        trend: { ...STR, description: "Exactly one of: rising, stable, declining, unknown." },
+        summary: { ...STR, description: "How the player/subject is doing and what it means for this card." },
       },
       required: ["trend", "summary"],
     },
     recommendedTrades: {
-      type: "array",
+      type: "ARRAY",
       description: "Comparable cards/players worth trading toward, respecting the user's filters.",
       items: {
-        type: "object",
-        additionalProperties: false,
+        type: "OBJECT",
         properties: {
-          player: { type: "string" },
-          cardSuggestion: { type: "string", description: "Which card of that player to target, if relevant." },
-          reason: { type: "string" },
-          comparableValue: { type: "string", description: "Rough value range to expect." },
+          player: STR,
+          cardSuggestion: { ...STR, description: "Which card of that player to target." },
+          reason: STR,
+          comparableValue: { ...STR, description: "Rough value range to expect." },
         },
         required: ["player", "cardSuggestion", "reason", "comparableValue"],
       },
     },
-    generalAssessment: { type: "string", description: "Plain-language overall take on the card." },
+    generalAssessment: { ...STR, description: "Plain-language overall take on the card." },
     warnings: {
-      type: "array",
-      description: "Caveats: low photo confidence, possible reprint/counterfeit signs, volatile value, etc.",
-      items: { type: "string" },
+      type: "ARRAY",
+      description: "Caveats: low photo confidence, possible reprint/counterfeit signs, volatile value.",
+      items: STR,
     },
   },
   required: [
@@ -120,40 +106,26 @@ export const scanSchema = {
 } as const;
 
 export const tradeSchema = {
-  type: "object",
-  additionalProperties: false,
+  type: "OBJECT",
   properties: {
-    fairness: {
-      type: "string",
-      description: "One of: fair, favors_you, favors_them, lopsided.",
-    },
-    verdict: { type: "string", description: "One-line headline judgment." },
+    fairness: { ...STR, description: "Exactly one of: fair, favors_you, favors_them, lopsided." },
+    verdict: { ...STR, description: "One-line headline judgment." },
     yourSide: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        valueLow: { type: "number" },
-        valueHigh: { type: "number" },
-        notes: { type: "string" },
-      },
+      type: "OBJECT",
+      properties: { valueLow: NUM, valueHigh: NUM, notes: STR },
       required: ["valueLow", "valueHigh", "notes"],
     },
     theirSide: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        valueLow: { type: "number" },
-        valueHigh: { type: "number" },
-        notes: { type: "string" },
-      },
+      type: "OBJECT",
+      properties: { valueLow: NUM, valueHigh: NUM, notes: STR },
       required: ["valueLow", "valueHigh", "notes"],
     },
-    valueGapNote: { type: "string", description: "Who comes out ahead and by roughly how much." },
-    reasoning: { type: "string", description: "Why this trade is or isn't fair, including trajectory and upside." },
+    valueGapNote: { ...STR, description: "Who comes out ahead and by roughly how much." },
+    reasoning: { ...STR, description: "Why the trade is or isn't fair, including trajectory and upside." },
     suggestions: {
-      type: "array",
+      type: "ARRAY",
       description: "Ways to even out or improve the deal.",
-      items: { type: "string" },
+      items: STR,
     },
   },
   required: ["fairness", "verdict", "yourSide", "theirSide", "valueGapNote", "reasoning", "suggestions"],

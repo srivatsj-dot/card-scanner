@@ -5,7 +5,8 @@ breakdown: what it is, what it's worth, the stats casual collectors miss, how
 good it is to own right now, and which comparable cards make smart trades.
 
 Works across **Pokémon, baseball, soccer, cricket, basketball, football, and
-hockey** cards. Powered by Claude (`claude-opus-4-8`) with vision.
+hockey** cards. Powered by Google **Gemini** (`gemini-2.5-flash`) with vision —
+which has a **free tier**.
 
 ## What it does
 
@@ -38,11 +39,12 @@ chat.
 
 ## Setup
 
-You need an Anthropic API key: https://platform.claude.com/
+You need a **free** Google Gemini API key: https://aistudio.google.com/apikey
+(sign in with a Google account — no billing required to start).
 
 ```bash
 # 1. Add your key
-cp .env.example .env        # then edit .env and set ANTHROPIC_API_KEY
+cp .env.example .env        # then edit .env and set GEMINI_API_KEY
 
 # 2. Install everything (root, server, and web)
 npm install
@@ -54,7 +56,7 @@ npm run dev
 - Web app: http://localhost:5173
 - API server: http://localhost:8787 (the web dev server proxies `/api` to it)
 
-The server reads `ANTHROPIC_API_KEY` from `.env` (via `dotenv`).
+The server reads `GEMINI_API_KEY` from `.env` at the repo root (via `dotenv`).
 
 ### Production build
 
@@ -66,18 +68,22 @@ npm start          # runs the API server (serve web/dist with any static host)
 ## How it's built
 
 ```
-server/   Express API + @anthropic-ai/sdk
+server/   Express API + @google/genai
   src/index.ts      routes: /api/scan, /api/trade, /api/chat, /api/health
+  src/gemini.ts     Gemini client + model config
   src/prompts.ts    system prompts + filter/custom-instruction handling
-  src/schemas.ts    JSON schemas for Claude structured outputs
+  src/schemas.ts    Gemini responseSchema definitions for structured output
 web/      Vite + React UI
   src/components/    ScanView, ResultCard, TradeView, SettingsView, ChatDrawer
 ```
 
-- **Scanning** uses Claude vision with a JSON-schema **structured output**, so
-  results parse reliably.
-- **Adaptive thinking** is on for scans and trade evaluations.
+- **Scanning** uses Gemini vision with a JSON **structured output**
+  (`responseSchema`), so results parse reliably.
 - **Chat** is **streamed** token-by-token over Server-Sent Events.
+
+Want a different model? Set `CARD_SCANNER_MODEL` in `.env` (e.g.
+`gemini-2.0-flash`). To switch providers entirely (Groq, Mistral, OpenRouter),
+only `server/src/gemini.ts` and `server/src/index.ts` need changes.
 
 ## Notes
 

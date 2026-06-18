@@ -2,8 +2,8 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import type { Request, Response } from "express";
-import Anthropic from "@anthropic-ai/sdk";
-import { client, MODEL, hasApiKey, firstText } from "./anthropic.js";
+import { ApiError } from "@google/genai";
+import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { scanSchema, tradeSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
@@ -30,7 +30,7 @@ function apiKeyGuard(res: Response): boolean {
   if (!hasApiKey) {
     res.status(503).json({
       error:
-        "No ANTHROPIC_API_KEY configured on the server. Copy .env.example to .env and add your key.",
+        "No GEMINI_API_KEY configured on the server. Get a free key at https://aistudio.google.com/apikey, then add it to .env.",
     });
     return false;
   }
@@ -38,27 +38,31 @@ function apiKeyGuard(res: Response): boolean {
 }
 
 function describeError(err: unknown): { status: number; message: string } {
-  if (err instanceof Anthropic.AuthenticationError) {
-    return { status: 401, message: "Invalid ANTHROPIC_API_KEY." };
-  }
-  if (err instanceof Anthropic.RateLimitError) {
-    return { status: 429, message: "Rate limited by the Claude API — try again shortly." };
-  }
-  if (err instanceof Anthropic.APIError) {
-    if (typeof err.message === "string" && /credit balance is too low/i.test(err.message)) {
+  if (err instanceof ApiError) {
+    if (err.status === 429) {
       return {
-        status: 402,
+        status: 429,
         message:
-          "Your Anthropic account is out of API credits. Add credits at platform.claude.com → Plans & Billing, then try again.",
+          "Gemini free-tier rate limit hit. Wait a minute and try again, or check quota in Google AI Studio.",
       };
     }
-    return { status: err.status ?? 500, message: err.message };
+    if (err.status === 400 && /api key/i.test(err.message)) {
+      return { status: 401, message: "Invalid GEMINI_API_KEY." };
+    }
+    return { status: err.status || 500, message: err.message };
   }
   return { status: 500, message: err instanceof Error ? err.message : "Unexpected server error." };
 }
 
+/** Pull JSON out of a Gemini response, tolerating accidental ```json fences. */
+function parseJson<T>(text: string | undefined): T {
+  if (!text) throw new Error("The model returned an empty response.");
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  return JSON.parse(cleaned) as T;
+}
+
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, model: MODEL, hasApiKey });
+  res.json({ ok: true, provider: "google-gemini", model: MODEL, hasApiKey });
 });
 
 // --- Scan a card image -----------------------------------------------------
@@ -81,38 +85,25 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   }
 
   try {
-    const response = await client.messages.create({
+    const response = await ai.models.generateContent({
       model: MODEL,
-      max_tokens: 10000,
-      thinking: { type: "adaptive" },
-      system: scanSystemPrompt(settings || {}),
-      output_config: {
-        format: { type: "json_schema", schema: scanSchema as unknown as Record<string, unknown> },
-      },
-      messages: [
+      contents: [
         {
           role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType as any, data: imageBase64 },
-            },
-            {
-              type: "text",
-              text: "Scan this trading card and return the full structured analysis.",
-            },
+          parts: [
+            { inlineData: { mimeType: mediaType, data: imageBase64 } },
+            { text: "Scan this trading card and return the full structured analysis." },
           ],
         },
       ],
+      config: {
+        systemInstruction: scanSystemPrompt(settings || {}),
+        responseMimeType: "application/json",
+        responseSchema: scanSchema as any,
+      },
     });
 
-    if (response.stop_reason === "refusal") {
-      res.status(422).json({ error: "The model declined to analyze this image." });
-      return;
-    }
-
-    const text = firstText(response.content);
-    res.json(JSON.parse(text));
+    res.json(parseJson(response.text));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -135,30 +126,19 @@ app.post("/api/trade", async (req: Request, res: Response) => {
   }
 
   try {
-    const response = await client.messages.create({
+    const response = await ai.models.generateContent({
       model: MODEL,
-      max_tokens: 6000,
-      thinking: { type: "adaptive" },
-      system: tradeSystemPrompt(settings || {}),
-      output_config: {
-        format: { type: "json_schema", schema: tradeSchema as unknown as Record<string, unknown> },
+      contents:
+        `Evaluate this trade.\n\nWhat I give up (my side):\n${yourSide}\n\n` +
+        `What I receive (their side):\n${theirSide}`,
+      config: {
+        systemInstruction: tradeSystemPrompt(settings || {}),
+        responseMimeType: "application/json",
+        responseSchema: tradeSchema as any,
       },
-      messages: [
-        {
-          role: "user",
-          content:
-            `Evaluate this trade.\n\nWhat I give up (my side):\n${yourSide}\n\n` +
-            `What I receive (their side):\n${theirSide}`,
-        },
-      ],
     });
 
-    if (response.stop_reason === "refusal") {
-      res.status(422).json({ error: "The model declined to evaluate this trade." });
-      return;
-    }
-
-    res.json(JSON.parse(firstText(response.content)));
+    res.json(parseJson(response.text));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -190,18 +170,21 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   };
 
   try {
-    const stream = client.messages.stream({
+    const stream = await ai.models.generateContentStream({
       model: MODEL,
-      max_tokens: 4000,
-      system: chatSystemPrompt(settings || {}, cardContext),
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      // Gemini uses "model" for the assistant role.
+      contents: messages.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      })),
+      config: {
+        systemInstruction: chatSystemPrompt(settings || {}, cardContext),
+      },
     });
 
-    stream.on("text", (delta) => send("delta", { text: delta }));
-
-    const final = await stream.finalMessage();
-    if (final.stop_reason === "refusal") {
-      send("error", { message: "The model declined to respond." });
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) send("delta", { text });
     }
     send("done", {});
     res.end();
@@ -214,8 +197,8 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`card-scanner API listening on http://localhost:${PORT}`);
-  console.log(`  model: ${MODEL}`);
+  console.log(`  provider: google-gemini  model: ${MODEL}`);
   if (!hasApiKey) {
-    console.log("  ⚠  ANTHROPIC_API_KEY is not set — copy .env.example to .env and add your key.");
+    console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
 });
