@@ -5,13 +5,14 @@ import { searchCard } from "./api";
 import { describeCard, sleep, DAY_MS } from "./utils";
 import ScanView from "./components/ScanView";
 import SearchView from "./components/SearchView";
+import BulkView from "./components/BulkView";
 import TradeView from "./components/TradeView";
 import SettingsView from "./components/SettingsView";
 import BinderView from "./components/BinderView";
 import WishlistView from "./components/WishlistView";
 import ChatDrawer from "./components/ChatDrawer";
 
-type View = "scan" | "search" | "trade" | "binder" | "wishlist" | "settings";
+type View = "scan" | "search" | "bulk" | "trade" | "binder" | "wishlist" | "settings";
 
 const SETTINGS_KEY = "card-scanner-settings";
 const BINDER_KEY = "card-scanner-binder";
@@ -166,6 +167,7 @@ export default function App() {
           <nav className="nav">
             <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>Scan</button>
             <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>Search</button>
+            <button className={view === "bulk" ? "active" : ""} onClick={() => setView("bulk")}>Bulk</button>
             <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>Trade</button>
             <button className={view === "binder" ? "active" : ""} onClick={() => setView("binder")}>
               Binder{saved.length > 0 ? ` (${saved.length})` : ""}
@@ -192,6 +194,7 @@ export default function App() {
       {view === "search" && (
         <SearchView settings={settings} result={search} onResult={(r) => { setSearch(r); if (r) setLastResult(r); }} onSave={saveCard} />
       )}
+      {view === "bulk" && <BulkView settings={settings} onSave={saveCard} />}
       {view === "trade" && <TradeView settings={settings} saved={saved} />}
       {view === "binder" && (
         <BinderView
