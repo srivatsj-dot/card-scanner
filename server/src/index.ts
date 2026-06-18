@@ -45,6 +45,13 @@ function describeError(err: unknown): { status: number; message: string } {
     return { status: 429, message: "Rate limited by the Claude API — try again shortly." };
   }
   if (err instanceof Anthropic.APIError) {
+    if (typeof err.message === "string" && /credit balance is too low/i.test(err.message)) {
+      return {
+        status: 402,
+        message:
+          "Your Anthropic account is out of API credits. Add credits at platform.claude.com → Plans & Billing, then try again.",
+      };
+    }
     return { status: err.status ?? 500, message: err.message };
   }
   return { status: 500, message: err instanceof Error ? err.message : "Unexpected server error." };
