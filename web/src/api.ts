@@ -28,6 +28,11 @@ export function scanCard(dataUrls: string[], settings: Settings): Promise<ScanRe
   return postJson<ScanResult>("/api/scan", { images, settings });
 }
 
+/** Look up a card from a typed description (no photo). */
+export function searchCard(text: string, settings: Settings): Promise<ScanResult> {
+  return postJson<ScanResult>("/api/scan", { text, settings });
+}
+
 /** Convert UI card entries into the server's {text, imageBase64, mediaType} shape. */
 function entriesToServer(entries: CardEntry[]) {
   return entries

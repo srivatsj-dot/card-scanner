@@ -197,9 +197,11 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     images?: { imageBase64: string; mediaType: string }[];
     imageBase64?: string; // legacy single-image support
     mediaType?: string;
+    text?: string; // typed card description (photo optional)
     settings?: Settings;
   };
   const settings = body.settings;
+  const text = body.text?.trim() || "";
 
   // Accept either the new images[] array or a single legacy image.
   const images =
@@ -209,8 +211,8 @@ app.post("/api/scan", async (req: Request, res: Response) => {
       ? [{ imageBase64: body.imageBase64, mediaType: body.mediaType }]
       : [];
 
-  if (images.length === 0) {
-    res.status(400).json({ error: "At least one image is required." });
+  if (images.length === 0 && !text) {
+    res.status(400).json({ error: "Add a photo or type a card description." });
     return;
   }
   const bad = images.find((im) => !ALLOWED_MEDIA.has(im.mediaType));
@@ -227,12 +229,22 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     images.length > 1
       ? `These ${images.length} photos are of the SAME single card (e.g. front, back, and/or angled shots). Use ALL of them together — the back and angled shots often reveal the card number, set, serial numbering, and whether a parallel/refractor finish is present. `
       : "";
+  const describedAs = text
+    ? images.length > 0
+      ? `The collector adds this description (use it to resolve ambiguity): "${text}". `
+      : `Look up the card the collector describes: "${text}". `
+    : "";
+  const task =
+    images.length > 0
+      ? "Identify this exact trading card (subject, set, year, card number, parallel, serial number, special edition), "
+      : "Identify the described card as specifically as you can (subject, set, year, card number, parallel, special edition); if the description is ambiguous, note assumptions in warnings. ";
   const scanParts: Part[] = [
     ...imageParts,
     {
       text:
         intro +
-        "Identify this exact trading card (subject, set, year, card number, parallel, serial number, special edition), " +
+        describedAs +
+        task +
         "then research current value and the subject's current form, and return the full structured analysis.",
     },
   ];

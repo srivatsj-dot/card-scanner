@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
-import type { Settings, TradeResult, AskResult, CardEntry } from "../types";
+import type { Settings, TradeResult, AskResult, CardEntry, SavedCard } from "../types";
 import { evaluateTrade, suggestAsks } from "../api";
+import { describeCard } from "../utils";
 import CameraModal from "./CameraModal";
+import BinderPicker from "./BinderPicker";
 
 let nextId = 1;
 const newEntry = (): CardEntry => ({ id: nextId++, text: "" });
@@ -31,6 +33,7 @@ function CardRow({
   onChange,
   onRemove,
   canRemove,
+  onFromBinder,
 }: {
   entry: CardEntry;
   index: number;
@@ -38,6 +41,7 @@ function CardRow({
   onChange: (e: CardEntry) => void;
   onRemove: () => void;
   canRemove: boolean;
+  onFromBinder?: () => void;
 }) {
   const [showCamera, setShowCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -67,6 +71,9 @@ function CardRow({
             📸 {entry.dataUrl ? "Retake" : "Photo"}
           </button>
           <button className="btn ghost small" onClick={() => fileRef.current?.click()}>Upload</button>
+          {onFromBinder && (
+            <button className="btn ghost small" onClick={onFromBinder}>📒 From binder</button>
+          )}
           {entry.dataUrl && (
             <button className="btn ghost small" onClick={() => onChange({ ...entry, dataUrl: undefined })}>
               Remove photo
@@ -106,12 +113,16 @@ function Side({
   entries,
   setEntries,
   placeholder,
+  hasBinder,
+  onFromBinder,
 }: {
   title: string;
   hint: string;
   entries: CardEntry[];
   setEntries: (e: CardEntry[]) => void;
   placeholder: string;
+  hasBinder: boolean;
+  onFromBinder: (entryId: number) => void;
 }) {
   function update(id: number, e: CardEntry) {
     setEntries(entries.map((x) => (x.id === id ? e : x)));
@@ -129,6 +140,7 @@ function Side({
           canRemove={entries.length > 1}
           onChange={(e) => update(entry.id, e)}
           onRemove={() => setEntries(entries.filter((x) => x.id !== entry.id))}
+          onFromBinder={hasBinder ? () => onFromBinder(entry.id) : undefined}
         />
       ))}
       <button className="btn secondary small" onClick={() => setEntries([...entries, newEntry()])}>
@@ -138,13 +150,25 @@ function Side({
   );
 }
 
-export default function TradeView({ settings }: { settings: Settings }) {
+export default function TradeView({ settings, saved }: { settings: Settings; saved: SavedCard[] }) {
   const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
   const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
   const [trade, setTrade] = useState<TradeResult | null>(null);
   const [ask, setAsk] = useState<AskResult | null>(null);
   const [loading, setLoading] = useState<"" | "fair" | "ask">("");
   const [error, setError] = useState<string | null>(null);
+  const [picking, setPicking] = useState<{ side: "your" | "their"; id: number } | null>(null);
+
+  function applyPick(card: SavedCard) {
+    if (!picking) return;
+    const { side, id } = picking;
+    const setList = side === "your" ? setYourSide : setTheirSide;
+    const text = describeCard(card.result);
+    setList((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, text, dataUrl: card.thumbnail || e.dataUrl } : e))
+    );
+    setPicking(null);
+  }
 
   const hasGiving = yourSide.some((e) => e.text.trim() || e.dataUrl);
   const hasReceiving = theirSide.some((e) => e.text.trim() || e.dataUrl);
@@ -180,9 +204,9 @@ export default function TradeView({ settings }: { settings: Settings }) {
       <div className="card">
         <h2>Trade tool</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Add the cards on each side — type them or snap a photo. You can add multiple cards per
-          side (e.g. Schwarber + Marte). Then check if a trade is fair, or ask what you should get
-          back for the cards you're giving.
+          Add the cards on each side — type them, snap a photo, or pull one from your binder. You
+          can add multiple cards per side (e.g. Schwarber + Marte). Then check if a trade is fair,
+          or ask what you should get back for the cards you're giving.
         </p>
       </div>
 
@@ -193,6 +217,8 @@ export default function TradeView({ settings }: { settings: Settings }) {
           entries={yourSide}
           setEntries={setYourSide}
           placeholder="e.g. 2016 Topps Chrome Kyle Schwarber RC auto /150"
+          hasBinder={saved.length > 0}
+          onFromBinder={(id) => setPicking({ side: "your", id })}
         />
         <Side
           title="You receive (optional)"
@@ -200,8 +226,14 @@ export default function TradeView({ settings }: { settings: Settings }) {
           entries={theirSide}
           setEntries={setTheirSide}
           placeholder="e.g. 2018 Bowman Chrome Julio Rodríguez refractor"
+          hasBinder={saved.length > 0}
+          onFromBinder={(id) => setPicking({ side: "their", id })}
         />
       </div>
+
+      {picking && (
+        <BinderPicker saved={saved} onPick={applyPick} onClose={() => setPicking(null)} />
+      )}
 
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

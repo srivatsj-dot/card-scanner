@@ -316,6 +316,20 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .binder-row { display: flex; gap: 14px; align-items: center; }
 .binder-row .thumb { width: 64px; height: 88px; }
 
+/* Binder picker rows */
+.picker-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+.picker-row:hover { border-color: var(--gold); }
+
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
   background: var(--panel-2);

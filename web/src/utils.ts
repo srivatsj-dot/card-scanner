@@ -21,3 +21,15 @@ export function makeThumbnail(dataUrl: string, max = 280): Promise<string> {
     img.src = dataUrl;
   });
 }
+
+import type { ScanResult } from "./types";
+
+/** Build a short text description of a saved card for the trade tool. */
+export function describeCard(r: ScanResult): string {
+  const parts = [r.year, r.manufacturer, r.setName, r.player, r.parallel].filter(Boolean);
+  let s = parts.join(" ");
+  if (r.specialEdition) s += ` (${r.specialEdition})`;
+  if (r.serialNumber) s += ` /${r.serialNumber.replace(/^.*\//, "")}`;
+  else if (r.cardNumber) s += ` #${r.cardNumber}`;
+  return s.trim() || r.player || "Saved card";
+}

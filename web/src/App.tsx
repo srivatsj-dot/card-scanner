@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import type { ScanResult, Settings, SavedCard, Theme } from "./types";
 import { defaultSettings } from "./types";
 import ScanView from "./components/ScanView";
+import SearchView from "./components/SearchView";
 import TradeView from "./components/TradeView";
 import SettingsView from "./components/SettingsView";
 import BinderView from "./components/BinderView";
 import ChatDrawer from "./components/ChatDrawer";
 
-type View = "scan" | "trade" | "binder" | "settings";
+type View = "scan" | "search" | "trade" | "binder" | "settings";
 
 const SETTINGS_KEY = "card-scanner-settings";
 const BINDER_KEY = "card-scanner-binder";
@@ -30,6 +31,8 @@ export default function App() {
     ...loadJSON<Partial<Settings>>(SETTINGS_KEY, {}),
   }));
   const [scan, setScan] = useState<ScanResult | null>(null);
+  const [search, setSearch] = useState<ScanResult | null>(null);
+  const [lastResult, setLastResult] = useState<ScanResult | null>(null);
   const [saved, setSaved] = useState<SavedCard[]>(() => loadJSON<SavedCard[]>(BINDER_KEY, []));
   const [theme, setTheme] = useState<Theme>(() => (loadJSON<Theme>(THEME_KEY, "dark")));
   const [chatOpen, setChatOpen] = useState(false);
@@ -67,6 +70,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <nav className="nav">
             <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>Scan</button>
+            <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>Search</button>
             <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>Trade</button>
             <button className={view === "binder" ? "active" : ""} onClick={() => setView("binder")}>
               Binder{saved.length > 0 ? ` (${saved.length})` : ""}
@@ -85,9 +89,22 @@ export default function App() {
       </div>
 
       {view === "scan" && (
-        <ScanView settings={settings} result={scan} onResult={setScan} onSave={saveCard} />
+        <ScanView
+          settings={settings}
+          result={scan}
+          onResult={(r) => { setScan(r); if (r) setLastResult(r); }}
+          onSave={saveCard}
+        />
       )}
-      {view === "trade" && <TradeView settings={settings} />}
+      {view === "search" && (
+        <SearchView
+          settings={settings}
+          result={search}
+          onResult={(r) => { setSearch(r); if (r) setLastResult(r); }}
+          onSave={saveCard}
+        />
+      )}
+      {view === "trade" && <TradeView settings={settings} saved={saved} />}
       {view === "binder" && (
         <BinderView
           saved={saved}
@@ -102,7 +119,7 @@ export default function App() {
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 Ask a question</button>
 
       {chatOpen && (
-        <ChatDrawer settings={settings} cardContext={scan} onClose={() => setChatOpen(false)} />
+        <ChatDrawer settings={settings} cardContext={lastResult} onClose={() => setChatOpen(false)} />
       )}
     </div>
   );
