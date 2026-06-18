@@ -74,7 +74,8 @@ export function buildConstraints(settings: Settings): string {
 export function scanSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +
-    `\n\nWhen you analyze the card image, fill every field. If you genuinely cannot read a detail from the photo, use null and add a note in "warnings". For "recommendedTrades", suggest 2-4 comparable cards/players worth chasing (upgrades or hot names). For "similarValueTargets", suggest 2-4 cards of SIMILAR value the collector could realistically ask for in return if they traded this card away — fair 1-for-1 swaps the other side would accept. Both lists must respect the collector's filters. For "playerOutlook.trend", use exactly one of: rising, stable, declining, unknown.` +
+    `\n\nACCURACY FIRST. Read the card literally: transcribe the exact name, team, set/brand, year, and card number as printed — do not guess from resemblance to a player or set you recall. Zoom in mentally on small text (card number, copyright year, set logo, serial numbering). If a detail is unclear or you are not confident, set that field to null and note it in "warnings" — never fill a field with a confident guess. Use Google Search to CONFIRM the card's identity (player, set, year, card number, parallel) and its value; if the image and your knowledge disagree, trust what is printed on the card. It is better to return null than a wrong value.` +
+    `\n\nWhen you analyze the card, fill every field you can verify. For "recommendedTrades", suggest 2-4 comparable cards/players worth chasing (upgrades or hot names). For "similarValueTargets", suggest 2-4 cards of SIMILAR value the collector could realistically ask for in return if they traded this card away — fair 1-for-1 swaps the other side would accept. Both lists must respect the collector's filters. For "playerOutlook.trend", use exactly one of: rising, stable, declining, unknown.` +
     buildConstraints(settings)
   );
 }

@@ -5,8 +5,8 @@ breakdown: what it is, what it's worth, the stats casual collectors miss, how
 good it is to own right now, and which comparable cards make smart trades.
 
 Works across **Pokémon, baseball, soccer, cricket, basketball, football, and
-hockey** cards. Powered by Google **Gemini** (`gemini-2.5-flash-lite` by
-default) with vision — which has a **free tier**.
+hockey** cards. Powered by Google **Gemini** (`gemini-2.5-flash` by default)
+with vision — which has a **free tier**.
 
 ## What it does
 
@@ -85,11 +85,16 @@ web/      Vite + React UI
   (JSON requested in the prompt, since Gemini can't combine search with strict
   schema), with a fallback reshape only if the JSON is malformed. Disable with
   `CARD_SCANNER_GROUNDING=false` in `.env` for stale-but-faster results.
+- **Accuracy:** identification/appraisal run at low temperature with a
+  read-it-literally, verify-with-search, prefer-"unknown"-over-guessing prompt.
+  The default model `gemini-2.5-flash` is the sharpest free option for reading
+  cards.
 - **Rate limits:** the free tier has per-minute/day caps (and grounding has its
   own, lower cap). The server retries briefly on 429 and, if a grounded call is
   rate-limited, **automatically falls back to a non-grounded call** so you still
-  get a result. The default model `gemini-2.5-flash-lite` has the most generous
-  free limits; set `CARD_SCANNER_MODEL=gemini-2.5-flash` for sharper IDs.
+  get a result. If you hit limits a lot, `CARD_SCANNER_MODEL=gemini-2.5-flash-lite`
+  has higher limits (less accurate), or `CARD_SCANNER_GROUNDING=false` skips the
+  search quota.
 - **Chat** is **streamed** token-by-token over Server-Sent Events, also with
   live grounding.
 

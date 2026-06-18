@@ -75,6 +75,10 @@ function parseJson<T>(text: string | undefined): T {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Low temperature for identification/appraisal — less guessing and more
+// consistent extraction than the default sampling.
+const ANALYZE_TEMPERATURE = 0.2;
+
 /** Call Gemini, retrying briefly on transient 429s to smooth free-tier bursts. */
 async function generate(params: Parameters<typeof ai.models.generateContent>[0]) {
   let lastErr: unknown;
@@ -104,6 +108,7 @@ async function groundedJson<T>(systemInstruction: string, parts: Part[], schema:
     model: MODEL,
     contents: [{ role: "user", parts }],
     config: {
+      temperature: ANALYZE_TEMPERATURE,
       systemInstruction:
         systemInstruction +
         `\n\nToday's date is ${today()}. Use Google Search to verify the subject's CURRENT form/standing and the card's CURRENT market value — do not rely on memory for anything time-sensitive.` +
@@ -129,6 +134,7 @@ async function structure<T>(systemInstruction: string, analysis: string, schema:
       "Convert the following analysis into the required JSON. Use only facts present in the analysis; do not invent new details.\n\n" +
       analysis,
     config: {
+      temperature: ANALYZE_TEMPERATURE,
       systemInstruction,
       responseMimeType: "application/json",
       responseSchema: schema as any,
@@ -143,6 +149,7 @@ async function structuredDirect<T>(systemInstruction: string, parts: Part[], sch
     model: MODEL,
     contents: [{ role: "user", parts }],
     config: {
+      temperature: ANALYZE_TEMPERATURE,
       systemInstruction,
       responseMimeType: "application/json",
       responseSchema: schema as any,
