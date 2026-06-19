@@ -47,21 +47,32 @@ export default function BulkView({ settings, onSave }: Props) {
   async function scanAll() {
     setRunning(true);
     // Bulk scans skip live grounding (one fast call each) so a stack of cards
-    // doesn't trip the free-tier rate limit. Sequential with a small gap.
+    // doesn't trip the free-tier rate limit. Sequential with a small gap, and a
+    // rate-limited card backs off and retries instead of killing the whole run.
     const fastSettings = { ...settings, liveData: false };
     const pending = rows.filter((r) => r.status === "pending" || r.status === "error");
     for (let i = 0; i < pending.length; i++) {
       const row = pending[i];
       patch(row.id, { status: "scanning", error: undefined });
-      try {
-        const result = await scanCard([row.dataUrl], fastSettings);
-        patch(row.id, { status: "done", result });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Scan failed.";
-        patch(row.id, { status: "error", error: msg });
-        if (msg.toLowerCase().includes("rate limit")) break; // stop; user can resume
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const result = await scanCard([row.dataUrl], fastSettings);
+          patch(row.id, { status: "done", result });
+          break;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Scan failed.";
+          const rateLimited = msg.toLowerCase().includes("rate limit");
+          if (rateLimited && attempt < 2) {
+            // Wait out the per-minute cap, then retry the same card.
+            patch(row.id, { status: "scanning", error: t("Rate limited — waiting, then retrying…") });
+            await sleep(8000 * (attempt + 1));
+            continue;
+          }
+          patch(row.id, { status: "error", error: msg });
+          break;
+        }
       }
-      if (i < pending.length - 1) await sleep(1500);
+      if (i < pending.length - 1) await sleep(2000);
     }
     setRunning(false);
   }
@@ -127,7 +138,7 @@ export default function BulkView({ settings, onSave }: Props) {
           <div className="binder-row">
             <img className="thumb" src={row.dataUrl} alt="card" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              {row.status === "scanning" && <div className="muted"><span className="spinner" />{t("Scanning…")}</div>}
+              {row.status === "scanning" && <div className="muted"><span className="spinner" />{row.error || t("Scanning…")}</div>}
               {row.status === "pending" && <div className="muted">{t("Ready to scan")}</div>}
               {row.status === "error" && <div className="warn">{row.error}</div>}
               {row.status === "done" && row.result && (
