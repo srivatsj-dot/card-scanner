@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useT } from "../translator";
 
 interface Props {
   onCapture: (dataUrl: string) => void;
@@ -18,6 +19,7 @@ export default function CameraModal({ onCapture, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [portrait, setPortrait] = useState(true);
+  const t = useT();
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +28,7 @@ export default function CameraModal({ onCapture, onClose }: Props) {
 
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError("This browser can't access the camera. Use Upload instead.");
+        setError(t("This browser can't access the camera. Use Upload instead."));
         return;
       }
       try {
@@ -57,12 +59,12 @@ export default function CameraModal({ onCapture, onClose }: Props) {
         const name = (err as { name?: string })?.name;
         if (name === "NotAllowedError" || name === "SecurityError") {
           setError(
-            "Camera permission is blocked for this site. In Safari: top menu → Safari → Settings for localhost… → set Camera to Allow, then reload. Or just use Upload."
+            t("Camera permission is blocked for this site. In Safari: top menu → Safari → Settings for localhost… → set Camera to Allow, then reload. Or just use Upload.")
           );
         } else if (name === "NotFoundError") {
-          setError("No camera was found on this device. Use Upload instead.");
+          setError(t("No camera was found on this device. Use Upload instead."));
         } else {
-          setError("Couldn't open the camera. Make sure no other app is using it, or use Upload.");
+          setError(t("Couldn't open the camera. Make sure no other app is using it, or use Upload."));
         }
       }
     }
@@ -100,28 +102,28 @@ export default function CameraModal({ onCapture, onClose }: Props) {
             onClick={() => videoRef.current?.play().then(() => setReady(true)).catch(() => {})}
           >
             <video ref={videoRef} autoPlay playsInline muted className="cam-video" />
-            {!ready && <div className="cam-hint muted">Starting camera… (tap if it stays black)</div>}
+            {!ready && <div className="cam-hint muted">{t("Starting camera… (tap if it stays black)")}</div>}
           </div>
         )}
 
         <div className="cam-actions">
           {!error && (
             <>
-              <button className="btn" onClick={capture} disabled={!ready}>📷 Capture</button>
+              <button className="btn" onClick={capture} disabled={!ready}>📷 {t("Capture")}</button>
               <button
                 className="btn secondary"
                 onClick={() => setPortrait((p) => !p)}
-                title="Switch frame orientation"
+                title={t("Switch frame orientation")}
               >
-                {portrait ? "Landscape frame" : "Portrait frame"}
+                {portrait ? t("Landscape frame") : t("Portrait frame")}
               </button>
             </>
           )}
-          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn ghost" onClick={onClose}>{t("Cancel")}</button>
         </div>
         {!error && (
           <p className="muted" style={{ fontSize: 12, margin: "8px 2px 0", textAlign: "center" }}>
-            Fill the frame with the card. Use the orientation button for vertical cards.
+            {t("Fill the frame with the card. Use the orientation button for vertical cards.")}
           </p>
         )}
       </div>

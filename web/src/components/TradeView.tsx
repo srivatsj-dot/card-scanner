@@ -9,12 +9,12 @@ import BinderPicker from "./BinderPicker";
 let nextId = 1;
 const newEntry = (): CardEntry => ({ id: nextId++, text: "" });
 
-function fairnessPill(f: string) {
+function fairnessPill(f: string, t: (s: string) => string) {
   switch (f) {
-    case "fair": return <span className="pill green">Fair trade</span>;
-    case "favors_you": return <span className="pill green">Favors you</span>;
-    case "favors_them": return <span className="pill red">Favors them</span>;
-    case "lopsided": return <span className="pill red">Lopsided</span>;
+    case "fair": return <span className="pill green">{t("Fair trade")}</span>;
+    case "favors_you": return <span className="pill green">{t("Favors you")}</span>;
+    case "favors_them": return <span className="pill red">{t("Favors them")}</span>;
+    case "lopsided": return <span className="pill red">{t("Lopsided")}</span>;
     default: return <span className="pill">{f}</span>;
   }
 }
@@ -254,7 +254,7 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
       {trade && (
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            {fairnessPill(trade.fairness)}
+            {fairnessPill(trade.fairness, t)}
             <h2 style={{ margin: 0 }}>{trade.verdict}</h2>
           </div>
           <div className="grid2" style={{ marginTop: 14 }}>
@@ -288,7 +288,7 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
 
       {ask && (
         <div className="card">
-          <h2 style={{ marginBottom: 4 }}>What to ask for</h2>
+          <h2 style={{ marginBottom: 4 }}>{t("What to ask for")}</h2>
           <p className="muted" style={{ marginTop: 0 }}>{ask.givingValueNote}</p>
           {ask.targets.map((t, i) => (
             <div className="trade-rec" key={i}>

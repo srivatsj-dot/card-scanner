@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ScanResult, Settings } from "../types";
 import { streamChat } from "../api";
+import { useT } from "../translator";
 
 interface Props {
   settings: Settings;
@@ -14,6 +15,7 @@ export default function ChatDrawer({ settings, cardContext, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const msgsRef = useRef<HTMLDivElement>(null);
+  const t = useT();
 
   useEffect(() => {
     msgsRef.current?.scrollTo({ top: msgsRef.current.scrollHeight, behavior: "smooth" });
@@ -60,9 +62,9 @@ export default function ChatDrawer({ settings, cardContext, onClose }: Props) {
       <aside className="drawer">
         <header>
           <div>
-            <strong>Ask the appraiser</strong>
+            <strong>{t("Ask the appraiser")}</strong>
             {cardContext?.player && (
-              <div className="muted" style={{ fontSize: 12 }}>About: {cardContext.player}</div>
+              <div className="muted" style={{ fontSize: 12 }}>{t("About:")} {cardContext.player}</div>
             )}
           </div>
           <button className="iconbtn" onClick={onClose} aria-label="Close">×</button>
@@ -71,9 +73,8 @@ export default function ChatDrawer({ settings, cardContext, onClose }: Props) {
         <div className="msgs" ref={msgsRef}>
           {messages.length === 0 && (
             <div className="muted" style={{ fontSize: 14 }}>
-              Ask anything — “Is this a good long-term hold?”, “What grade could it get?”, “Who
-              else should I target?”
-              {cardContext?.player ? " I have your scanned card as context." : ""}
+              {t("Ask anything — “Is this a good long-term hold?”, “What grade could it get?”, “Who else should I target?”")}
+              {cardContext?.player ? " " + t("I have your scanned card as context.") : ""}
             </div>
           )}
           {messages.map((m, i) => (
@@ -88,7 +89,7 @@ export default function ChatDrawer({ settings, cardContext, onClose }: Props) {
           <input
             type="text"
             value={input}
-            placeholder="Type a question…"
+            placeholder={t("Type a question…")}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") send();
@@ -96,7 +97,7 @@ export default function ChatDrawer({ settings, cardContext, onClose }: Props) {
             disabled={busy}
           />
           <button className="btn" onClick={send} disabled={busy || !input.trim()}>
-            Send
+            {t("Send")}
           </button>
         </div>
       </aside>

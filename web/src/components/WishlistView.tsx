@@ -15,10 +15,11 @@ interface Props {
 }
 
 function ChangeBadge({ item }: { item: WishItem }) {
+  const t = useT();
   if (item.previousMid == null || !item.result) return null;
   const now = item.result.estimatedValue.mid;
   const diff = now - item.previousMid;
-  if (Math.abs(diff) < 0.5) return <span className="pill">no change</span>;
+  if (Math.abs(diff) < 0.5) return <span className="pill">{t("no change")}</span>;
   const up = diff > 0;
   return (
     <span className={`pill ${up ? "green" : "red"}`}>
@@ -47,7 +48,7 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
       <div className="card">
         <h2>{t("Wishlist")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Cards you want. Add one and we'll look up its current price; prices auto-update daily.
+          {t("Cards you want. Add one and we'll look up its current price; prices auto-update daily.")}
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input
@@ -59,7 +60,7 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
             style={{ flex: 1, minWidth: 200 }}
           />
           <button className="btn" onClick={add} disabled={adding || !text.trim()}>
-            {adding ? <><span className="spinner" />Adding…</> : `+ ${t("Add")}`}
+            {adding ? <><span className="spinner" />{t("Adding…")}</> : `+ ${t("Add")}`}
           </button>
         </div>
       </div>
@@ -68,11 +69,11 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
-              <span className="muted" style={{ fontSize: 12 }}>Estimated cost to acquire all</span>
+              <span className="muted" style={{ fontSize: 12 }}>{t("Estimated cost to acquire all")}</span>
               <div className="value-big" style={{ fontSize: 22 }}>{money(total, currency)}</div>
             </div>
             <button className="btn secondary small" onClick={onRefresh} disabled={refreshing}>
-              {refreshing ? <><span className="spinner" />Updating…</> : `↻ ${t("Refresh prices")}`}
+              {refreshing ? <><span className="spinner" />{t("Updating…")}</> : `↻ ${t("Refresh prices")}`}
             </button>
           </div>
         </div>
@@ -90,7 +91,7 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
                   {r?.player || w.text}
                 </div>
                 <div className="muted" style={{ fontSize: 13 }}>
-                  {r ? [r.year, r.manufacturer, r.setName].filter(Boolean).join(" · ") : "Looking up…"}
+                  {r ? [r.year, r.manufacturer, r.setName].filter(Boolean).join(" · ") : t("Looking up…")}
                 </div>
                 <div style={{ marginTop: 4 }}>
                   {r?.sport && <span className="pill">{r.sport}</span>}
@@ -106,19 +107,19 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
                 <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
                   {r && (
                     <button className="btn ghost small" onClick={() => setOpenId(open ? null : w.id)}>
-                      {open ? "Hide" : "View"}
+                      {open ? t("Hide") : t("View")}
                     </button>
                   )}
                   {r && (
                     <button
                       className="btn secondary small"
                       onClick={() => onAddToBinder(w)}
-                      title="Got it — move to your binder"
+                      title={t("Got it — move to your binder")}
                     >
-                      ★ Got it → binder
+                      ★ {t("Got it → binder")}
                     </button>
                   )}
-                  <button className="btn ghost small" onClick={() => onRemove(w.id)}>Remove</button>
+                  <button className="btn ghost small" onClick={() => onRemove(w.id)}>{t("Remove")}</button>
                 </div>
               </div>
             </div>

@@ -30,12 +30,12 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
     <div className="card">
       <h2>{t("Settings & filters")}</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        These apply to every scan and trade. They're saved in your browser.
+        {t("These apply to every scan and trade. They're saved in your browser.")}
       </p>
 
       <div className="grid2">
         <label className="field">
-          <span>Card category I mostly collect</span>
+          <span>{t("Card category I mostly collect")}</span>
           <select
             value={settings.sport}
             onChange={(e) => set("sport", e.target.value === "Any" ? "" : e.target.value)}
@@ -47,7 +47,7 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
         </label>
 
         <label className="field">
-          <span>Currency</span>
+          <span>{t("Currency")}</span>
           <select value={settings.currency} onChange={(e) => set("currency", e.target.value)}>
             {["USD", "EUR", "GBP", "CAD", "AUD", "INR", "JPY"].map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -57,7 +57,7 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
       </div>
 
       <label className="field">
-        <span>Language (app &amp; results)</span>
+        <span>{t("Language (app & results)")}</span>
         <select value={settings.language} onChange={(e) => set("language", e.target.value)}>
           {LANGS.map((l) => (
             <option key={l.code} value={l.name}>{l.native}</option>
@@ -67,21 +67,21 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
 
       <div className="grid2">
         <label className="field">
-          <span>Min trade value (per card)</span>
+          <span>{t("Min trade value (per card)")}</span>
           <input
             type="number"
             min={0}
-            placeholder="e.g. 150 — blank for none"
+            placeholder={t("e.g. 150 — blank for none")}
             value={settings.minValue ?? ""}
             onChange={(e) => set("minValue", e.target.value === "" ? null : Number(e.target.value))}
           />
         </label>
         <label className="field">
-          <span>Max trade value (per card)</span>
+          <span>{t("Max trade value (per card)")}</span>
           <input
             type="number"
             min={0}
-            placeholder="blank for none"
+            placeholder={t("blank for none")}
             value={settings.maxValue ?? ""}
             onChange={(e) => set("maxValue", e.target.value === "" ? null : Number(e.target.value))}
           />
@@ -94,9 +94,9 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
           checked={settings.liveData}
           onChange={(e) => set("liveData", e.target.checked)}
         />
-        Use live web data for current prices &amp; player form
+        {t("Use live web data for current prices & player form")}
         <span className="muted" style={{ fontSize: 12 }}>
-          &nbsp;— turn off if you keep hitting free-tier rate limits (faster, fewer calls)
+          &nbsp;— {t("turn off if you keep hitting free-tier rate limits (faster, fewer calls)")}
         </span>
       </label>
 
@@ -106,32 +106,32 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
           checked={settings.autoRefresh}
           onChange={(e) => set("autoRefresh", e.target.checked)}
         />
-        Auto-refresh binder &amp; wishlist prices daily
+        {t("Auto-refresh binder & wishlist prices daily")}
         <span className="muted" style={{ fontSize: 12 }}>
-          &nbsp;— turn off to save quota; you can still refresh manually
+          &nbsp;— {t("turn off to save quota; you can still refresh manually")}
         </span>
       </label>
 
       <label className="field">
-        <span>Trade style</span>
+        <span>{t("Trade style")}</span>
         <select
           value={settings.holdHorizon}
           onChange={(e) => set("holdHorizon", e.target.value as Settings["holdHorizon"])}
         >
-          <option value="any">No preference</option>
-          <option value="flip">Short-term flips (liquid, trending now)</option>
-          <option value="long">Long-term holds (blue-chip, stable)</option>
+          <option value="any">{t("No preference")}</option>
+          <option value="flip">{t("Short-term flips (liquid, trending now)")}</option>
+          <option value="long">{t("Long-term holds (blue-chip, stable)")}</option>
         </select>
       </label>
 
-      <h3 style={{ marginTop: 18 }}>Recommendation rules</h3>
+      <h3 style={{ marginTop: 18 }}>{t("Recommendation rules")}</h3>
       <label className="toggle">
         <input
           type="checkbox"
           checked={settings.sameKindOnly}
           onChange={(e) => set("sameKindOnly", e.target.checked)}
         />
-        Only suggest cards of the <strong>same kind</strong> as the card (e.g. baseball → baseball)
+        {t("Only suggest cards of the same kind as the card (e.g. baseball → baseball)")}
       </label>
       <label className="toggle">
         <input
@@ -139,7 +139,7 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
           checked={settings.gradedOnly}
           onChange={(e) => set("gradedOnly", e.target.checked)}
         />
-        Only suggest graded / slabbed cards (PSA, BGS, SGC, CGC)
+        {t("Only suggest graded / slabbed cards (PSA, BGS, SGC, CGC)")}
       </label>
       <label className="toggle">
         <input
@@ -147,7 +147,7 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
           checked={settings.excludeMinorLeague}
           onChange={(e) => set("excludeMinorLeague", e.target.checked)}
         />
-        Don't suggest minor-league players or unproven prospects
+        {t("Don't suggest minor-league players or unproven prospects")}
       </label>
       <label className="toggle">
         <input
@@ -155,12 +155,12 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
           checked={settings.excludeRookies}
           onChange={(e) => set("excludeRookies", e.target.checked)}
         />
-        Skip rookie cards — favor established veterans
+        {t("Skip rookie cards — favor established veterans")}
       </label>
 
-      <h3 style={{ marginTop: 18 }}>Block card types</h3>
+      <h3 style={{ marginTop: 18 }}>{t("Block card types")}</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Never recommend cards from the categories you check.
+        {t("Never recommend cards from the categories you check.")}
       </p>
       <div className="chips">
         {BLOCKABLE_CATEGORIES.map((c) => {
@@ -179,32 +179,30 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
       </div>
 
       <label className="field" style={{ marginTop: 18 }}>
-        <span>Custom instructions</span>
+        <span>{t("Custom instructions")}</span>
         <textarea
           value={settings.customInstructions}
           placeholder={
-            "Anything else for the appraiser. Examples:\n" +
-            "• Never recommend Panini or Donruss cards\n" +
-            "• Only players on contending teams\n" +
-            "• Prefer numbered parallels"
+            t("Anything else for the appraiser. Examples:") + "\n" +
+            t("• Never recommend Panini or Donruss cards") + "\n" +
+            t("• Only players on contending teams") + "\n" +
+            t("• Prefer numbered parallels")
           }
           onChange={(e) => set("customInstructions", e.target.value)}
         />
       </label>
 
       <p className="muted" style={{ fontSize: 13 }}>
-        Tip: block specific brands or set names here in plain English — e.g. “never recommend
-        anything from Panini.”
+        {t("Tip: block specific brands or set names here in plain English — e.g. “never recommend anything from Panini.”")}
       </p>
 
-      <h3 style={{ marginTop: 18 }}>Backup &amp; restore</h3>
+      <h3 style={{ marginTop: 18 }}>{t("Backup & restore")}</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Your binder, wishlist, and settings live in this browser. Export a backup file to move them
-        to another device or keep them safe.
+        {t("Your binder, wishlist, and settings live in this browser. Export a backup file to move them to another device or keep them safe.")}
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button className="btn secondary small" onClick={onExport}>⬇ Export backup</button>
-        <button className="btn secondary small" onClick={() => importRef.current?.click()}>⬆ Import backup</button>
+        <button className="btn secondary small" onClick={onExport}>⬇ {t("Export backup")}</button>
+        <button className="btn secondary small" onClick={() => importRef.current?.click()}>⬆ {t("Import backup")}</button>
         <input
           ref={importRef}
           type="file"

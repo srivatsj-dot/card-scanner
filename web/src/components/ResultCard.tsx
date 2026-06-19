@@ -13,12 +13,12 @@ function money(n: number, currency: string) {
   }
 }
 
-function trendPill(trend: string) {
+function trendPill(trend: string, tr: (s: string) => string) {
   const t = trend.toLowerCase();
-  if (t === "rising") return <span className="pill green">▲ Rising</span>;
-  if (t === "declining") return <span className="pill red">▼ Declining</span>;
-  if (t === "stable") return <span className="pill blue">→ Stable</span>;
-  return <span className="pill">Outlook unknown</span>;
+  if (t === "rising") return <span className="pill green">▲ {tr("Rising")}</span>;
+  if (t === "declining") return <span className="pill red">▼ {tr("Declining")}</span>;
+  if (t === "stable") return <span className="pill blue">→ {tr("Stable")}</span>;
+  return <span className="pill">{tr("Outlook unknown")}</span>;
 }
 
 export default function ResultCard({ result }: { result: ScanResult }) {
@@ -28,8 +28,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
       <div className="card">
         <h2>{tr("Couldn't identify a card")}</h2>
         <p className="muted">
-          The photo didn't clearly show a trading card. Try a sharper, well-lit shot of the front of
-          the card filling most of the frame.
+          {tr("The photo didn't clearly show a trading card. Try a sharper, well-lit shot of the front of the card filling most of the frame.")}
         </p>
         {result.warnings?.length > 0 && (
           <ul>
@@ -50,7 +49,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
-            <h2 style={{ marginBottom: 4 }}>{result.player || "Unknown player"}</h2>
+            <h2 style={{ marginBottom: 4 }}>{result.player || tr("Unknown player")}</h2>
             <div className="muted" style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>
               {[result.year, result.manufacturer, result.setName].filter(Boolean).join(" · ")}
             </div>
@@ -94,7 +93,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
         <div className="card">
           <h3>{tr("Player outlook")}</h3>
-          <div style={{ marginBottom: 8 }}>{trendPill(result.playerOutlook.trend)}</div>
+          <div style={{ marginBottom: 8 }}>{trendPill(result.playerOutlook.trend, tr)}</div>
           <p style={{ marginTop: 0, fontSize: 15 }}>{result.playerOutlook.summary}</p>
         </div>
       </div>
@@ -118,7 +117,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
               ))}
             </ul>
           ) : (
-            <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>No obvious flaws spotted in the photo.</p>
+            <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>{tr("No obvious flaws spotted in the photo.")}</p>
           )}
           <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>{result.conditionReport.summary}</p>
         </div>
@@ -156,8 +155,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
         <div className="card">
           <h3>{tr("Similar value — what to ask for")}</h3>
           <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
-            If you traded this card away, these are fair same-value asks the other side would likely
-            accept.
+            {tr("If you traded this card away, these are fair same-value asks the other side would likely accept.")}
           </p>
           {result.similarValueTargets.map((t, i) => (
             <div className="trade-rec" key={i}>
