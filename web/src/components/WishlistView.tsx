@@ -1,12 +1,11 @@
 import { useState } from "react";
 import type { WishItem } from "../types";
 import { money } from "../utils";
-import { makeT } from "../i18n";
+import { useT } from "../translator";
 import ResultCard from "./ResultCard";
 
 interface Props {
   wishlist: WishItem[];
-  lang: string;
   onAdd: (text: string) => void;
   onRemove: (id: string) => void;
   onAddToBinder: (item: WishItem) => void;
@@ -28,8 +27,8 @@ function ChangeBadge({ item }: { item: WishItem }) {
   );
 }
 
-export default function WishlistView({ wishlist, lang, onAdd, onRemove, onAddToBinder, onRefresh, refreshing, adding }: Props) {
-  const t = makeT(lang);
+export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder, onRefresh, refreshing, adding }: Props) {
+  const t = useT();
   const [text, setText] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -46,7 +45,7 @@ export default function WishlistView({ wishlist, lang, onAdd, onRemove, onAddToB
   return (
     <div>
       <div className="card">
-        <h2>{t("wishlist.title")}</h2>
+        <h2>{t("Wishlist")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Cards you want. Add one and we'll look up its current price; prices auto-update daily.
         </p>
@@ -60,7 +59,7 @@ export default function WishlistView({ wishlist, lang, onAdd, onRemove, onAddToB
             style={{ flex: 1, minWidth: 200 }}
           />
           <button className="btn" onClick={add} disabled={adding || !text.trim()}>
-            {adding ? <><span className="spinner" />Adding…</> : `+ ${t("btn.add")}`}
+            {adding ? <><span className="spinner" />Adding…</> : `+ ${t("Add")}`}
           </button>
         </div>
       </div>
@@ -73,7 +72,7 @@ export default function WishlistView({ wishlist, lang, onAdd, onRemove, onAddToB
               <div className="value-big" style={{ fontSize: 22 }}>{money(total, currency)}</div>
             </div>
             <button className="btn secondary small" onClick={onRefresh} disabled={refreshing}>
-              {refreshing ? <><span className="spinner" />Updating…</> : `↻ ${t("btn.refresh")}`}
+              {refreshing ? <><span className="spinner" />Updating…</> : `↻ ${t("Refresh prices")}`}
             </button>
           </div>
         </div>

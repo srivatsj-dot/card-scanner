@@ -1,6 +1,6 @@
 import type { SavedCard, WishItem } from "../types";
 import { ACHIEVEMENTS, computeStats } from "../achievements";
-import { makeT } from "../i18n";
+import { useT } from "../translator";
 
 interface Props {
   saved: SavedCard[];
@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function AwardsView({ saved, wishlist, scans, trades, lang }: Props) {
-  const t = makeT(lang);
+  const t = useT();
   const stats = computeStats(saved, wishlist, scans, trades, lang);
   const earnedCount = ACHIEVEMENTS.filter((a) => a.earned(stats)).length;
 
@@ -19,7 +19,7 @@ export default function AwardsView({ saved, wishlist, scans, trades, lang }: Pro
     <div>
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0 }}>🏆 {t("awards.title")}</h2>
+          <h2 style={{ margin: 0 }}>🏆 {t("Achievements")}</h2>
           <div className="value-big" style={{ fontSize: 22 }}>{earnedCount}/{ACHIEVEMENTS.length}</div>
         </div>
         <p className="muted" style={{ marginTop: 6, marginBottom: 0 }}>

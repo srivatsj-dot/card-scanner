@@ -416,6 +416,37 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   }
 });
 
+// --- Translate UI strings (full-app localization) --------------------------
+app.post("/api/translate", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  const { texts, language } = req.body as { texts?: string[]; language?: string };
+  if (!Array.isArray(texts) || texts.length === 0 || !language) {
+    res.status(400).json({ error: "texts and language are required." });
+    return;
+  }
+  if (language.toLowerCase() === "english") {
+    res.json({ translations: Object.fromEntries(texts.map((t) => [t, t])) });
+    return;
+  }
+  try {
+    const prompt =
+      `Translate these UI strings for a trading-card collector app into ${language}. ` +
+      `Return ONLY a JSON object that maps each ORIGINAL English string (exact key) to its natural ${language} translation. ` +
+      `Keep emojis, numbers, currency, punctuation, and placeholders like "(3)" or "/150" intact. Keep it concise for a mobile UI. ` +
+      `Do not add keys that aren't in the list.\n\nStrings:\n${JSON.stringify(texts)}`;
+    // Use flash-lite (higher free quota) so translation doesn't compete with scans.
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: prompt,
+      config: { temperature: 0.2, maxOutputTokens: 8192, thinkingConfig: NO_THINKING, responseMimeType: "application/json" },
+    });
+    res.json({ translations: parseJson(response.text) });
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`card-scanner API listening on http://localhost:${PORT}`);
   console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);

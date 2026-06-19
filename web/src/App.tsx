@@ -3,7 +3,8 @@ import type { ScanResult, Settings, SavedCard, WishItem, Theme } from "./types";
 import { defaultSettings } from "./types";
 import { searchCard } from "./api";
 import { describeCard, sleep, DAY_MS } from "./utils";
-import { makeT, langByName, detectLanguageName } from "./i18n";
+import { langByName, detectLanguageName } from "./i18n";
+import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
 import ScanView from "./components/ScanView";
 import SearchView from "./components/SearchView";
@@ -48,7 +49,7 @@ export default function App() {
       ? { ...defaultSettings, ...stored }
       : { ...defaultSettings, language: detectLanguageName() };
   });
-  const t = makeT(settings.language);
+  const t = useT();
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [search, setSearch] = useState<ScanResult | null>(null);
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
@@ -147,6 +148,7 @@ export default function App() {
   useEffect(() => {
     // Right-to-left layout for Arabic etc.
     document.documentElement.dir = langByName(settings.language).rtl ? "rtl" : "ltr";
+    setLanguage(settings.language);
   }, [settings.language]);
 
   function saveCard(result: ScanResult, frontDataUrl: string | undefined) {
@@ -282,18 +284,18 @@ export default function App() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <nav className="nav">
-            <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>{t("nav.scan")}</button>
-            <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>{t("nav.search")}</button>
-            <button className={view === "bulk" ? "active" : ""} onClick={() => setView("bulk")}>{t("nav.bulk")}</button>
-            <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>{t("nav.trade")}</button>
+            <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>{t("Scan")}</button>
+            <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>{t("Search")}</button>
+            <button className={view === "bulk" ? "active" : ""} onClick={() => setView("bulk")}>{t("Bulk")}</button>
+            <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>{t("Trade")}</button>
             <button className={view === "binder" ? "active" : ""} onClick={() => setView("binder")}>
-              {t("nav.binder")}{saved.length > 0 ? ` (${saved.length})` : ""}
+              {t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}
             </button>
             <button className={view === "wishlist" ? "active" : ""} onClick={() => setView("wishlist")}>
-              {t("nav.wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
+              {t("Wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
             </button>
-            <button className={view === "awards" ? "active" : ""} onClick={() => setView("awards")}>🏆 {t("nav.awards")}</button>
-            <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>{t("nav.settings")}</button>
+            <button className={view === "awards" ? "active" : ""} onClick={() => setView("awards")}>🏆 {t("Awards")}</button>
+            <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>{t("Settings")}</button>
           </nav>
           <button
             className="theme-toggle"
@@ -317,7 +319,6 @@ export default function App() {
       {view === "binder" && (
         <BinderView
           saved={saved}
-          lang={settings.language}
           onRemove={(id) => setSaved((prev) => prev.filter((c) => c.id !== id))}
           onClear={() => { if (confirm("Remove all saved cards from your binder?")) setSaved([]); }}
           onRefresh={() => refreshAll(true)}
@@ -327,7 +328,6 @@ export default function App() {
       {view === "wishlist" && (
         <WishlistView
           wishlist={wishlist}
-          lang={settings.language}
           onAdd={addWish}
           onRemove={(id) => setWishlist((prev) => prev.filter((w) => w.id !== id))}
           onAddToBinder={wishToBinder}
@@ -341,7 +341,7 @@ export default function App() {
         <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} />
       )}
 
-      <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("chat.ask")}</button>
+      <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("Ask a question")}</button>
 
       {chatOpen && (
         <ChatDrawer settings={aiSettings} cardContext={lastResult} onClose={() => setChatOpen(false)} />

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { ScanResult, Settings } from "../types";
 import { scanCard } from "../api";
 import { makeThumbnail, money, sleep } from "../utils";
-import { makeT } from "../i18n";
+import { useT } from "../translator";
 import CameraModal from "./CameraModal";
 
 interface Props {
@@ -26,7 +26,7 @@ export default function BulkView({ settings, onSave }: Props) {
   const [running, setRunning] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const t = makeT(settings.language);
+  const t = useT();
 
   function addImage(dataUrl: string) {
     setRows((prev) => [...prev, { id: rid++, dataUrl, status: "pending" }]);
@@ -86,22 +86,20 @@ export default function BulkView({ settings, onSave }: Props) {
   return (
     <div>
       <div className="card">
-        <h2>{t("bulk.title")}</h2>
+        <h2>{t("Bulk scan")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Scan a whole stack at once — add a photo of <strong>each</strong> card (one per card), then
-          scan them all. Fast mode (no live web lookup) keeps it reliable on the free tier. For the
-          most accurate current value on a single card, use the Scan tab instead.
+          {t("Scan a whole stack at once — add a photo of each card (one per card), then scan them all. Fast mode keeps it reliable on the free tier. For the most accurate value on a single card, use the Scan tab instead.")}
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn secondary" onClick={() => setShowCamera(true)} disabled={running}>📸 Add photo</button>
-          <button className="btn secondary" onClick={() => fileRef.current?.click()} disabled={running}>Upload photos</button>
+          <button className="btn secondary" onClick={() => setShowCamera(true)} disabled={running}>📸 {t("Add photo")}</button>
+          <button className="btn secondary" onClick={() => fileRef.current?.click()} disabled={running}>{t("Upload photos")}</button>
           {rows.length > 0 && (
             <button className="btn" onClick={scanAll} disabled={running}>
-              {running ? <><span className="spinner" />Scanning…</> : `Scan all (${rows.filter(r => r.status !== "done").length})`}
+              {running ? <><span className="spinner" />{t("Scanning…")}</> : `${t("Scan all")} (${rows.filter(r => r.status !== "done").length})`}
             </button>
           )}
           {rows.length > 0 && (
-            <button className="btn ghost" onClick={() => setRows([])} disabled={running}>Clear</button>
+            <button className="btn ghost" onClick={() => setRows([])} disabled={running}>{t("Clear")}</button>
           )}
         </div>
         <input
@@ -117,10 +115,10 @@ export default function BulkView({ settings, onSave }: Props) {
       {done.length > 0 && (
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <span className="muted" style={{ fontSize: 12 }}>{done.length} identified · estimated total</span>
+            <span className="muted" style={{ fontSize: 12 }}>{done.length} {t("identified · estimated total")}</span>
             <div className="value-big" style={{ fontSize: 22 }}>{money(total, currency)}</div>
           </div>
-          <button className="btn" onClick={saveAll} disabled={running}>★ Save all to binder</button>
+          <button className="btn" onClick={saveAll} disabled={running}>★ {t("Save all to binder")}</button>
         </div>
       )}
 
@@ -129,12 +127,12 @@ export default function BulkView({ settings, onSave }: Props) {
           <div className="binder-row">
             <img className="thumb" src={row.dataUrl} alt="card" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              {row.status === "scanning" && <div className="muted"><span className="spinner" />Scanning…</div>}
-              {row.status === "pending" && <div className="muted">Ready to scan</div>}
+              {row.status === "scanning" && <div className="muted"><span className="spinner" />{t("Scanning…")}</div>}
+              {row.status === "pending" && <div className="muted">{t("Ready to scan")}</div>}
               {row.status === "error" && <div className="warn">{row.error}</div>}
               {row.status === "done" && row.result && (
                 <>
-                  <div style={{ fontWeight: 700 }}>{row.result.player || "Unidentified"}</div>
+                  <div style={{ fontWeight: 700 }}>{row.result.player || t("Unidentified")}</div>
                   <div className="muted" style={{ fontSize: 13 }}>
                     {[row.result.year, row.result.manufacturer, row.result.setName].filter(Boolean).join(" · ") || "—"}
                   </div>
@@ -152,12 +150,12 @@ export default function BulkView({ settings, onSave }: Props) {
                     {money(row.result.estimatedValue.mid, row.result.estimatedValue.currency)}
                   </div>
                   <button className="btn ghost small" style={{ marginTop: 6 }} onClick={() => saveOne(row)} disabled={row.saved}>
-                    {row.saved ? "✓ Saved" : "★ Save"}
+                    {t(row.saved ? "✓ Saved" : "★ Save")}
                   </button>
                 </>
               )}
               <button className="btn ghost small" style={{ marginTop: 6 }} onClick={() => setRows((p) => p.filter((r) => r.id !== row.id))} disabled={running}>
-                Remove
+                {t("Remove")}
               </button>
             </div>
           </div>

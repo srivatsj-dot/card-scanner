@@ -1,4 +1,5 @@
 import type { ScanResult } from "../types";
+import { useT } from "../translator";
 
 function money(n: number, currency: string) {
   try {
@@ -21,10 +22,11 @@ function trendPill(trend: string) {
 }
 
 export default function ResultCard({ result }: { result: ScanResult }) {
+  const tr = useT();
   if (!result.identified) {
     return (
       <div className="card">
-        <h2>Couldn't identify a card</h2>
+        <h2>{tr("Couldn't identify a card")}</h2>
         <p className="muted">
           The photo didn't clearly show a trading card. Try a sharper, well-lit shot of the front of
           the card filling most of the frame.
@@ -74,7 +76,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
       <div className="grid2">
         <div className="card">
-          <h3>Estimated value</h3>
+          <h3>{tr("Estimated value")}</h3>
           <div className="value-row">
             <span className="value-big">{money(v.mid, v.currency)}</span>
             <span className="range">
@@ -84,28 +86,28 @@ export default function ResultCard({ result }: { result: ScanResult }) {
           <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>{v.note}</p>
           {result.estimatedCondition && (
             <div className="kv" style={{ marginTop: 10 }}>
-              <span className="k">Condition (est.)</span>
+              <span className="k">{tr("Condition (est.)")}</span>
               <span>{result.estimatedCondition}</span>
             </div>
           )}
         </div>
 
         <div className="card">
-          <h3>Player outlook</h3>
+          <h3>{tr("Player outlook")}</h3>
           <div style={{ marginBottom: 8 }}>{trendPill(result.playerOutlook.trend)}</div>
           <p style={{ marginTop: 0, fontSize: 15 }}>{result.playerOutlook.summary}</p>
         </div>
       </div>
 
       <div className="card">
-        <h3>Overall take</h3>
+        <h3>{tr("Overall take")}</h3>
         <p style={{ marginTop: 0 }}>{result.rating.summary}</p>
         <p style={{ marginBottom: 0 }} className="muted">{result.generalAssessment}</p>
       </div>
 
       {result.conditionReport && (
         <div className="card">
-          <h3>Condition &amp; flaws</h3>
+          <h3>{tr("Condition & flaws")}</h3>
           <div style={{ marginBottom: 8 }}>
             <span className="pill">{result.conditionReport.grade}</span>
           </div>
@@ -124,7 +126,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
       {result.hiddenInsights.length > 0 && (
         <div className="card">
-          <h3>Stats you might not notice</h3>
+          <h3>{tr("Stats you might not notice")}</h3>
           {result.hiddenInsights.map((ins, i) => (
             <div className="insight" key={i}>
               <div className="label">{ins.label}</div>
@@ -136,7 +138,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
       {result.recommendedTrades.length > 0 && (
         <div className="card">
-          <h3>Good trades to chase</h3>
+          <h3>{tr("Good trades to chase")}</h3>
           {result.recommendedTrades.map((t, i) => (
             <div className="trade-rec" key={i}>
               <div className="name">{t.player}</div>
@@ -152,7 +154,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
       {result.similarValueTargets?.length > 0 && (
         <div className="card">
-          <h3>Similar value — what to ask for</h3>
+          <h3>{tr("Similar value — what to ask for")}</h3>
           <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
             If you traded this card away, these are fair same-value asks the other side would likely
             accept.
@@ -172,7 +174,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
       {result.warnings.length > 0 && (
         <div className="card">
-          <h3>Heads up</h3>
+          <h3>{tr("Heads up")}</h3>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {result.warnings.map((w, i) => (
               <li key={i} className="warn">{w}</li>

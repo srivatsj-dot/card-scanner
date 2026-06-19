@@ -1,7 +1,8 @@
 import { useRef } from "react";
 import type { Settings } from "../types";
 import { CATEGORIES, BLOCKABLE_CATEGORIES } from "../types";
-import { LANGS, makeT } from "../i18n";
+import { LANGS } from "../i18n";
+import { useT } from "../translator";
 
 interface Props {
   settings: Settings;
@@ -12,7 +13,7 @@ interface Props {
 
 export default function SettingsView({ settings, onChange, onExport, onImport }: Props) {
   const importRef = useRef<HTMLInputElement>(null);
-  const t = makeT(settings.language);
+  const t = useT();
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     onChange({ ...settings, [key]: value });
   }
@@ -27,7 +28,7 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
 
   return (
     <div className="card">
-      <h2>{t("settings.title")}</h2>
+      <h2>{t("Settings & filters")}</h2>
       <p className="muted" style={{ marginTop: 0 }}>
         These apply to every scan and trade. They're saved in your browser.
       </p>

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { Settings, TradeResult, AskResult, CardEntry, SavedCard } from "../types";
 import { evaluateTrade, suggestAsks } from "../api";
 import { describeCard } from "../utils";
-import { makeT } from "../i18n";
+import { useT } from "../translator";
 import CameraModal from "./CameraModal";
 import BinderPicker from "./BinderPicker";
 
@@ -46,6 +46,7 @@ function CardRow({
 }) {
   const [showCamera, setShowCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const t = useT();
 
   function readFile(file: File) {
     const reader = new FileReader();
@@ -69,20 +70,20 @@ function CardRow({
         />
         <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
           <button className="btn ghost small" onClick={() => setShowCamera(true)}>
-            📸 {entry.dataUrl ? "Retake" : "Photo"}
+            📸 {t(entry.dataUrl ? "Retake" : "Photo")}
           </button>
-          <button className="btn ghost small" onClick={() => fileRef.current?.click()}>Upload</button>
+          <button className="btn ghost small" onClick={() => fileRef.current?.click()}>{t("Upload")}</button>
           {onFromBinder && (
-            <button className="btn ghost small" onClick={onFromBinder}>📒 From binder</button>
+            <button className="btn ghost small" onClick={onFromBinder}>📒 {t("From binder")}</button>
           )}
           {entry.dataUrl && (
             <button className="btn ghost small" onClick={() => onChange({ ...entry, dataUrl: undefined })}>
-              Remove photo
+              {t("Remove photo")}
             </button>
           )}
           {canRemove && (
             <button className="btn ghost small" onClick={onRemove} style={{ marginLeft: "auto" }}>
-              ✕ Remove card
+              ✕ {t("Remove card")}
             </button>
           )}
         </div>
@@ -125,6 +126,7 @@ function Side({
   hasBinder: boolean;
   onFromBinder: (entryId: number) => void;
 }) {
+  const t = useT();
   function update(id: number, e: CardEntry) {
     setEntries(entries.map((x) => (x.id === id ? e : x)));
   }
@@ -145,7 +147,7 @@ function Side({
         />
       ))}
       <button className="btn secondary small" onClick={() => setEntries([...entries, newEntry()])}>
-        + Add another card
+        + {t("Add another card")}
       </button>
     </div>
   );
@@ -159,7 +161,7 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
   const [loading, setLoading] = useState<"" | "fair" | "ask">("");
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState<{ side: "your" | "their"; id: number } | null>(null);
-  const t = makeT(settings.language);
+  const t = useT();
 
   function applyPick(card: SavedCard) {
     if (!picking) return;
@@ -206,18 +208,16 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
   return (
     <div>
       <div className="card">
-        <h2>{t("trade.title")}</h2>
+        <h2>{t("Trade tool")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Add the cards on each side — type them, snap a photo, or pull one from your binder. You
-          can add multiple cards per side (e.g. Schwarber + Marte). Then check if a trade is fair,
-          or ask what you should get back for the cards you're giving.
+          {t("Add the cards on each side — type them, snap a photo, or pull one from your binder. You can add multiple cards per side. Then check if a trade is fair, or ask what you should get back.")}
         </p>
       </div>
 
       <div className="grid2">
         <Side
-          title="You give up"
-          hint="The card(s) you'd send."
+          title={t("You give up")}
+          hint={t("The card(s) you'd send.")}
           entries={yourSide}
           setEntries={setYourSide}
           placeholder="e.g. 2016 Topps Chrome Kyle Schwarber RC auto /150"
@@ -225,8 +225,8 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
           onFromBinder={(id) => setPicking({ side: "your", id })}
         />
         <Side
-          title="You receive (optional)"
-          hint="Fill in for a fairness check, or leave blank and ask what to request."
+          title={t("You receive (optional)")}
+          hint={t("Fill in for a fairness check, or leave blank and ask what to request.")}
           entries={theirSide}
           setEntries={setTheirSide}
           placeholder="e.g. 2018 Bowman Chrome Julio Rodríguez refractor"
@@ -242,10 +242,10 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn" onClick={checkFair} disabled={!!loading || !hasGiving || !hasReceiving}>
-            {loading === "fair" ? <><span className="spinner" />Evaluating…</> : "Is this fair?"}
+            {loading === "fair" ? <><span className="spinner" />{t("Evaluating…")}</> : t("Is this fair?")}
           </button>
           <button className="btn secondary" onClick={whatToAsk} disabled={!!loading || !hasGiving}>
-            {loading === "ask" ? <><span className="spinner" />Thinking…</> : "What should I ask for?"}
+            {loading === "ask" ? <><span className="spinner" />{t("Thinking…")}</> : t("What should I ask for?")}
           </button>
         </div>
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
@@ -259,14 +259,14 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
           </div>
           <div className="grid2" style={{ marginTop: 14 }}>
             <div>
-              <h3>Your side</h3>
+              <h3>{t("Your side")}</h3>
               <div className="value-big" style={{ fontSize: 22 }}>
                 {settings.currency} {trade.yourSide.valueLow}–{trade.yourSide.valueHigh}
               </div>
               <p className="muted" style={{ fontSize: 14 }}>{trade.yourSide.notes}</p>
             </div>
             <div>
-              <h3>Their side</h3>
+              <h3>{t("Their side")}</h3>
               <div className="value-big" style={{ fontSize: 22 }}>
                 {settings.currency} {trade.theirSide.valueLow}–{trade.theirSide.valueHigh}
               </div>
@@ -277,7 +277,7 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
           <p>{trade.reasoning}</p>
           {trade.suggestions.length > 0 && (
             <>
-              <h3>How to even it out</h3>
+              <h3>{t("How to even it out")}</h3>
               <ul style={{ marginTop: 0 }}>
                 {trade.suggestions.map((s, i) => <li key={i}>{s}</li>)}
               </ul>

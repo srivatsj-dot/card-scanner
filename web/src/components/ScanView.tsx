@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { ScanResult, Settings } from "../types";
 import { scanCard } from "../api";
 import { makeThumbnail } from "../utils";
-import { makeT } from "../i18n";
+import { useT } from "../translator";
 import ResultCard from "./ResultCard";
 import CameraModal from "./CameraModal";
 
@@ -16,13 +16,13 @@ interface Props {
 const MAX_IMAGES = 4;
 
 export default function ScanView({ settings, result, onResult, onSave }: Props) {
-  const [images, setImages] = useState<string[]>([]); // data URLs
+  const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [saved, setSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const t = makeT(settings.language);
+  const t = useT();
 
   function addImage(dataUrl: string) {
     setImages((prev) => (prev.length >= MAX_IMAGES ? prev : [...prev, dataUrl]));
@@ -47,8 +47,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
     setLoading(true);
     setError(null);
     try {
-      const r = await scanCard(images, settings);
-      onResult(r);
+      onResult(await scanCard(images, settings));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed.");
     } finally {
@@ -68,11 +67,9 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
   return (
     <div>
       <div className="card">
-        <h2>{t("scan.title")}</h2>
+        <h2>{t("Scan a card")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Add up to {MAX_IMAGES} photos of the <strong>same</strong> card — front, back, and an
-          angled shot help read serial numbers and spot refractors/parallels. Works for Pokémon,
-          baseball, soccer, cricket, basketball, football, and hockey.
+          {t("Add up to 4 photos of the same card — front, back, and an angled shot help read serial numbers and spot refractors and parallels. Works for Pokémon, baseball, soccer, cricket, basketball, football, and hockey.")}
         </p>
 
         {images.length > 0 && (
@@ -80,14 +77,10 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
             {images.map((src, i) => (
               <div className="img-slot" key={i}>
                 <img src={src} alt={labels[i] || `photo ${i + 1}`} />
-                <span className="img-label">{labels[i] || `Photo ${i + 1}`}</span>
+                <span className="img-label">{t(labels[i] || `Photo ${i + 1}`)}</span>
                 <button
                   className="img-remove"
-                  onClick={() => {
-                    setImages(images.filter((_, j) => j !== i));
-                    onResult(null);
-                    setSaved(false);
-                  }}
+                  onClick={() => { setImages(images.filter((_, j) => j !== i)); onResult(null); setSaved(false); }}
                   aria-label="Remove"
                 >
                   ×
@@ -100,27 +93,24 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
         <div
           className={images.length === 0 ? "dropzone" : ""}
           onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
-          }}
+          onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files); }}
           style={images.length === 0 ? {} : { marginTop: 4 }}
         >
           {images.length === 0 && (
             <>
-              <div className="big">Scan a card</div>
+              <div className="big">{t("Scan a card")}</div>
               <div className="muted" style={{ marginBottom: 16 }}>
-                Use your camera, or drop / choose images (JPG, PNG, WEBP)
+                {t("Use your camera, or drop / choose images (JPG, PNG, WEBP)")}
               </div>
             </>
           )}
           {images.length < MAX_IMAGES && (
             <div style={{ display: "flex", gap: 8, justifyContent: images.length === 0 ? "center" : "flex-start", flexWrap: "wrap" }}>
               <button className="btn" onClick={() => setShowCamera(true)} disabled={loading}>
-                📸 {images.length === 0 ? "Use camera" : "Add photo"}
+                📸 {t(images.length === 0 ? "Use camera" : "Add photo")}
               </button>
               <button className="btn secondary" onClick={() => fileRef.current?.click()} disabled={loading}>
-                Upload file{images.length === 0 ? "" : "(s)"}
+                {t(images.length === 0 ? "Upload file" : "Upload files")}
               </button>
             </div>
           )}
@@ -129,14 +119,10 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
         {images.length > 0 && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
             <button className="btn" onClick={runScan} disabled={loading}>
-              {loading ? <><span className="spinner" />Analyzing…</> : `${t("btn.analyze")}${images.length > 1 ? ` (${images.length})` : ""}`}
+              {loading ? <><span className="spinner" />{t("Analyzing…")}</> : `${t("Analyze card")}${images.length > 1 ? ` (${images.length})` : ""}`}
             </button>
-            <button
-              className="btn ghost"
-              onClick={() => { setImages([]); onResult(null); setError(null); setSaved(false); }}
-              disabled={loading}
-            >
-              Clear
+            <button className="btn ghost" onClick={() => { setImages([]); onResult(null); setError(null); setSaved(false); }} disabled={loading}>
+              {t("Clear")}
             </button>
           </div>
         )}
@@ -147,10 +133,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
           accept="image/*"
           multiple
           style={{ display: "none" }}
-          onChange={(e) => {
-            if (e.target.files?.length) handleFiles(e.target.files);
-            e.target.value = "";
-          }}
+          onChange={(e) => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = ""; }}
         />
 
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
@@ -160,9 +143,9 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
         <div style={{ marginTop: 16 }}>
           {result.identified && (
             <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <span className="muted" style={{ fontSize: 14 }}>Keep this in your collection?</span>
+              <span className="muted" style={{ fontSize: 14 }}>{t("Keep this in your collection?")}</span>
               <button className="btn" onClick={save} disabled={saved}>
-                {saved ? t("btn.saved") : t("btn.save")}
+                {t(saved ? "✓ Saved to binder" : "★ Save to binder")}
               </button>
             </div>
           )}
@@ -170,9 +153,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
         </div>
       )}
 
-      {showCamera && (
-        <CameraModal onCapture={(d) => addImage(d)} onClose={() => setShowCamera(false)} />
-      )}
+      {showCamera && <CameraModal onCapture={(d) => addImage(d)} onClose={() => setShowCamera(false)} />}
     </div>
   );
 }
