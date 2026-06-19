@@ -2,6 +2,7 @@ export interface Settings {
   customInstructions?: string;
   liveData?: boolean;
   language?: string;
+  wishlist?: string[];
   minValue?: number | null;
   maxValue?: number | null;
   excludeMinorLeague?: boolean;
@@ -72,6 +73,15 @@ export function buildConstraints(settings: Settings): string {
     lines.push(`Prefer cards good for short-term flips: liquid, currently trending, easy to move.`);
   } else if (settings.holdHorizon === "long") {
     lines.push(`Prefer long-term holds: stable, blue-chip names likely to retain or grow value.`);
+  }
+  const wl = (settings.wishlist || []).map((w) => w.trim()).filter(Boolean);
+  if (wl.length > 0) {
+    lines.push(
+      `Collector's WISHLIST (cards they want): ${wl.join("; ")}. ` +
+        `When recommending trades or judging a trade's fairness, give a MODERATE preference to wishlist cards: ` +
+        `if two options are close in value and quality, prefer the wishlist one, and be slightly more lenient on a deal that lands a wishlist card (a small value give-up is acceptable). ` +
+        `But NEVER call a clearly unfair or lopsided trade fair, or endorse it, just to obtain a wishlist card — fairness still rules. Note when a card is on the wishlist.`
+    );
   }
   if (settings.customInstructions && settings.customInstructions.trim()) {
     lines.push(`Collector's custom instructions (follow these): ${settings.customInstructions.trim()}`);

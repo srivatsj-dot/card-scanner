@@ -3,6 +3,7 @@ export interface Settings {
   liveData: boolean;
   autoRefresh: boolean;
   language: string;
+  wishlist?: string[]; // injected at call time (the user's wishlist), not persisted
   minValue: number | null;
   maxValue: number | null;
   excludeMinorLeague: boolean;

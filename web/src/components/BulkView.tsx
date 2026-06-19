@@ -46,20 +46,22 @@ export default function BulkView({ settings, onSave }: Props) {
 
   async function scanAll() {
     setRunning(true);
-    // Scan sequentially with a small gap so we don't trip free-tier rate limits.
+    // Bulk scans skip live grounding (one fast call each) so a stack of cards
+    // doesn't trip the free-tier rate limit. Sequential with a small gap.
+    const fastSettings = { ...settings, liveData: false };
     const pending = rows.filter((r) => r.status === "pending" || r.status === "error");
     for (let i = 0; i < pending.length; i++) {
       const row = pending[i];
       patch(row.id, { status: "scanning", error: undefined });
       try {
-        const result = await scanCard([row.dataUrl], settings);
+        const result = await scanCard([row.dataUrl], fastSettings);
         patch(row.id, { status: "done", result });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Scan failed.";
         patch(row.id, { status: "error", error: msg });
         if (msg.toLowerCase().includes("rate limit")) break; // stop; user can resume
       }
-      if (i < pending.length - 1) await sleep(1200);
+      if (i < pending.length - 1) await sleep(1500);
     }
     setRunning(false);
   }
@@ -87,8 +89,8 @@ export default function BulkView({ settings, onSave }: Props) {
         <h2>{t("bulk.title")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Scan a whole stack at once — add a photo of <strong>each</strong> card (one per card), then
-          scan them all. Great for cataloguing a binder page. Saves your free-tier quota by spacing
-          out the calls.
+          scan them all. Fast mode (no live web lookup) keeps it reliable on the free tier. For the
+          most accurate current value on a single card, use the Scan tab instead.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn secondary" onClick={() => setShowCamera(true)} disabled={running}>📸 Add photo</button>

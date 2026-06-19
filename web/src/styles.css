@@ -470,7 +470,7 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px;
-  width: min(560px, 96vw);
+  width: min(760px, 96vw);
   box-shadow: var(--shadow);
 }
 .cam-video {
@@ -490,8 +490,8 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   place-items: center;
   margin: 0 auto;
 }
-.cam-stage.landscape { aspect-ratio: 4 / 3; max-height: 60vh; }
-.cam-stage.portrait { aspect-ratio: 3 / 4; max-height: 70vh; max-width: 380px; }
+.cam-stage.landscape { aspect-ratio: 4 / 3; max-height: 72vh; }
+.cam-stage.portrait { aspect-ratio: 3 / 4; max-height: 80vh; max-width: 520px; }
 .cam-hint {
   position: absolute;
   inset: 0;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme } from "./types";
 import { defaultSettings } from "./types";
 import { searchCard } from "./api";
@@ -51,6 +51,16 @@ export default function App() {
   const [wishlist, setWishlist] = useState<WishItem[]>(() => loadJSON<WishItem[]>(WISHLIST_KEY, []));
   const [theme, setTheme] = useState<Theme>(() => loadJSON<Theme>(THEME_KEY, "dark"));
   const [chatOpen, setChatOpen] = useState(false);
+
+  // Settings the AI sees, augmented with the current wishlist (for wishlist-aware
+  // trade/recommendation logic). Not persisted into the saved settings.
+  const aiSettings = useMemo(
+    () => ({
+      ...settings,
+      wishlist: wishlist.map((w) => (w.result ? describeCard(w.result) : w.text)).filter(Boolean),
+    }),
+    [settings, wishlist]
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
@@ -131,7 +141,7 @@ export default function App() {
     setWishlist((prev) => [{ id, addedAt: Date.now(), text }, ...prev]);
     setAdding(true);
     try {
-      const r = await searchCard(text, settings);
+      const r = await searchCard(text, aiSettings);
       setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, result: r, lastRefreshedAt: Date.now() } : w)));
     } catch {
       /* leave as text-only; user can retry via refresh */
@@ -162,7 +172,7 @@ export default function App() {
         try {
           if (!first) await sleep(REFRESH_GAP_MS);
           first = false;
-          const fresh = await searchCard(describeCard(card.result), settings);
+          const fresh = await searchCard(describeCard(card.result), aiSettings);
           const prevMid = card.result.estimatedValue.mid;
           const newMid = fresh.estimatedValue.mid;
           if (prevMid > 0 && Math.abs(newMid - prevMid) / prevMid >= 0.15) {
@@ -193,7 +203,7 @@ export default function App() {
         try {
           if (!first) await sleep(REFRESH_GAP_MS);
           first = false;
-          const fresh = await searchCard(w.result ? describeCard(w.result) : w.text, settings);
+          const fresh = await searchCard(w.result ? describeCard(w.result) : w.text, aiSettings);
           setWishlist((prev) =>
             prev.map((x) =>
               x.id === w.id
@@ -259,13 +269,13 @@ export default function App() {
       </div>
 
       {view === "scan" && (
-        <ScanView settings={settings} result={scan} onResult={(r) => { setScan(r); if (r) setLastResult(r); }} onSave={saveCard} />
+        <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) setLastResult(r); }} onSave={saveCard} />
       )}
       {view === "search" && (
-        <SearchView settings={settings} result={search} onResult={(r) => { setSearch(r); if (r) setLastResult(r); }} onSave={saveCard} />
+        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) setLastResult(r); }} onSave={saveCard} />
       )}
-      {view === "bulk" && <BulkView settings={settings} onSave={saveCard} />}
-      {view === "trade" && <TradeView settings={settings} saved={saved} />}
+      {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} />}
+      {view === "trade" && <TradeView settings={aiSettings} saved={saved} />}
       {view === "binder" && (
         <BinderView
           saved={saved}
@@ -295,7 +305,7 @@ export default function App() {
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("chat.ask")}</button>
 
       {chatOpen && (
-        <ChatDrawer settings={settings} cardContext={lastResult} onClose={() => setChatOpen(false)} />
+        <ChatDrawer settings={aiSettings} cardContext={lastResult} onClose={() => setChatOpen(false)} />
       )}
 
       <div className="toasts">
