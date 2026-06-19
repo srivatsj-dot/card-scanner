@@ -129,7 +129,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
         {images.length > 0 && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
             <button className="btn" onClick={runScan} disabled={loading}>
-              {loading ? <><span className="spinner" />Analyzing…</> : `Analyze card${images.length > 1 ? ` (${images.length} photos)` : ""}`}
+              {loading ? <><span className="spinner" />Analyzing…</> : `${t("btn.analyze")}${images.length > 1 ? ` (${images.length})` : ""}`}
             </button>
             <button
               className="btn ghost"

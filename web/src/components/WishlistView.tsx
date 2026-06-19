@@ -60,7 +60,7 @@ export default function WishlistView({ wishlist, lang, onAdd, onRemove, onAddToB
             style={{ flex: 1, minWidth: 200 }}
           />
           <button className="btn" onClick={add} disabled={adding || !text.trim()}>
-            {adding ? <><span className="spinner" />Adding…</> : "+ Add"}
+            {adding ? <><span className="spinner" />Adding…</> : `+ ${t("btn.add")}`}
           </button>
         </div>
       </div>
@@ -73,7 +73,7 @@ export default function WishlistView({ wishlist, lang, onAdd, onRemove, onAddToB
               <div className="value-big" style={{ fontSize: 22 }}>{money(total, currency)}</div>
             </div>
             <button className="btn secondary small" onClick={onRefresh} disabled={refreshing}>
-              {refreshing ? <><span className="spinner" />Updating…</> : "↻ Refresh prices"}
+              {refreshing ? <><span className="spinner" />Updating…</> : `↻ ${t("btn.refresh")}`}
             </button>
           </div>
         </div>

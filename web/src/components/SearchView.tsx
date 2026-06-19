@@ -51,7 +51,7 @@ export default function SearchView({ settings, result, onResult, onSave }: Props
           />
         </label>
         <button className="btn" onClick={run} disabled={loading || !text.trim()}>
-          {loading ? <><span className="spinner" />Searching…</> : "Search"}
+          {loading ? <><span className="spinner" />Searching…</> : t("btn.search")}
         </button>
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
       </div>

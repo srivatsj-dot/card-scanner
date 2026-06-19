@@ -343,6 +343,36 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 }
 .picker-row:hover { border-color: var(--gold); }
 
+/* Achievements */
+.award-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.award {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  background: var(--panel-2);
+}
+.award.locked { opacity: 0.55; filter: grayscale(0.6); }
+.award.earned { border-color: rgba(244, 196, 90, 0.45); }
+.award-emoji { font-size: 30px; line-height: 1; }
+.award-title { font-weight: 700; margin-top: 6px; }
+.award-desc { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; margin-top: 4px; }
+.award-progress { margin-top: 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; color: var(--muted); }
+.award-badge {
+  margin-top: 8px;
+  display: inline-block;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--gold);
+  border: 1px solid rgba(244, 196, 90, 0.4);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
   background: var(--panel-2);

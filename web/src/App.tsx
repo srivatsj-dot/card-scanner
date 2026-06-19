@@ -4,6 +4,7 @@ import { defaultSettings } from "./types";
 import { searchCard } from "./api";
 import { describeCard, sleep, DAY_MS } from "./utils";
 import { makeT, langByName, detectLanguageName } from "./i18n";
+import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
 import ScanView from "./components/ScanView";
 import SearchView from "./components/SearchView";
 import BulkView from "./components/BulkView";
@@ -11,14 +12,17 @@ import TradeView from "./components/TradeView";
 import SettingsView from "./components/SettingsView";
 import BinderView from "./components/BinderView";
 import WishlistView from "./components/WishlistView";
+import AwardsView from "./components/AwardsView";
 import ChatDrawer from "./components/ChatDrawer";
 
-type View = "scan" | "search" | "bulk" | "trade" | "binder" | "wishlist" | "settings";
+type View = "scan" | "search" | "bulk" | "trade" | "binder" | "wishlist" | "awards" | "settings";
 
 const SETTINGS_KEY = "card-scanner-settings";
 const BINDER_KEY = "card-scanner-binder";
 const WISHLIST_KEY = "card-scanner-wishlist";
 const THEME_KEY = "card-scanner-theme";
+const SCANS_KEY = "card-scanner-scans";
+const EARNED_KEY = "card-scanner-earned";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -50,7 +54,14 @@ export default function App() {
   const [saved, setSaved] = useState<SavedCard[]>(() => loadJSON<SavedCard[]>(BINDER_KEY, []));
   const [wishlist, setWishlist] = useState<WishItem[]>(() => loadJSON<WishItem[]>(WISHLIST_KEY, []));
   const [theme, setTheme] = useState<Theme>(() => loadJSON<Theme>(THEME_KEY, "dark"));
+  const [scans, setScans] = useState<number>(() => loadJSON<number>(SCANS_KEY, 0));
   const [chatOpen, setChatOpen] = useState(false);
+  const earnedRef = useRef<Set<string>>(
+    new Set(
+      loadJSON<string[] | null>(EARNED_KEY, null) ??
+        earnedIds(computeStats(loadJSON<SavedCard[]>(BINDER_KEY, []), loadJSON<WishItem[]>(WISHLIST_KEY, []), loadJSON<number>(SCANS_KEY, 0)))
+    )
+  );
 
   // Settings the AI sees, augmented with the current wishlist (for wishlist-aware
   // trade/recommendation logic). Not persisted into the saved settings.
@@ -103,6 +114,21 @@ export default function App() {
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(BINDER_KEY, JSON.stringify(saved)); }, [saved]);
   useEffect(() => { localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist)); }, [wishlist]);
+  useEffect(() => { localStorage.setItem(SCANS_KEY, JSON.stringify(scans)); }, [scans]);
+  // Unlock-achievement toasts.
+  useEffect(() => {
+    const ids = earnedIds(computeStats(saved, wishlist, scans));
+    const newly = ids.filter((id) => !earnedRef.current.has(id));
+    if (newly.length) {
+      newly.forEach((id) => {
+        const a = ACHIEVEMENTS.find((x) => x.id === id);
+        if (a) toast(`🏆 ${a.emoji} ${a.title} unlocked!`);
+      });
+      earnedRef.current = new Set(ids);
+      localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved, wishlist, scans]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, JSON.stringify(theme));
@@ -255,6 +281,7 @@ export default function App() {
             <button className={view === "wishlist" ? "active" : ""} onClick={() => setView("wishlist")}>
               {t("nav.wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
             </button>
+            <button className={view === "awards" ? "active" : ""} onClick={() => setView("awards")}>🏆 {t("nav.awards")}</button>
             <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>{t("nav.settings")}</button>
           </nav>
           <button
@@ -269,10 +296,10 @@ export default function App() {
       </div>
 
       {view === "scan" && (
-        <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) setLastResult(r); }} onSave={saveCard} />
+        <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} />
       )}
       {view === "search" && (
-        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) setLastResult(r); }} onSave={saveCard} />
+        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} />
       )}
       {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} />}
       {view === "trade" && <TradeView settings={aiSettings} saved={saved} />}
@@ -298,6 +325,7 @@ export default function App() {
           adding={adding}
         />
       )}
+      {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} lang={settings.language} />}
       {view === "settings" && (
         <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} />
       )}

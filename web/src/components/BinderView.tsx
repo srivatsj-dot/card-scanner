@@ -112,7 +112,7 @@ export default function BinderView({ saved, lang, onRemove, onClear, onRefresh, 
             style={{ flex: 1, minWidth: 120 }}
           />
           <button className="btn secondary small" onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? <><span className="spinner" />Updating…</> : "↻ Refresh prices"}
+            {refreshing ? <><span className="spinner" />Updating…</> : `↻ ${t("btn.refresh")}`}
           </button>
         </div>
         <p className="muted" style={{ fontSize: 12, margin: "8px 2px 0" }}>
