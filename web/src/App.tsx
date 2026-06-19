@@ -15,16 +15,10 @@ import BinderView from "./components/BinderView";
 import WishlistView from "./components/WishlistView";
 import AwardsView from "./components/AwardsView";
 import ChatDrawer from "./components/ChatDrawer";
+import AuthScreen from "./components/AuthScreen";
+import { currentUser, displayNameOf, logout } from "./auth";
 
 type View = "scan" | "search" | "bulk" | "trade" | "binder" | "wishlist" | "awards" | "settings";
-
-const SETTINGS_KEY = "card-scanner-settings";
-const BINDER_KEY = "card-scanner-binder";
-const WISHLIST_KEY = "card-scanner-wishlist";
-const THEME_KEY = "card-scanner-theme";
-const SCANS_KEY = "card-scanner-scans";
-const TRADES_KEY = "card-scanner-trades";
-const EARNED_KEY = "card-scanner-earned";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -40,7 +34,18 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const isRateLimit = (e: unknown) =>
   String(e instanceof Error ? e.message : e).toLowerCase().includes("rate limit");
 
-export default function App() {
+function MainApp({ user, onLogout }: { user: string; onLogout: () => void }) {
+  // All persisted state is namespaced per account, so each user has their own
+  // binder, wishlist, settings, and progress in the same browser.
+  const SETTINGS_KEY = `card-scanner-settings:${user}`;
+  const BINDER_KEY = `card-scanner-binder:${user}`;
+  const WISHLIST_KEY = `card-scanner-wishlist:${user}`;
+  const THEME_KEY = `card-scanner-theme:${user}`;
+  const SCANS_KEY = `card-scanner-scans:${user}`;
+  const TRADES_KEY = `card-scanner-trades:${user}`;
+  const EARNED_KEY = `card-scanner-earned:${user}`;
+  const AUTO_REFRESH_KEY = `card-scanner-last-auto-refresh:${user}`;
+
   const [view, setView] = useState<View>("scan");
   const [settings, setSettings] = useState<Settings>(() => {
     const stored = loadJSON<Partial<Settings> | null>(SETTINGS_KEY, null);
@@ -278,10 +283,9 @@ export default function App() {
   // only for items older than 24h. Stamp the time first so reloads don't re-burst.
   useEffect(() => {
     if (settings.autoRefresh === false) return;
-    const KEY = "card-scanner-last-auto-refresh";
-    const last = Number(localStorage.getItem(KEY) || 0);
+    const last = Number(localStorage.getItem(AUTO_REFRESH_KEY) || 0);
     if (Date.now() - last < 60 * 60 * 1000) return;
-    localStorage.setItem(KEY, String(Date.now()));
+    localStorage.setItem(AUTO_REFRESH_KEY, String(Date.now()));
     refreshAll(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -316,6 +320,13 @@ export default function App() {
           >
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
+          <div className="user-menu">
+            <span className="user-chip" title={displayNameOf(user)}>
+              <span className="user-avatar">{displayNameOf(user).slice(0, 1).toUpperCase()}</span>
+              <span className="user-name">{displayNameOf(user)}</span>
+            </span>
+            <button className="btn ghost small" onClick={onLogout}>{t("Log out")}</button>
+          </div>
         </div>
       </div>
 
@@ -368,12 +379,40 @@ export default function App() {
             <div className="unlock-emoji">{u.emoji}</div>
             <div className="unlock-text">
               <div className="unlock-label">🏆 {t("Achievement unlocked")}</div>
-              <div className="unlock-title">{u.title}</div>
-              <div className="unlock-desc">{u.desc}</div>
+              <div className="unlock-title">{t(u.title)}</div>
+              <div className="unlock-desc">{t(u.desc)}</div>
             </div>
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  const [user, setUser] = useState<string | null>(() => currentUser());
+
+  // Keep a theme on the documentElement even before sign-in (for the auth screen).
+  useEffect(() => {
+    if (!document.documentElement.dataset.theme) {
+      document.documentElement.dataset.theme = "dark";
+    }
+  }, []);
+
+  if (!user) {
+    return <AuthScreen onAuthed={() => setUser(currentUser())} />;
+  }
+
+  // key={user} fully remounts MainApp on account switch so all per-user state
+  // re-initializes from that account's namespaced storage.
+  return (
+    <MainApp
+      key={user}
+      user={user}
+      onLogout={() => {
+        logout();
+        setUser(null);
+      }}
+    />
   );
 }

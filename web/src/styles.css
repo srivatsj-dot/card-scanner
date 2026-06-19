@@ -303,6 +303,60 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   line-height: 1;
 }
 
+/* Account chip + log out */
+.user-menu { display: flex; align-items: center; gap: 8px; }
+.user-chip { display: flex; align-items: center; gap: 8px; max-width: 160px; }
+.user-avatar {
+  width: 30px; height: 30px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #1a1406;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 14px;
+}
+.user-name {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Login / create-account screen */
+.auth-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.auth-card { width: min(420px, 100%); }
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  margin: 4px 0 18px;
+}
+.auth-tabs button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 9px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+.auth-tabs button.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+
 /* Multi-image scan strip */
 .img-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .img-slot { position: relative; }
