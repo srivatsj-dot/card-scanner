@@ -21,9 +21,11 @@ const DATA_BASES = [
 
 interface StoredUser {
   display: string;
-  salt: string; // hex
-  hash: string; // hex
+  salt: string; // hex ("" for Google accounts)
+  hash: string; // hex ("" for Google accounts)
   createdAt: number;
+  provider?: "local" | "google";
+  email?: string;
 }
 type Users = Record<string, StoredUser>;
 
@@ -102,6 +104,7 @@ export async function register(name: string, password: string): Promise<void> {
   const display = name.trim();
   const key = keyOf(name);
   if (display.length < 2) throw new Error("Username needs at least 2 characters.");
+  if (display.includes(":")) throw new Error("Username can't contain a colon.");
   if (password.length < 4) throw new Error("Password needs at least 4 characters.");
   const users = loadUsers();
   if (users[key]) throw new Error("That username is already taken.");
@@ -125,4 +128,44 @@ export async function login(name: string, password: string): Promise<void> {
 
 export function logout(): void {
   localStorage.removeItem(SESSION_KEY);
+}
+
+// --- Google sign-in --------------------------------------------------------
+// The browser receives a signed Google ID token (JWT). We read the profile from
+// it to key a local account by the Google user id (`sub`), which is globally
+// unique — so there's never a username clash. Data still lives on this device;
+// Google just provides identity and a display name (no password to remember).
+
+function decodeJwt(token: string): Record<string, unknown> {
+  const part = token.split(".")[1] || "";
+  const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+  const json = decodeURIComponent(
+    atob(b64)
+      .split("")
+      .map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0"))
+      .join("")
+  );
+  return JSON.parse(json) as Record<string, unknown>;
+}
+
+export function loginWithGoogle(credential: string): string {
+  const claims = decodeJwt(credential);
+  const sub = String(claims.sub || "");
+  if (!sub) throw new Error("Google sign-in didn't return a valid account.");
+  const key = `google:${sub}`;
+  const users = loadUsers();
+  if (!users[key]) {
+    users[key] = {
+      display: String(claims.name || claims.email || "Google user"),
+      salt: "",
+      hash: "",
+      createdAt: Date.now(),
+      provider: "google",
+      email: claims.email ? String(claims.email) : undefined,
+    };
+    saveUsers(users);
+  }
+  migrateLegacy(key);
+  localStorage.setItem(SESSION_KEY, key);
+  return key;
 }

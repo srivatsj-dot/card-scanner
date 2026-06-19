@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { login, register, hasAnyAccount } from "../auth";
+import { useEffect, useRef, useState } from "react";
+import { login, register, hasAnyAccount, loginWithGoogle } from "../auth";
 import { useT } from "../translator";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   const t = useT();
@@ -9,6 +11,52 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const onAuthedRef = useRef(onAuthed);
+  onAuthedRef.current = onAuthed;
+
+  // Render Google's "Continue with Google" button when a client ID is configured.
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    function init() {
+      const gsi = (window as unknown as { google?: any }).google;
+      if (!gsi?.accounts?.id || !googleBtnRef.current) return;
+      gsi.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (resp: { credential?: string }) => {
+          try {
+            if (!resp.credential) throw new Error("Google sign-in was cancelled.");
+            loginWithGoogle(resp.credential);
+            onAuthedRef.current();
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Google sign-in failed.");
+          }
+        },
+      });
+      gsi.accounts.id.renderButton(googleBtnRef.current, {
+        theme: "filled_blue",
+        size: "large",
+        width: 320,
+        text: "continue_with",
+        shape: "pill",
+      });
+    }
+    if ((window as unknown as { google?: any }).google?.accounts?.id) {
+      init();
+      return;
+    }
+    let script = document.getElementById("gis-script") as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.id = "gis-script";
+      document.body.appendChild(script);
+    }
+    script.addEventListener("load", init);
+    return () => script?.removeEventListener("load", init);
+  }, []);
 
   async function submit() {
     if (busy) return;
@@ -36,6 +84,13 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             ? t("Create an account to keep your binder, wishlist, and settings.")
             : t("Welcome back — log in to your collection.")}
         </p>
+
+        {GOOGLE_CLIENT_ID && (
+          <>
+            <div ref={googleBtnRef} className="google-btn-host" />
+            <div className="auth-divider"><span>{t("or")}</span></div>
+          </>
+        )}
 
         <div className="auth-tabs">
           <button

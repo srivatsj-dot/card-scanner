@@ -356,6 +356,19 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   font-weight: 600;
 }
 .auth-tabs button.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+.google-btn-host { display: flex; justify-content: center; margin: 4px 0 2px; min-height: 40px; }
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  margin: 14px 0;
+}
+.auth-divider::before,
+.auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.auth-divider span { padding: 0 12px; }
 
 /* Multi-image scan strip */
 .img-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
