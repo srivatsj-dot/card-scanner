@@ -11,7 +11,7 @@ export interface Settings {
   sameKindOnly: boolean;
   gradedOnly: boolean;
   blockedCategories: string[];
-  holdHorizon: "any" | "flip" | "long";
+  collectorType: "any" | "money" | "talent";
   sport: string; // preferred category; "" means any
   currency: string;
 }
@@ -66,7 +66,7 @@ export const defaultSettings: Settings = {
   sameKindOnly: false,
   gradedOnly: false,
   blockedCategories: [],
-  holdHorizon: "any",
+  collectorType: "any",
   sport: "",
   currency: "USD",
 };

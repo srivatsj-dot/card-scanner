@@ -10,7 +10,7 @@ export interface Settings {
   sameKindOnly?: boolean;
   gradedOnly?: boolean;
   blockedCategories?: string[];
-  holdHorizon?: "any" | "flip" | "long";
+  collectorType?: "any" | "money" | "talent";
   sport?: string;
   currency?: string;
 }
@@ -79,10 +79,18 @@ export function buildConstraints(settings: Settings): string {
   if (settings.excludeRookies) {
     lines.push(`FILTER: Exclude rookie-card recommendations; favor established veterans.`);
   }
-  if (settings.holdHorizon === "flip") {
-    lines.push(`Prefer cards good for short-term flips: liquid, currently trending, easy to move.`);
-  } else if (settings.holdHorizon === "long") {
-    lines.push(`Prefer long-term holds: stable, blue-chip names likely to retain or grow value.`);
+  if (settings.collectorType === "money") {
+    lines.push(
+      `COLLECTOR TYPE: This is a MONEY collector — they care about dollar value, resale, and price appreciation more than fandom. ` +
+        `Prioritize cards that hold or grow in value: liquid, easy-to-sell names, proven blue-chips, and good value-for-money. ` +
+        `When recommending trades or judging fairness, optimize for financial upside, and frame insights around investment value.`
+    );
+  } else if (settings.collectorType === "talent") {
+    lines.push(
+      `COLLECTOR TYPE: This is a TALENT collector — they care about how good the player actually is (skill, performance, upside) more than the card's price tag. ` +
+        `Favor genuinely talented players, rising stars, and high-ceiling prospects even when their cards are inexpensive, and steer away from overpriced cards of mediocre players. ` +
+        `When recommending trades, optimize for player quality and on-field/on-court talent over pure resale value, and frame insights around the player rather than the money.`
+    );
   }
   const wl = (settings.wishlist || []).map((w) => w.trim()).filter(Boolean);
   if (wl.length > 0) {

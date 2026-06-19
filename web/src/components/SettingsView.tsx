@@ -113,14 +113,14 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
       </label>
 
       <label className="field">
-        <span>{t("Trade style")}</span>
+        <span>{t("What kind of collector are you?")}</span>
         <select
-          value={settings.holdHorizon}
-          onChange={(e) => set("holdHorizon", e.target.value as Settings["holdHorizon"])}
+          value={settings.collectorType}
+          onChange={(e) => set("collectorType", e.target.value as Settings["collectorType"])}
         >
           <option value="any">{t("No preference")}</option>
-          <option value="flip">{t("Short-term flips (liquid, trending now)")}</option>
-          <option value="long">{t("Long-term holds (blue-chip, stable)")}</option>
+          <option value="money">{t("Money collector — chase value & resale")}</option>
+          <option value="talent">{t("Talent collector — chase the best players")}</option>
         </select>
       </label>
 
