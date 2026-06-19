@@ -10,6 +10,10 @@
   --green: #4fd18b;
   --red: #ff6b6b;
   --blue: #6aa8ff;
+  --brand1: #7c5cff;    /* playful accent: purple → */
+  --brand2: #ff5fa2;    /* → pink → */
+  --brand3: #ffa53c;    /* → orange */
+  --brand-grad: linear-gradient(135deg, var(--brand1), var(--brand2) 55%, var(--brand3));
   --radius: 14px;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
@@ -27,6 +31,9 @@
   --green: #0f8a48;
   --red: #c62f2f;
   --blue: #1f5fd0;
+  --brand1: #6a3cff;
+  --brand2: #ff3d8b;
+  --brand3: #ff8a1e;
   --shadow: 0 4px 16px rgba(20, 30, 60, 0.1);
 }
 /* Light-mode contrast fixes for elements that assume dark text-on-accent */
@@ -67,37 +74,51 @@ button, input, textarea, select {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
+  flex-wrap: nowrap;
   margin-bottom: 22px;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
 
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
 }
 .brand h1 {
-  font-size: 26px;
+  font-size: 24px;
   margin: 0;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .brand .dot { color: var(--gold); }
-.brand .tag {
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-}
 
 .nav {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 3px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.nav::-webkit-scrollbar { display: none; }
 
 .binder-controls {
   display: flex;
@@ -114,15 +135,17 @@ button, input, textarea, select {
   background: transparent;
   border: none;
   color: var(--muted);
-  padding: 8px 16px;
+  padding: 7px 12px;
   border-radius: 999px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
 }
 .nav button.active {
-  background: var(--panel-2);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--brand-grad);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(124, 92, 255, 0.35);
 }
 
 .card {
@@ -141,7 +164,11 @@ button, input, textarea, select {
 }
 @media (max-width: 760px) {
   .grid2 { grid-template-columns: 1fr; }
-  .topbar { flex-direction: column; gap: 14px; align-items: stretch; }
+}
+/* Keep the whole top bar on one line; the tab strip scrolls if it must. */
+@media (max-width: 900px) {
+  .user-name { display: none; }
+  .brand h1 { font-size: 20px; }
 }
 
 h2 { font-size: 20px; margin: 0 0 12px; }
@@ -183,17 +210,18 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   font-size: 14px;
   cursor: pointer;
 }
-.toggle input { width: 18px; height: 18px; accent-color: var(--gold); }
+.toggle input { width: 18px; height: 18px; accent-color: var(--brand1); }
 
 .btn {
-  background: var(--gold);
-  color: #1a1406;
+  background: var(--brand-grad);
+  color: #fff;
   border: none;
   border-radius: 10px;
   padding: 11px 18px;
   font-weight: 700;
   cursor: pointer;
   font-family: ui-sans-serif, system-ui, sans-serif;
+  box-shadow: 0 6px 18px rgba(124, 92, 255, 0.28);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.secondary {
@@ -246,7 +274,7 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   width: 78px; height: 78px;
   border-radius: 50%;
   display: grid; place-items: center;
-  background: conic-gradient(var(--gold) calc(var(--p) * 1%), var(--line) 0);
+  background: conic-gradient(var(--brand2) calc(var(--p) * 1%), var(--line) 0);
   flex: 0 0 auto;
 }
 .score-ring .inner {
@@ -310,8 +338,8 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   width: 30px; height: 30px;
   flex-shrink: 0;
   border-radius: 999px;
-  background: var(--gold);
-  color: #1a1406;
+  background: var(--brand-grad);
+  color: #fff;
   display: grid;
   place-items: center;
   font-weight: 800;
@@ -329,11 +357,67 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 /* Login / create-account screen */
 .auth-wrap {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 24px;
+  position: relative;
+  overflow: hidden;
 }
-.auth-card { width: min(420px, 100%); }
+.auth-wrap::before {
+  content: "";
+  position: absolute;
+  top: -160px;
+  width: 520px; height: 520px;
+  background: var(--brand-grad);
+  filter: blur(120px);
+  opacity: 0.35;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.auth-hero {
+  position: relative;
+  text-align: center;
+  margin-bottom: 18px;
+}
+.auth-logo {
+  display: inline-grid;
+  place-items: center;
+  padding: 14px;
+  border-radius: 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+}
+.auth-brand {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: 0.3px;
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.auth-tagline {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+}
+.auth-card {
+  width: min(420px, 100%);
+  position: relative;
+  overflow: hidden;
+}
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--brand-grad);
+}
 .auth-tabs {
   display: flex;
   gap: 6px;
@@ -485,15 +569,15 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .chat-fab {
   position: fixed;
   right: 22px; bottom: 22px;
-  background: var(--gold);
-  color: #1a1406;
+  background: var(--brand-grad);
+  color: #fff;
   border: none;
   border-radius: 999px;
   padding: 14px 20px;
   font-weight: 800;
   font-family: ui-sans-serif, system-ui, sans-serif;
   cursor: pointer;
-  box-shadow: var(--shadow);
+  box-shadow: 0 10px 26px rgba(124, 92, 255, 0.4);
   z-index: 30;
 }
 .drawer {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { login, register, hasAnyAccount, loginWithGoogle } from "../auth";
 import { useT } from "../translator";
+import Logo from "./Logo";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -75,10 +76,12 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
 
   return (
     <div className="auth-wrap">
+      <div className="auth-hero">
+        <div className="auth-logo"><Logo size={72} /></div>
+        <h1 className="auth-brand">Card-O-Rama</h1>
+        <p className="auth-tagline">{t("Scan it. Price it. Trade smarter.")}</p>
+      </div>
       <div className="card auth-card">
-        <div className="brand" style={{ justifyContent: "center", marginBottom: 6 }}>
-          <h1>Card<span className="dot">·</span>Scanner</h1>
-        </div>
         <p className="muted" style={{ textAlign: "center", marginTop: 0 }}>
           {mode === "register"
             ? t("Create an account to keep your binder, wishlist, and settings.")

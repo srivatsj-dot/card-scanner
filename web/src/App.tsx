@@ -16,6 +16,7 @@ import WishlistView from "./components/WishlistView";
 import AwardsView from "./components/AwardsView";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
+import Logo from "./components/Logo";
 import { currentUser, displayNameOf, logout } from "./auth";
 
 type View = "scan" | "search" | "bulk" | "trade" | "binder" | "wishlist" | "awards" | "settings";
@@ -294,10 +295,10 @@ function MainApp({ user, onLogout }: { user: string; onLogout: () => void }) {
     <div className="app">
       <div className="topbar">
         <div className="brand">
-          <h1>Card<span className="dot">·</span>Scanner</h1>
-          <span className="tag">AI appraiser</span>
+          <Logo size={34} />
+          <h1>Card-O-Rama</h1>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="topbar-right">
           <nav className="nav">
             <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>{t("Scan")}</button>
             <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>{t("Search")}</button>
