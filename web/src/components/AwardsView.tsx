@@ -34,8 +34,8 @@ export default function AwardsView({ saved, wishlist, scans, trades, lang }: Pro
             return (
               <div key={a.id} className={`award ${got ? "earned" : "locked"}`}>
                 <div className="award-emoji">{got ? a.emoji : "🔒"}</div>
-                <div className="award-title">{got ? a.title : t("Locked")}</div>
-                <div className="award-desc">{got ? a.desc : t("Keep collecting to reveal this one.")}</div>
+                <div className="award-title">{got ? t(a.title) : t("Locked")}</div>
+                <div className="award-desc">{got ? t(a.desc) : t("Keep collecting to reveal this one.")}</div>
                 {got && <div className="award-badge">{t("Unlocked")}</div>}
               </div>
             );
