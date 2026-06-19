@@ -6,12 +6,13 @@ interface Props {
   saved: SavedCard[];
   wishlist: WishItem[];
   scans: number;
+  trades: number;
   lang: string;
 }
 
-export default function AwardsView({ saved, wishlist, scans, lang }: Props) {
+export default function AwardsView({ saved, wishlist, scans, trades, lang }: Props) {
   const t = makeT(lang);
-  const stats = computeStats(saved, wishlist, scans);
+  const stats = computeStats(saved, wishlist, scans, trades, lang);
   const earnedCount = ACHIEVEMENTS.filter((a) => a.earned(stats)).length;
 
   return (

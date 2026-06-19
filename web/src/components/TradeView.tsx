@@ -151,7 +151,7 @@ function Side({
   );
 }
 
-export default function TradeView({ settings, saved }: { settings: Settings; saved: SavedCard[] }) {
+export default function TradeView({ settings, saved, onTrade }: { settings: Settings; saved: SavedCard[]; onTrade: () => void }) {
   const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
   const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
   const [trade, setTrade] = useState<TradeResult | null>(null);
@@ -181,6 +181,7 @@ export default function TradeView({ settings, saved }: { settings: Settings; sav
     setAsk(null);
     try {
       setTrade(await evaluateTrade(yourSide, theirSide, settings));
+      onTrade();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Trade check failed.");
     } finally {
@@ -194,6 +195,7 @@ export default function TradeView({ settings, saved }: { settings: Settings; sav
     setTrade(null);
     try {
       setAsk(await suggestAsks(yourSide, settings));
+      onTrade();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Suggestion failed.");
     } finally {

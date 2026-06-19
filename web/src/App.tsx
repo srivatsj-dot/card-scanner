@@ -22,6 +22,7 @@ const BINDER_KEY = "card-scanner-binder";
 const WISHLIST_KEY = "card-scanner-wishlist";
 const THEME_KEY = "card-scanner-theme";
 const SCANS_KEY = "card-scanner-scans";
+const TRADES_KEY = "card-scanner-trades";
 const EARNED_KEY = "card-scanner-earned";
 
 function loadJSON<T>(key: string, fallback: T): T {
@@ -55,11 +56,20 @@ export default function App() {
   const [wishlist, setWishlist] = useState<WishItem[]>(() => loadJSON<WishItem[]>(WISHLIST_KEY, []));
   const [theme, setTheme] = useState<Theme>(() => loadJSON<Theme>(THEME_KEY, "dark"));
   const [scans, setScans] = useState<number>(() => loadJSON<number>(SCANS_KEY, 0));
+  const [trades, setTrades] = useState<number>(() => loadJSON<number>(TRADES_KEY, 0));
   const [chatOpen, setChatOpen] = useState(false);
   const earnedRef = useRef<Set<string>>(
     new Set(
       loadJSON<string[] | null>(EARNED_KEY, null) ??
-        earnedIds(computeStats(loadJSON<SavedCard[]>(BINDER_KEY, []), loadJSON<WishItem[]>(WISHLIST_KEY, []), loadJSON<number>(SCANS_KEY, 0)))
+        earnedIds(
+          computeStats(
+            loadJSON<SavedCard[]>(BINDER_KEY, []),
+            loadJSON<WishItem[]>(WISHLIST_KEY, []),
+            loadJSON<number>(SCANS_KEY, 0),
+            loadJSON<number>(TRADES_KEY, 0),
+            settings.language
+          )
+        )
     )
   );
 
@@ -115,9 +125,10 @@ export default function App() {
   useEffect(() => { localStorage.setItem(BINDER_KEY, JSON.stringify(saved)); }, [saved]);
   useEffect(() => { localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist)); }, [wishlist]);
   useEffect(() => { localStorage.setItem(SCANS_KEY, JSON.stringify(scans)); }, [scans]);
+  useEffect(() => { localStorage.setItem(TRADES_KEY, JSON.stringify(trades)); }, [trades]);
   // Unlock-achievement toasts.
   useEffect(() => {
-    const ids = earnedIds(computeStats(saved, wishlist, scans));
+    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language));
     const newly = ids.filter((id) => !earnedRef.current.has(id));
     if (newly.length) {
       newly.forEach((id) => {
@@ -128,7 +139,7 @@ export default function App() {
       localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved, wishlist, scans]);
+  }, [saved, wishlist, scans, trades, settings.language]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, JSON.stringify(theme));
@@ -302,7 +313,7 @@ export default function App() {
         <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} />
       )}
       {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} />}
-      {view === "trade" && <TradeView settings={aiSettings} saved={saved} />}
+      {view === "trade" && <TradeView settings={aiSettings} saved={saved} onTrade={() => setTrades((n) => n + 1)} />}
       {view === "binder" && (
         <BinderView
           saved={saved}
@@ -325,7 +336,7 @@ export default function App() {
           adding={adding}
         />
       )}
-      {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} lang={settings.language} />}
+      {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
         <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} />
       )}
