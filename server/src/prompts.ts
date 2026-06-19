@@ -27,7 +27,17 @@ Be candid and practical. Lead with the useful conclusion. Values and player outl
 export function buildConstraints(settings: Settings): string {
   const lines: string[] = [];
   const currency = settings.currency || "USD";
-  lines.push(`Report monetary values in ${currency}.`);
+  if (currency === "USD") {
+    lines.push(`Report all monetary values in USD. Set every "currency" field to "USD".`);
+  } else {
+    lines.push(
+      `CURRENCY: The collector wants values in ${currency}. The trading-card market is priced in US dollars, so first estimate the value in USD, then CONVERT to ${currency} at the current real exchange rate` +
+        (settings.liveData === false
+          ? ` (use your best known approximate rate).`
+          : ` (look up today's rate with your search tool).`) +
+        ` Do NOT just relabel a USD number with a different currency — actually convert it (e.g. $100 USD is roughly €92, not €100). Set every "currency" field to the ISO code "${currency}" and make all low/mid/high numbers the converted ${currency} amounts.`
+    );
+  }
 
   const lang = settings.language?.trim();
   if (lang && lang.toLowerCase() !== "english") {
@@ -91,11 +101,14 @@ export function buildConstraints(settings: Settings): string {
   return `\n\nCollector preferences and filters:\n- ${lines.join("\n- ")}`;
 }
 
-export function scanSystemPrompt(settings: Settings): string {
+export function scanSystemPrompt(settings: Settings, hasImage = true): string {
+  const conditionInstruction = hasImage
+    ? `\n\nFor "conditionReport", inspect the photo(s) for condition: corner whitening/fraying, edge chipping, surface scratches or print lines, centering, creases, and gloss. List each visible flaw specifically (or an empty list if it presents clean), give an overall condition label, and lower confidence if the photos are limited (front-only, glare, low resolution).`
+    : `\n\nNO PHOTO was provided — you CANNOT see the card, so you must NOT judge or assume its condition. Do not invent a grade or flaws. UNLESS the collector's text description explicitly states a condition (e.g. "mint", "PSA 10", "near mint", "played", "creased", "heavy wear"), set "conditionReport.grade" to "Not assessed (no photo)", leave "conditionReport.flaws" as an empty list, and in "conditionReport.summary" say condition can't be assessed without a photo. Set "estimatedCondition" to null unless a condition is stated in the description. When condition is unstated, value the card as a typical raw/ungraded copy and note in the value "note" that the estimate assumes an unspecified condition.`;
   return (
     APPRAISER_ROLE +
     `\n\nACCURACY FIRST. Read the card literally: transcribe the exact name, team, set/brand, year, and card number as printed — do not guess from resemblance to a player or set you recall. Zoom in mentally on small text (card number, copyright year, set logo, serial numbering). If a detail is unclear or you are not confident, set that field to null and note it in "warnings" — never fill a field with a confident guess. Use Google Search to CONFIRM the card's identity (player, set, year, card number, parallel) and its value; if the image and your knowledge disagree, trust what is printed on the card. It is better to return null than a wrong value.` +
-    `\n\nFor "conditionReport", inspect the photo(s) for condition: corner whitening/fraying, edge chipping, surface scratches or print lines, centering, creases, and gloss. List each visible flaw specifically (or an empty list if it presents clean), give an overall condition label, and lower confidence if the photos are limited (front-only, glare, low resolution).` +
+    conditionInstruction +
     `\n\nWhen you analyze the card, fill every field you can verify. For "recommendedTrades", suggest 2-4 comparable cards/players worth chasing (upgrades or hot names). For "similarValueTargets", suggest 2-4 cards of SIMILAR value the collector could realistically ask for in return if they traded this card away — fair 1-for-1 swaps the other side would accept. Both lists must respect the collector's filters. For "playerOutlook.trend", use exactly one of: rising, stable, declining, unknown.` +
     buildConstraints(settings)
   );

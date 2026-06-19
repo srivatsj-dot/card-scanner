@@ -221,7 +221,7 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     return;
   }
 
-  const sys = scanSystemPrompt(settings || {});
+  const sys = scanSystemPrompt(settings || {}, images.length > 0);
   const imageParts: Part[] = images.map((im) => ({
     inlineData: { mimeType: im.mediaType, data: im.imageBase64 },
   }));

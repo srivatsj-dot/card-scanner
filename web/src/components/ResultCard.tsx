@@ -116,7 +116,7 @@ export default function ResultCard({ result }: { result: ScanResult }) {
                 <li key={i} className="warn">{f}</li>
               ))}
             </ul>
-          ) : (
+          ) : /no photo|not assessed/i.test(result.conditionReport.grade) ? null : (
             <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>{tr("No obvious flaws spotted in the photo.")}</p>
           )}
           <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>{result.conditionReport.summary}</p>
