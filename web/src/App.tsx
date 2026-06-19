@@ -86,12 +86,19 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
+  const [unlocks, setUnlocks] = useState<{ id: number; emoji: string; title: string; desc: string }[]>([]);
   const refreshingRef = useRef(false);
 
   function toast(msg: string) {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, msg }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
+  }
+
+  function showUnlock(emoji: string, title: string, desc: string) {
+    const id = Date.now() + Math.random();
+    setUnlocks((u) => [...u, { id, emoji, title, desc }]);
+    setTimeout(() => setUnlocks((u) => u.filter((x) => x.id !== id)), 4800);
   }
 
   function exportData() {
@@ -103,7 +110,7 @@ export default function App() {
     a.download = `card-scanner-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast("Backup downloaded");
+    toast(t("Backup downloaded"));
   }
 
   function importData(file: File) {
@@ -114,9 +121,9 @@ export default function App() {
         if (d.settings) setSettings({ ...defaultSettings, ...d.settings });
         if (Array.isArray(d.saved)) setSaved(d.saved);
         if (Array.isArray(d.wishlist)) setWishlist(d.wishlist);
-        toast("Data imported");
+        toast(t("Data imported"));
       } catch {
-        toast("Couldn't read that backup file");
+        toast(t("Couldn't read that backup file"));
       }
     };
     reader.readAsText(file);
@@ -132,10 +139,14 @@ export default function App() {
     const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language));
     const newly = ids.filter((id) => !earnedRef.current.has(id));
     if (newly.length) {
-      newly.forEach((id) => {
-        const a = ACHIEVEMENTS.find((x) => x.id === id);
-        if (a) toast(`🏆 ${a.emoji} ${a.title} unlocked!`);
-      });
+      // Don't fire a wall of banners on the very first computation (e.g. importing
+      // an existing collection) — only celebrate genuinely new unlocks.
+      if (earnedRef.current.size > 0 || newly.length <= 3) {
+        newly.forEach((id) => {
+          const a = ACHIEVEMENTS.find((x) => x.id === id);
+          if (a) showUnlock(a.emoji, a.title, a.desc);
+        });
+      }
       earnedRef.current = new Set(ids);
       localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
     }
@@ -165,7 +176,7 @@ export default function App() {
       },
       ...prev,
     ]);
-    toast(`Saved ${result.player || "card"} to binder`);
+    toast(`${t("Saved to binder")}: ${result.player || t("card")}`);
   }
 
   function wishToBinder(item: WishItem) {
@@ -320,7 +331,7 @@ export default function App() {
         <BinderView
           saved={saved}
           onRemove={(id) => setSaved((prev) => prev.filter((c) => c.id !== id))}
-          onClear={() => { if (confirm("Remove all saved cards from your binder?")) setSaved([]); }}
+          onClear={() => { if (confirm(t("Remove all saved cards from your binder?"))) setSaved([]); }}
           onRefresh={() => refreshAll(true)}
           refreshing={refreshing}
         />
@@ -349,6 +360,19 @@ export default function App() {
 
       <div className="toasts">
         {toasts.map((t) => <div className="toast" key={t.id}>{t.msg}</div>)}
+      </div>
+
+      <div className="unlock-stack">
+        {unlocks.map((u) => (
+          <div className="unlock-banner" key={u.id}>
+            <div className="unlock-emoji">{u.emoji}</div>
+            <div className="unlock-text">
+              <div className="unlock-label">🏆 {t("Achievement unlocked")}</div>
+              <div className="unlock-title">{u.title}</div>
+              <div className="unlock-desc">{u.desc}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

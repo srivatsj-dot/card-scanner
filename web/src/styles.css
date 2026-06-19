@@ -363,7 +363,7 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .award-emoji { font-size: 30px; line-height: 1; }
 .award-title { font-weight: 700; margin-top: 6px; }
 .award-desc { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; margin-top: 4px; }
-.award-progress { margin-top: 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; color: var(--muted); }
+.award.locked .award-title { letter-spacing: 0.08em; }
 .award-badge {
   margin-top: 8px;
   display: inline-block;
@@ -488,6 +488,57 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Achievement unlock banner */
+.unlock-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 90;
+  pointer-events: none;
+  width: min(380px, calc(100vw - 32px));
+}
+.unlock-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, var(--panel-2), var(--panel));
+  border: 1px solid rgba(244, 196, 90, 0.55);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(244,196,90,0.12) inset;
+  animation: unlock-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.unlock-emoji {
+  font-size: 34px;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(244,196,90,0.4));
+}
+.unlock-text { min-width: 0; }
+.unlock-label {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 700;
+}
+.unlock-title { font-weight: 800; font-size: 16px; margin-top: 1px; }
+.unlock-desc {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+@keyframes unlock-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* Camera modal */

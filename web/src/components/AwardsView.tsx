@@ -23,7 +23,7 @@ export default function AwardsView({ saved, wishlist, scans, trades, lang }: Pro
           <div className="value-big" style={{ fontSize: 22 }}>{earnedCount}/{ACHIEVEMENTS.length}</div>
         </div>
         <p className="muted" style={{ marginTop: 6, marginBottom: 0 }}>
-          Earn badges as your collection grows.
+          {t("Earn badges as your collection grows. Most stay hidden until you unlock them.")}
         </p>
       </div>
 
@@ -34,10 +34,9 @@ export default function AwardsView({ saved, wishlist, scans, trades, lang }: Pro
             return (
               <div key={a.id} className={`award ${got ? "earned" : "locked"}`}>
                 <div className="award-emoji">{got ? a.emoji : "🔒"}</div>
-                <div className="award-title">{a.title}</div>
-                <div className="award-desc">{a.desc}</div>
-                {!got && a.progress && <div className="award-progress">{a.progress(stats)}</div>}
-                {got && <div className="award-badge">Unlocked</div>}
+                <div className="award-title">{got ? a.title : t("Locked")}</div>
+                <div className="award-desc">{got ? a.desc : t("Keep collecting to reveal this one.")}</div>
+                {got && <div className="award-badge">{t("Unlocked")}</div>}
               </div>
             );
           })}
