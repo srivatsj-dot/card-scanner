@@ -5,7 +5,8 @@
   --line: #2a3552;
   --text: #e8ecf5;
   --muted: #93a0bd;
-  --gold: #f4c45a;
+  --gold: #f4c45a;      /* button / accent fill */
+  --value: #f4c45a;     /* big value text */
   --green: #4fd18b;
   --red: #ff6b6b;
   --blue: #6aa8ff;
@@ -13,19 +14,20 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
-/* Light theme overrides (data-theme on <html>) */
+/* Light theme overrides (data-theme on <html>) — tuned for readability. */
 :root[data-theme="light"] {
-  --bg: #f2f4f8;
+  --bg: #eceff5;
   --panel: #ffffff;
-  --panel-2: #eef1f6;
-  --line: #d8deea;
-  --text: #141922;
-  --muted: #5a6678;
-  --gold: #9a6a07;
-  --green: #157a44;
+  --panel-2: #eef1f7;
+  --line: #c9d2e0;        /* darker so borders are visible on white */
+  --text: #0f1622;        /* near-black for crisp body text */
+  --muted: #475063;       /* darker muted for readable secondary text */
+  --gold: #e6a920;        /* stays bright for buttons (dark text on top) */
+  --value: #946100;       /* dark gold so value numbers read on white */
+  --green: #0f8a48;
   --red: #c62f2f;
-  --blue: #2563eb;
-  --shadow: 0 6px 20px rgba(20, 30, 60, 0.08);
+  --blue: #1f5fd0;
+  --shadow: 0 4px 16px rgba(20, 30, 60, 0.1);
 }
 /* Light-mode contrast fixes for elements that assume dark text-on-accent */
 :root[data-theme="light"] .bubble.user { color: #ffffff; }
@@ -233,7 +235,7 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 }
 .value-big {
   font-size: 32px;
-  color: var(--gold);
+  color: var(--value);
   font-weight: 700;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
@@ -267,7 +269,7 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   color: var(--muted);
   margin: 0 6px 6px 0;
 }
-.pill.gold { color: var(--gold); border-color: rgba(244,196,90,0.4); }
+.pill.gold { color: var(--value); border-color: rgba(244,196,90,0.4); }
 .pill.green { color: var(--green); border-color: rgba(79,209,139,0.4); }
 .pill.red { color: var(--red); border-color: rgba(255,107,107,0.4); }
 .pill.blue { color: var(--blue); border-color: rgba(106,168,255,0.4); }
@@ -560,3 +562,20 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-weight: 700;
 }
+
+/* --- UI polish --- */
+.btn { transition: filter 0.15s ease, transform 0.04s ease; }
+.btn:hover:not(:disabled) { filter: brightness(1.07); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn.secondary:hover:not(:disabled),
+.btn.ghost:hover:not(:disabled) { border-color: var(--gold); color: var(--text); }
+.nav button { transition: color 0.15s ease, background 0.15s ease; }
+.nav button:hover { color: var(--text); }
+.card { transition: border-color 0.15s ease; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.75; }
+.theme-toggle { transition: border-color 0.15s ease; }
+.theme-toggle:hover { border-color: var(--gold); }
+.pill { background: var(--panel-2); }
+:root[data-theme="light"] .dropzone:hover { background: rgba(230, 169, 32, 0.06); }
+/* Make the score number readable in light mode */
+:root[data-theme="light"] .score-ring .inner { color: var(--text); }
