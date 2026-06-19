@@ -53,15 +53,15 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "cards_25", emoji: "👟", title: "Shoebox", desc: "Save 25 cards.", earned: (s) => s.cards >= 25 },
   { id: "cards_50", emoji: "🗂️", title: "Real Collection", desc: "Save 50 cards.", earned: (s) => s.cards >= 50 },
   // Total value
-  { id: "val_50", emoji: "🪙", title: "Pocket Change", desc: "Binder worth 50+.", earned: (s) => s.totalValue >= 50 },
-  { id: "val_100", emoji: "💵", title: "Lunch Money", desc: "Binder worth 100+.", earned: (s) => s.totalValue >= 100 },
-  { id: "val_500", emoji: "💰", title: "Stacking Up", desc: "Binder worth 500+.", earned: (s) => s.totalValue >= 500 },
-  { id: "val_1k", emoji: "💸", title: "Four Figures", desc: "Binder worth 1,000+.", earned: (s) => s.totalValue >= 1000 },
-  { id: "val_2500", emoji: "🏦", title: "Serious Money", desc: "Binder worth 2,500+.", earned: (s) => s.totalValue >= 2500 },
-  // Single-card value
-  { id: "single_50", emoji: "✨", title: "Nice Card", desc: "Own a card worth 50+.", earned: (s) => s.maxSingle >= 50 },
-  { id: "single_100", emoji: "🌠", title: "Nice Pull", desc: "Own a card worth 100+.", earned: (s) => s.maxSingle >= 100 },
-  { id: "single_250", emoji: "💎", title: "Big Hit", desc: "Own a card worth 250+.", earned: (s) => s.maxSingle >= 250 },
+  { id: "val_50", emoji: "🪙", title: "Pocket Change", desc: "Binder worth $50+.", earned: (s) => s.totalValue >= 50 },
+  { id: "val_100", emoji: "💵", title: "Lunch Money", desc: "Binder worth $100+.", earned: (s) => s.totalValue >= 100 },
+  { id: "val_500", emoji: "💰", title: "Stacking Up", desc: "Binder worth $500+.", earned: (s) => s.totalValue >= 500 },
+  { id: "val_1k", emoji: "💸", title: "Four Figures", desc: "Binder worth $1,000+.", earned: (s) => s.totalValue >= 1000 },
+  { id: "val_2500", emoji: "🏦", title: "Serious Money", desc: "Binder worth $2,500+.", earned: (s) => s.totalValue >= 2500 },
+  // Single-card value (USD)
+  { id: "single_50", emoji: "✨", title: "Nice Card", desc: "Own a card worth $50+.", earned: (s) => s.maxSingle >= 50 },
+  { id: "single_100", emoji: "🌠", title: "Nice Pull", desc: "Own a card worth $100+.", earned: (s) => s.maxSingle >= 100 },
+  { id: "single_250", emoji: "💎", title: "Big Hit", desc: "Own a card worth $250+.", earned: (s) => s.maxSingle >= 250 },
   // Wishlist
   { id: "wish_1", emoji: "🛒", title: "Window Shopper", desc: "Add a card to your wishlist.", earned: (s) => s.wishlist >= 1 },
   { id: "wish_5", emoji: "⭐", title: "Wishful Thinking", desc: "Wishlist 5 cards.", earned: (s) => s.wishlist >= 5 },
@@ -107,6 +107,16 @@ const decade = (year: string | null) => {
   return n >= 1900 && n <= 2099 ? Math.floor(n / 10) : NaN;
 };
 
+// Value thresholds in the achievement list are in USD, but a card's stored value
+// is in whatever currency the collector picked — so a ₹8,000 card must not count
+// as "$8,000". Convert every value to USD with approximate rates before tallying,
+// so the milestones mean the same thing in any currency.
+const USD_PER_UNIT: Record<string, number> = {
+  USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73, AUD: 0.66, INR: 0.012, JPY: 0.0067,
+};
+const toUSD = (n: number, currency?: string) =>
+  (n || 0) * (USD_PER_UNIT[(currency || "USD").toUpperCase()] ?? 1);
+
 export function computeStats(
   saved: SavedCard[],
   wishlist: WishItem[],
@@ -143,12 +153,12 @@ export function computeStats(
 
   return {
     cards: saved.length,
-    totalValue: saved.reduce((sum, s) => sum + (s.result.estimatedValue.mid || 0), 0),
-    maxSingle: saved.reduce((m, s) => Math.max(m, s.result.estimatedValue.mid || 0), 0),
+    totalValue: saved.reduce((sum, s) => sum + toUSD(s.result.estimatedValue.mid, s.result.estimatedValue.currency), 0),
+    maxSingle: saved.reduce((m, s) => Math.max(m, toUSD(s.result.estimatedValue.mid, s.result.estimatedValue.currency)), 0),
     scans,
     trades,
     wishlist: wishlist.length,
-    wishlistValue: wishlist.reduce((sum, w) => sum + (w.result?.estimatedValue.mid || 0), 0),
+    wishlistValue: wishlist.reduce((sum, w) => sum + toUSD(w.result?.estimatedValue.mid || 0, w.result?.estimatedValue.currency), 0),
     sportsCount: sportsOwned.size,
     sportsOwned,
     distinctPlayers: new Set(players).size,
