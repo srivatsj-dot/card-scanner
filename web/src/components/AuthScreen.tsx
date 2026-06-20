@@ -29,8 +29,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
         callback: (resp: { credential?: string }) => {
           try {
             if (!resp.credential) throw new Error("Google sign-in was cancelled.");
-            const { email: gEmail, isNew } = loginWithGoogle(resp.credential);
-            if (isNew && gEmail) notifySignup(gEmail, gEmail.split("@")[0]);
+            loginWithGoogle(resp.credential);
             onAuthedRef.current();
           } catch (e) {
             setError(e instanceof Error ? e.message : "Google sign-in failed.");

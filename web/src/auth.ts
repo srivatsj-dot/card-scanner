@@ -159,40 +159,19 @@ function decodeJwt(token: string): Record<string, unknown> {
   return JSON.parse(json) as Record<string, unknown>;
 }
 
-export function loginWithGoogle(credential: string): { key: string; email?: string; isNew: boolean } {
+// Google is a sign-in shortcut for EXISTING accounts only — it never creates a
+// new one. It matches the Google email to an account you already registered.
+export function loginWithGoogle(credential: string): { key: string; email: string } {
   const claims = decodeJwt(credential);
-  const sub = String(claims.sub || "");
-  if (!sub) throw new Error("Google sign-in didn't return a valid account.");
-  const email = claims.email ? String(claims.email) : undefined;
+  const email = claims.email ? String(claims.email) : "";
+  if (!email) throw new Error("Google didn't share an email for this account.");
   const users = loadUsers();
-
-  // If you already have an account using this email (e.g. you signed up with a
-  // username + password and that email), Google signs you straight into it.
-  if (email) {
-    const lower = email.toLowerCase();
-    const existing = Object.keys(users).find((k) => users[k].email?.toLowerCase() === lower);
-    if (existing) {
-      migrateLegacy(existing);
-      localStorage.setItem(SESSION_KEY, existing);
-      return { key: existing, email, isNew: false };
-    }
+  const lower = email.toLowerCase();
+  const existing = Object.keys(users).find((k) => users[k].email?.toLowerCase() === lower);
+  if (!existing) {
+    throw new Error("No account uses this Google email yet. Create an account first, then sign in with Google.");
   }
-
-  // Otherwise use (or create) a Google-keyed account.
-  const key = `google:${sub}`;
-  const isNew = !users[key];
-  if (isNew) {
-    users[key] = {
-      display: String(claims.name || email || "Google user"),
-      salt: "",
-      hash: "",
-      createdAt: Date.now(),
-      provider: "google",
-      email,
-    };
-    saveUsers(users);
-  }
-  migrateLegacy(key);
-  localStorage.setItem(SESSION_KEY, key);
-  return { key, email, isNew };
+  migrateLegacy(existing);
+  localStorage.setItem(SESSION_KEY, existing);
+  return { key: existing, email };
 }
