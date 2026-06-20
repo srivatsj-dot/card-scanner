@@ -11,11 +11,12 @@ interface Props {
   result: ScanResult | null;
   onResult: (r: ScanResult | null) => void;
   onSave: (result: ScanResult, frontDataUrl: string | undefined) => void;
+  onWishAll?: (texts: string[]) => void;
 }
 
 const MAX_IMAGES = 4;
 
-export default function ScanView({ settings, result, onResult, onSave }: Props) {
+export default function ScanView({ settings, result, onResult, onSave, onWishAll }: Props) {
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +150,7 @@ export default function ScanView({ settings, result, onResult, onSave }: Props) 
               </button>
             </div>
           )}
-          <ResultCard result={result} />
+          <ResultCard result={result} onWishAll={onWishAll} />
         </div>
       )}
 

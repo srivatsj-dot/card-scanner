@@ -8,6 +8,7 @@ import CameraModal from "./CameraModal";
 interface Props {
   settings: Settings;
   onSave: (result: ScanResult, frontDataUrl: string | undefined) => void;
+  onWish: (results: ScanResult[]) => void;
 }
 
 interface Row {
@@ -21,10 +22,10 @@ interface Row {
 
 let rid = 1;
 
-export default function BulkView({ settings, onSave }: Props) {
+export default function BulkView({ settings, onSave, onWish }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [running, setRunning] = useState(false);
-  const [accurate, setAccurate] = useState(false);
+  const [accurate, setAccurate] = useState(true);
   const [showCamera, setShowCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const t = useT();
@@ -126,7 +127,7 @@ export default function BulkView({ settings, onSave }: Props) {
         </div>
         <label className="toggle" style={{ marginTop: 12, marginBottom: 0 }}>
           <input type="checkbox" checked={accurate} onChange={(e) => setAccurate(e.target.checked)} disabled={running} />
-          {t("Accurate mode — verify with live data (slower, uses more quota)")}
+          {t("Verify online (on by default — more accurate; uncheck to go faster / save quota)")}
         </label>
         <input
           ref={fileRef}
@@ -144,7 +145,12 @@ export default function BulkView({ settings, onSave }: Props) {
             <span className="muted" style={{ fontSize: 12 }}>{foundCount} {t("cards found · estimated total")}</span>
             <div className="value-big" style={{ fontSize: 22 }}>{money(total, currency)}</div>
           </div>
-          <button className="btn" onClick={saveAll} disabled={running}>★ {t("Save all to binder")}</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn secondary" onClick={() => onWish(allCards.map(bulkCardToResult))} disabled={running}>
+              ♡ {t("Add all to wishlist")}
+            </button>
+            <button className="btn" onClick={saveAll} disabled={running}>★ {t("Save all to binder")}</button>
+          </div>
         </div>
       )}
 

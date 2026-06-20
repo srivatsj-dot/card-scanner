@@ -206,6 +206,41 @@ function MainApp({ user, onLogout }: { user: string; onLogout: () => void }) {
     }
   }
 
+  // Add several text descriptions to the wishlist at once (e.g. all of a card's
+  // recommended trade targets). Items appear instantly; prices fill in gently so
+  // we don't burst the rate limit.
+  async function addWishMany(texts: string[]) {
+    const clean = texts.map((s) => s.trim()).filter(Boolean);
+    if (clean.length === 0) return;
+    const items = clean.map((text) => ({ id: uid(), addedAt: Date.now(), text }));
+    setWishlist((prev) => [...items, ...prev]);
+    toast(`${clean.length} ${t("added to wishlist")}`);
+    for (const item of items) {
+      try {
+        const r = await searchCard(item.text, aiSettings);
+        setWishlist((prev) => prev.map((w) => (w.id === item.id ? { ...w, result: r, lastRefreshedAt: Date.now() } : w)));
+        await sleep(800);
+      } catch {
+        /* leave text-only; daily refresh will price it */
+      }
+    }
+  }
+
+  // Add cards we already have full results for (e.g. bulk-detected cards) — no
+  // lookup needed since the value is already known.
+  function addWishResults(results: ScanResult[]) {
+    if (results.length === 0) return;
+    const items = results.map((result) => ({
+      id: uid(),
+      addedAt: Date.now(),
+      text: describeCard(result),
+      result,
+      lastRefreshedAt: Date.now(),
+    }));
+    setWishlist((prev) => [...items, ...prev]);
+    toast(`${results.length} ${t("added to wishlist")}`);
+  }
+
   // Refresh saved + wishlist prices. force=true ignores the 24h freshness check
   // and refreshes everything. Auto runs are gentle: capped count, spaced out, so
   // they don't burn the free-tier quota that foreground scans need.
@@ -332,13 +367,13 @@ function MainApp({ user, onLogout }: { user: string; onLogout: () => void }) {
       </div>
 
       {view === "scan" && (
-        <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} />
+        <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} />
       )}
       {view === "search" && (
-        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} />
+        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} />
       )}
-      {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} />}
-      {view === "trade" && <TradeView settings={aiSettings} saved={saved} onTrade={() => setTrades((n) => n + 1)} />}
+      {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />}
+      {view === "trade" && <TradeView settings={aiSettings} saved={saved} onTrade={() => setTrades((n) => n + 1)} onWishAll={addWishMany} />}
       {view === "binder" && (
         <BinderView
           saved={saved}

@@ -153,7 +153,7 @@ function Side({
   );
 }
 
-export default function TradeView({ settings, saved, onTrade }: { settings: Settings; saved: SavedCard[]; onTrade: () => void }) {
+export default function TradeView({ settings, saved, onTrade, onWishAll }: { settings: Settings; saved: SavedCard[]; onTrade: () => void; onWishAll?: (texts: string[]) => void }) {
   const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
   const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
   const [trade, setTrade] = useState<TradeResult | null>(null);
@@ -288,7 +288,17 @@ export default function TradeView({ settings, saved, onTrade }: { settings: Sett
 
       {ask && (
         <div className="card">
-          <h2 style={{ marginBottom: 4 }}>{t("What to ask for")}</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <h2 style={{ marginBottom: 4 }}>{t("What to ask for")}</h2>
+            {onWishAll && ask.targets.length > 0 && (
+              <button
+                className="btn ghost small"
+                onClick={() => onWishAll(ask.targets.map((x) => `${x.player} ${x.cardSuggestion}`))}
+              >
+                ♡ {t("Add all to wishlist")}
+              </button>
+            )}
+          </div>
           <p className="muted" style={{ marginTop: 0 }}>{ask.givingValueNote}</p>
           {ask.targets.map((t, i) => (
             <div className="trade-rec" key={i}>

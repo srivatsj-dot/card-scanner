@@ -21,7 +21,13 @@ function trendPill(trend: string, tr: (s: string) => string) {
   return <span className="pill">{tr("Outlook unknown")}</span>;
 }
 
-export default function ResultCard({ result }: { result: ScanResult }) {
+export default function ResultCard({
+  result,
+  onWishAll,
+}: {
+  result: ScanResult;
+  onWishAll?: (texts: string[]) => void;
+}) {
   const tr = useT();
   if (!result.identified) {
     return (
@@ -137,7 +143,17 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
       {result.recommendedTrades.length > 0 && (
         <div className="card">
-          <h3>{tr("Good trades to chase")}</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <h3 style={{ margin: 0 }}>{tr("Good trades to chase")}</h3>
+            {onWishAll && (
+              <button
+                className="btn ghost small"
+                onClick={() => onWishAll(result.recommendedTrades.map((t) => `${t.player} ${t.cardSuggestion}`))}
+              >
+                ♡ {tr("Add all to wishlist")}
+              </button>
+            )}
+          </div>
           {result.recommendedTrades.map((t, i) => (
             <div className="trade-rec" key={i}>
               <div className="name">{t.player}</div>
@@ -153,7 +169,17 @@ export default function ResultCard({ result }: { result: ScanResult }) {
 
       {result.similarValueTargets?.length > 0 && (
         <div className="card">
-          <h3>{tr("Similar value — what to ask for")}</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <h3 style={{ margin: 0 }}>{tr("Similar value — what to ask for")}</h3>
+            {onWishAll && (
+              <button
+                className="btn ghost small"
+                onClick={() => onWishAll(result.similarValueTargets.map((t) => `${t.player} ${t.cardSuggestion}`))}
+              >
+                ♡ {tr("Add all to wishlist")}
+              </button>
+            )}
+          </div>
           <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
             {tr("If you traded this card away, these are fair same-value asks the other side would likely accept.")}
           </p>

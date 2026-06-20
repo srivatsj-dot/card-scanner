@@ -9,9 +9,10 @@ interface Props {
   result: ScanResult | null;
   onResult: (r: ScanResult | null) => void;
   onSave: (result: ScanResult, frontDataUrl: string | undefined) => void;
+  onWishAll?: (texts: string[]) => void;
 }
 
-export default function SearchView({ settings, result, onResult, onSave }: Props) {
+export default function SearchView({ settings, result, onResult, onSave, onWishAll }: Props) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +70,7 @@ export default function SearchView({ settings, result, onResult, onSave }: Props
               </button>
             </div>
           )}
-          <ResultCard result={result} />
+          <ResultCard result={result} onWishAll={onWishAll} />
         </div>
       )}
     </div>
