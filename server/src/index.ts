@@ -26,6 +26,10 @@ app.use(express.json({ limit: "25mb" }));
 
 const PORT = Number(process.env.PORT) || 8787;
 
+// The morning digest only reports news from this date onward (avoids stale or
+// hallucinated old events). The briefing archive officially starts here.
+const LAUNCH_DATE = "2026-06-19";
+
 // Google Search grounding gives the model live data (current player form,
 // recent sale prices) instead of its early-2025 training knowledge. On by
 // default; set CARD_SCANNER_GROUNDING=false to disable (one fewer API call).
@@ -440,6 +444,7 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     {
       text:
         `Today's date: ${today()}.\n` +
+        `IMPORTANT: This service launched on ${LAUNCH_DATE}. Only report news from ${LAUNCH_DATE} onward — NEVER mention or reference anything that happened before ${LAUNCH_DATE}. If nothing has happened since then, return empty arrays.\n\n` +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
         `Write the morning market update for these categories: ${cats.join(", ")}.`,
