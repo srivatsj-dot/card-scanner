@@ -137,6 +137,24 @@ export async function login(name: string, password: string): Promise<void> {
   localStorage.setItem(SESSION_KEY, key);
 }
 
+// Log in if the account exists, otherwise create it (with the given email).
+// Returns whether a new account was made so the caller can send a welcome email.
+export async function signInOrUp(name: string, password: string, email: string): Promise<{ isNew: boolean }> {
+  const key = keyOf(name);
+  if (loadUsers()[key]) {
+    await login(name, password);
+    // Backfill the email if this account somehow lacks one (enables Google later).
+    const users = loadUsers();
+    if (!users[key].email && isValidEmail(email)) {
+      users[key].email = email.trim();
+      saveUsers(users);
+    }
+    return { isNew: false };
+  }
+  await register(name, password, email);
+  return { isNew: true };
+}
+
 export function logout(): void {
   localStorage.removeItem(SESSION_KEY);
 }
