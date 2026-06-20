@@ -122,6 +122,15 @@ export function scanSystemPrompt(settings: Settings, hasImage = true): string {
   );
 }
 
+export function bulkSystemPrompt(settings: Settings): string {
+  return (
+    APPRAISER_ROLE +
+    `\n\nThis is a BULK scan. The photo (or photos) may show MULTIPLE distinct trading cards at once — a stack, a spread on a table, a binder page, or several cards side by side. Identify EVERY distinct card you can see and return ONE entry per card in "cards". If only one card is shown, return a single entry. Never merge two different cards into one entry, and never invent a card that isn't actually visible.` +
+    `\n\nFor each card, read it literally — the exact name, set/brand, year, and card number as printed — and give a realistic value range. If a card is too blurry, small, angled, or partly hidden to identify confidently, STILL include it with identified=false and a note saying it couldn't be read clearly. Keep each entry concise; do not assume condition you cannot see.` +
+    buildConstraints(settings)
+  );
+}
+
 export function askSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +

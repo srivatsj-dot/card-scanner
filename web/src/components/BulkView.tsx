@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import type { ScanResult, Settings } from "../types";
-import { scanCard } from "../api";
-import { makeThumbnail, money, sleep } from "../utils";
+import type { ScanResult, Settings, BulkCard } from "../types";
+import { bulkScan } from "../api";
+import { makeThumbnail, money, sleep, bulkCardToResult } from "../utils";
 import { useT } from "../translator";
 import CameraModal from "./CameraModal";
 
@@ -14,9 +14,9 @@ interface Row {
   id: number;
   dataUrl: string;
   status: "pending" | "scanning" | "done" | "error";
-  result?: ScanResult;
+  cards?: BulkCard[];
+  saved: number[]; // indices of cards already saved to the binder
   error?: string;
-  saved?: boolean;
 }
 
 let rid = 1;
@@ -29,7 +29,7 @@ export default function BulkView({ settings, onSave }: Props) {
   const t = useT();
 
   function addImage(dataUrl: string) {
-    setRows((prev) => [...prev, { id: rid++, dataUrl, status: "pending" }]);
+    setRows((prev) => [...prev, { id: rid++, dataUrl, status: "pending", saved: [] }]);
   }
   function handleFiles(files: FileList) {
     Array.from(files).forEach((file) => {
@@ -46,9 +46,8 @@ export default function BulkView({ settings, onSave }: Props) {
 
   async function scanAll() {
     setRunning(true);
-    // Bulk scans skip live grounding (one fast call each) so a stack of cards
-    // doesn't trip the free-tier rate limit. Sequential with a small gap, and a
-    // rate-limited card backs off and retries instead of killing the whole run.
+    // One call per photo (each photo may hold several cards). Skip grounding so a
+    // stack of photos doesn't trip the free tier; rate-limited photos back off.
     const fastSettings = { ...settings, liveData: false };
     const pending = rows.filter((r) => r.status === "pending" || r.status === "error");
     for (let i = 0; i < pending.length; i++) {
@@ -56,14 +55,13 @@ export default function BulkView({ settings, onSave }: Props) {
       patch(row.id, { status: "scanning", error: undefined });
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const result = await scanCard([row.dataUrl], fastSettings);
-          patch(row.id, { status: "done", result });
+          const { cards } = await bulkScan(row.dataUrl, fastSettings);
+          patch(row.id, { status: "done", cards: cards || [] });
           break;
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Scan failed.";
           const rateLimited = msg.toLowerCase().includes("rate limit");
           if (rateLimited && attempt < 2) {
-            // Wait out the per-minute cap, then retry the same card.
             patch(row.id, { status: "scanning", error: t("Rate limited — waiting, then retrying…") });
             await sleep(8000 * (attempt + 1));
             continue;
@@ -77,29 +75,40 @@ export default function BulkView({ settings, onSave }: Props) {
     setRunning(false);
   }
 
-  async function saveOne(row: Row) {
-    if (!row.result) return;
+  async function saveCard(row: Row, idx: number) {
+    const card = row.cards?.[idx];
+    if (!card || row.saved.includes(idx)) return;
     const thumb = await makeThumbnail(row.dataUrl);
-    onSave(row.result, thumb);
-    patch(row.id, { saved: true });
+    onSave(bulkCardToResult(card), thumb);
+    patch(row.id, { saved: [...row.saved, idx] });
   }
 
   async function saveAll() {
     for (const row of rows) {
-      if (row.result?.identified && !row.saved) await saveOne(row);
+      if (!row.cards) continue;
+      for (let idx = 0; idx < row.cards.length; idx++) {
+        if (row.cards[idx].identified && !row.saved.includes(idx)) await saveCard(row, idx);
+      }
     }
   }
 
-  const done = rows.filter((r) => r.status === "done" && r.result?.identified);
-  const total = done.reduce((s, r) => s + (r.result!.estimatedValue.mid || 0), 0);
-  const currency = done[0]?.result?.estimatedValue.currency || settings.currency;
+  const allCards = rows.flatMap((r) => (r.cards || []).filter((c) => c.identified));
+  const foundCount = allCards.length;
+  const total = allCards.reduce((s, c) => s + (c.estimatedValue.mid || 0), 0);
+  const currency = allCards[0]?.estimatedValue.currency || settings.currency;
+
+  function cardLine(c: BulkCard): string {
+    return [c.year, c.manufacturer, c.setName, c.cardNumber ? `#${c.cardNumber}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+  }
 
   return (
     <div>
       <div className="card">
         <h2>{t("Bulk scan")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          {t("Scan a whole stack at once — add a photo of each card (one per card), then scan them all. Fast mode keeps it reliable on the free tier. For the most accurate value on a single card, use the Scan tab instead.")}
+          {t("Snap or upload a photo with several cards in it — a stack, a spread, or a binder page — and it identifies every card it can see at once. For the sharpest single-card appraisal, use the Scan tab.")}
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn secondary" onClick={() => setShowCamera(true)} disabled={running}>📸 {t("Add photo")}</button>
@@ -123,10 +132,10 @@ export default function BulkView({ settings, onSave }: Props) {
         />
       </div>
 
-      {done.length > 0 && (
+      {foundCount > 0 && (
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <span className="muted" style={{ fontSize: 12 }}>{done.length} {t("identified · estimated total")}</span>
+            <span className="muted" style={{ fontSize: 12 }}>{foundCount} {t("cards found · estimated total")}</span>
             <div className="value-big" style={{ fontSize: 22 }}>{money(total, currency)}</div>
           </div>
           <button className="btn" onClick={saveAll} disabled={running}>★ {t("Save all to binder")}</button>
@@ -135,40 +144,61 @@ export default function BulkView({ settings, onSave }: Props) {
 
       {rows.map((row) => (
         <div className="card" key={row.id}>
-          <div className="binder-row">
-            <img className="thumb" src={row.dataUrl} alt="card" />
+          <div className="binder-row" style={{ alignItems: "flex-start" }}>
+            <img className="thumb" src={row.dataUrl} alt="cards" />
             <div style={{ flex: 1, minWidth: 0 }}>
               {row.status === "scanning" && <div className="muted"><span className="spinner" />{row.error || t("Scanning…")}</div>}
               {row.status === "pending" && <div className="muted">{t("Ready to scan")}</div>}
               {row.status === "error" && <div className="warn">{row.error}</div>}
-              {row.status === "done" && row.result && (
+              {row.status === "done" && (
                 <>
-                  <div style={{ fontWeight: 700 }}>{row.result.player || t("Unidentified")}</div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    {[row.result.year, row.result.manufacturer, row.result.setName].filter(Boolean).join(" · ") || "—"}
-                  </div>
-                  <div style={{ marginTop: 4 }}>
-                    {row.result.sport && <span className="pill">{row.result.sport}</span>}
-                    {row.result.parallel && <span className="pill gold">{row.result.parallel}</span>}
-                  </div>
+                  {(!row.cards || row.cards.length === 0) && (
+                    <div className="muted">{t("No cards found in this photo.")}</div>
+                  )}
+                  {row.cards && row.cards.length > 0 && (
+                    <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                      {row.cards.filter((c) => c.identified).length} {t("identified in this photo")}
+                    </div>
+                  )}
+                  {row.cards?.map((c, idx) => (
+                    <div key={idx} className="bulk-card">
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {c.identified ? (
+                          <>
+                            <div style={{ fontWeight: 700 }}>{c.player || t("Unknown player")}</div>
+                            <div className="muted" style={{ fontSize: 13 }}>{cardLine(c) || "—"}</div>
+                            <div style={{ marginTop: 4 }}>
+                              {c.sport && <span className="pill">{c.sport}</span>}
+                              {c.parallel && <span className="pill gold">{c.parallel}</span>}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="muted">{t("Couldn't read this card")} — {c.note}</div>
+                        )}
+                      </div>
+                      {c.identified && (
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div className="value-big" style={{ fontSize: 17 }}>
+                            {money(c.estimatedValue.mid, c.estimatedValue.currency)}
+                          </div>
+                          <button
+                            className="btn ghost small"
+                            style={{ marginTop: 6 }}
+                            onClick={() => saveCard(row, idx)}
+                            disabled={row.saved.includes(idx)}
+                          >
+                            {row.saved.includes(idx) ? t("✓ Saved") : t("★ Save")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </>
               )}
             </div>
-            <div style={{ textAlign: "right" }}>
-              {row.status === "done" && row.result?.identified && (
-                <>
-                  <div className="value-big" style={{ fontSize: 18 }}>
-                    {money(row.result.estimatedValue.mid, row.result.estimatedValue.currency)}
-                  </div>
-                  <button className="btn ghost small" style={{ marginTop: 6 }} onClick={() => saveOne(row)} disabled={row.saved}>
-                    {t(row.saved ? "✓ Saved" : "★ Save")}
-                  </button>
-                </>
-              )}
-              <button className="btn ghost small" style={{ marginTop: 6 }} onClick={() => setRows((p) => p.filter((r) => r.id !== row.id))} disabled={running}>
-                {t("Remove")}
-              </button>
-            </div>
+            <button className="btn ghost small" onClick={() => setRows((p) => p.filter((r) => r.id !== row.id))} disabled={running}>
+              {t("Remove")}
+            </button>
           </div>
         </div>
       ))}

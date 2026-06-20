@@ -7,9 +7,10 @@ import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
-import { scanSchema, tradeSchema, askSchema } from "./schemas.js";
+import { scanSchema, tradeSchema, askSchema, bulkSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
+  bulkSystemPrompt,
   tradeSystemPrompt,
   askSystemPrompt,
   chatSystemPrompt,
@@ -254,6 +255,52 @@ app.post("/api/scan", async (req: Request, res: Response) => {
 
   try {
     res.json(await analyze(sys, scanParts, scanSchema, groundedFor(settings)));
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
+// --- Bulk scan: identify EVERY card in a photo (a stack/spread/binder page) --
+app.post("/api/bulk", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+
+  const body = req.body as {
+    images?: { imageBase64: string; mediaType: string }[];
+    imageBase64?: string;
+    mediaType?: string;
+    settings?: Settings;
+  };
+  const settings = body.settings;
+  const images =
+    body.images && body.images.length > 0
+      ? body.images
+      : body.imageBase64 && body.mediaType
+      ? [{ imageBase64: body.imageBase64, mediaType: body.mediaType }]
+      : [];
+
+  if (images.length === 0) {
+    res.status(400).json({ error: "Add at least one photo." });
+    return;
+  }
+  const bad = images.find((im) => !ALLOWED_MEDIA.has(im.mediaType));
+  if (bad) {
+    res.status(400).json({ error: `Unsupported image type: ${bad.mediaType}` });
+    return;
+  }
+
+  const sys = bulkSystemPrompt(settings || {});
+  const parts: Part[] = [
+    ...images.map((im) => ({ inlineData: { mimeType: im.mediaType, data: im.imageBase64 } })),
+    {
+      text:
+        "Identify EVERY distinct trading card visible in the image(s). Return one entry per card " +
+        "with its identity and a value range. Include unreadable cards with identified=false.",
+    },
+  ];
+
+  try {
+    res.json(await analyze(sys, parts, bulkSchema, groundedFor(settings)));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });

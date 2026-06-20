@@ -136,6 +136,46 @@ export const scanSchema = {
   ],
 } as const;
 
+// Bulk scan: one image may hold several cards. Return one lean entry per card.
+export const bulkSchema = {
+  type: "OBJECT",
+  properties: {
+    cards: {
+      type: "ARRAY",
+      description: "One entry for EACH distinct trading card visible in the image(s).",
+      items: {
+        type: "OBJECT",
+        properties: {
+          identified: { type: "BOOLEAN", description: "Whether this is a real, identifiable trading card." },
+          player: nullableStr,
+          sport: nullableStr,
+          team: nullableStr,
+          year: nullableStr,
+          manufacturer: nullableStr,
+          setName: nullableStr,
+          cardNumber: nullableStr,
+          parallel: nullableStr,
+          specialEdition: nullableStr,
+          serialNumber: nullableStr,
+          estimatedValue: {
+            type: "OBJECT",
+            properties: { low: NUM, mid: NUM, high: NUM, currency: STR, note: STR },
+            required: ["low", "mid", "high", "currency", "note"],
+          },
+          conditionGrade: { ...nullableStr, description: "Rough condition label if clearly visible, else null." },
+          note: { ...STR, description: "One-line take on the card." },
+        },
+        required: [
+          "identified", "player", "sport", "team", "year", "manufacturer", "setName",
+          "cardNumber", "parallel", "specialEdition", "serialNumber", "estimatedValue",
+          "conditionGrade", "note",
+        ],
+      },
+    },
+  },
+  required: ["cards"],
+} as const;
+
 export const tradeSchema = {
   type: "OBJECT",
   properties: {

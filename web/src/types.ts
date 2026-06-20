@@ -122,6 +122,24 @@ export interface CardEntry {
   dataUrl?: string; // data: URL of a photo, if attached
 }
 
+/** A single card detected within a bulk-scan photo (lean — identity + value). */
+export interface BulkCard {
+  identified: boolean;
+  player: string | null;
+  sport: string | null;
+  team: string | null;
+  year: string | null;
+  manufacturer: string | null;
+  setName: string | null;
+  cardNumber: string | null;
+  parallel: string | null;
+  specialEdition: string | null;
+  serialNumber: string | null;
+  estimatedValue: { low: number; mid: number; high: number; currency: string; note: string };
+  conditionGrade: string | null;
+  note: string;
+}
+
 export interface AskResult {
   givingValueNote: string;
   targets: {

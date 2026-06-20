@@ -1,4 +1,4 @@
-import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry } from "./types";
+import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry, BulkCard } from "./types";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -31,6 +31,15 @@ export function scanCard(dataUrls: string[], settings: Settings): Promise<ScanRe
 /** Look up a card from a typed description (no photo). */
 export function searchCard(text: string, settings: Settings): Promise<ScanResult> {
   return postJson<ScanResult>("/api/scan", { text, settings });
+}
+
+/** Bulk scan one photo that may contain several cards; returns every card found. */
+export function bulkScan(dataUrl: string, settings: Settings): Promise<{ cards: BulkCard[] }> {
+  const { base64, mediaType } = splitDataUrl(dataUrl);
+  return postJson<{ cards: BulkCard[] }>("/api/bulk", {
+    images: [{ imageBase64: base64, mediaType }],
+    settings,
+  });
 }
 
 /** Convert UI card entries into the server's {text, imageBase64, mediaType} shape. */

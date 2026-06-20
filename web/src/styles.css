@@ -550,6 +550,16 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 }
 .picker-row:hover { border-color: var(--gold); }
 
+/* Bulk-scan detected cards */
+.bulk-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.bulk-card:first-of-type { border-top: none; }
+
 /* Achievements */
 .award-grid {
   display: grid;

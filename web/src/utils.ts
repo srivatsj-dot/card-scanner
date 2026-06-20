@@ -38,7 +38,39 @@ export function money(n: number, currency: string) {
   }
 }
 
-import type { ScanResult } from "./types";
+import type { ScanResult, BulkCard } from "./types";
+
+/** Promote a lean bulk-scan card into a full ScanResult for the binder.
+ * Missing fields get neutral defaults; a later price refresh fills in the rest. */
+export function bulkCardToResult(c: BulkCard): ScanResult {
+  return {
+    identified: c.identified,
+    player: c.player,
+    sport: c.sport,
+    team: c.team,
+    year: c.year,
+    manufacturer: c.manufacturer,
+    setName: c.setName,
+    cardNumber: c.cardNumber,
+    parallel: c.parallel,
+    specialEdition: c.specialEdition,
+    serialNumber: c.serialNumber,
+    estimatedCondition: c.conditionGrade,
+    conditionReport: {
+      grade: c.conditionGrade || "Not assessed",
+      flaws: [],
+      summary: c.conditionGrade ? "" : "Condition not assessed in bulk scan.",
+    },
+    estimatedValue: c.estimatedValue,
+    rating: { score: 0, label: "Quick scan", summary: c.note },
+    hiddenInsights: [],
+    playerOutlook: { trend: "unknown", summary: "" },
+    recommendedTrades: [],
+    similarValueTargets: [],
+    generalAssessment: c.note,
+    warnings: [],
+  };
+}
 
 /** Build a short text description of a saved card for the trade tool. */
 export function describeCard(r: ScanResult): string {
