@@ -207,7 +207,8 @@ export const digestSchema = {
   type: "OBJECT",
   properties: {
     overview: { ...STR, description: "One-line energetic summary of the day across the hobby." },
-    yourCards: { ...STR_ARR, description: "What's happening to the collector's OWN players/cards." },
+    yourCards: { ...STR_ARR, description: "What's happening to the collector's OWN players/cards (binder)." },
+    yourWishlist: { ...STR_ARR, description: "What's happening to cards/players on the collector's WISHLIST." },
     sections: {
       type: "ARRAY",
       description: "One section per requested category.",
@@ -226,7 +227,7 @@ export const digestSchema = {
       },
     },
   },
-  required: ["overview", "yourCards", "sections"],
+  required: ["overview", "yourCards", "yourWishlist", "sections"],
 } as const;
 
 export const tradeSchema = {

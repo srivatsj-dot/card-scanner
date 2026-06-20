@@ -174,7 +174,8 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
     APPRAISER_ROLE +
     `\n\nWrite a LIVELY morning market update for a card collector — punchy and specific, like a sports-card newsletter, NOT a dry list. Cover ONLY these categories: ${list}, and cover the whole hobby plus the collector's own cards. Every item must be ONE vivid sentence with real names, teams, and numbers — no vague filler like "some players are doing well."` +
     `\n\nStart with a one-line, energetic "overview" of the day across the hobby.` +
-    `\n\n"yourCards": 2-6 specific notes about what's happening to the COLLECTOR'S OWN players/cards (listed below) — price moves, hot/cold streaks, injuries, big games. If none are listed or nothing's happening, return an empty array.` +
+    `\n\n"yourCards": 2-6 specific notes about what's happening to the COLLECTOR'S OWN players/cards (their BINDER, listed below) — price moves, hot/cold streaks, injuries, big games. Empty array if none are listed or nothing's happening.` +
+    `\n\n"yourWishlist": 1-6 notes about cards/players on the collector's WISHLIST (listed below) — price drops worth pouncing on, momentum, or news. Empty array if none are listed or nothing's happening. Keep these SEPARATE from yourCards (binder).` +
     `\n\nFor EACH requested category, fill these buckets:` +
     `\n- "risingStars": players or cards heating up market-wide right now (including names the collector doesn't own).` +
     `\n- "declining": players cooling off, slumping, injured, or with bad news dragging their cards down. ALWAYS try to include at least one or two when there's any news.` +
@@ -182,7 +183,7 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
     `\n- "trades": real, recent trades, signings, call-ups, and debuts, including midseason moves.` +
     `\n- "chase": timely, REASONED buys — say WHY now (a breakout, a call-up, undervalued ahead of the playoffs), not just a card name.` +
     `\n- "news": set releases, big public sales, and grading/market news.` +
-    `\n\nUse live search for genuinely recent, real information — today's standings, last night's games, this week's moves. If a bucket has nothing notable, return an empty array. Only include a section for each requested category.` +
+    `\n\nCRUCIAL: report ONLY genuinely recent news — TODAY or the last day or two. Use live search to verify it actually happened recently. Do NOT pad with old, generic, or evergreen facts, and never invent anything. If there is no real, recent news for a bucket or a whole section, return an EMPTY array — a quiet day with little to report is fine and expected. Only include a section for each requested category.` +
     buildConstraints(settings)
   );
 }

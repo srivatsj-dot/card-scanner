@@ -422,9 +422,10 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 // --- Morning digest: daily market update grouped by sport ------------------
 app.post("/api/digest", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
-  const { sports, players, settings } = req.body as {
+  const { sports, players, wishlist, settings } = req.body as {
     sports?: string[];
     players?: string[];
+    wishlist?: string[];
     settings?: Settings;
   };
   const cats = (sports || []).map((s) => String(s).trim()).filter(Boolean);
@@ -434,13 +435,13 @@ app.post("/api/digest", async (req: Request, res: Response) => {
   }
   const sys = digestSystemPrompt(settings || {}, cats);
   const mine = (players || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
+  const want = (wishlist || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 60);
   const parts: Part[] = [
     {
       text:
         `Today's date: ${today()}.\n` +
-        (mine.length
-          ? `The collector's players/cards to prioritize:\n- ${mine.join("\n- ")}\n\n`
-          : "") +
+        (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
+        (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
         `Write the morning market update for these categories: ${cats.join(", ")}.`,
     },
   ];

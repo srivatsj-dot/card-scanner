@@ -88,8 +88,13 @@ export function planTradeUp(target: string, owned: string[], settings: Settings)
 }
 
 /** Daily morning market digest for the given categories. */
-export function getDigest(sports: string[], players: string[], settings: Settings): Promise<DigestResult> {
-  return postJson<DigestResult>("/api/digest", { sports, players, settings });
+export function getDigest(
+  sports: string[],
+  players: string[],
+  wishlist: string[],
+  settings: Settings
+): Promise<DigestResult> {
+  return postJson<DigestResult>("/api/digest", { sports, players, wishlist, settings });
 }
 
 export function suggestAsks(yourSide: CardEntry[], settings: Settings): Promise<AskResult> {

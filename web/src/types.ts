@@ -221,6 +221,7 @@ export interface DigestResult {
   generatedAt: number;
   overview: string;
   yourCards: string[];
+  yourWishlist: string[];
   sections: {
     sport: string;
     risingStars: string[];

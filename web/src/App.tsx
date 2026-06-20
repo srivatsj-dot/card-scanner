@@ -104,6 +104,11 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       ),
     [saved]
   );
+  // Wishlist cards, for the digest's "from your wishlist" section.
+  const digestWishlist = useMemo(
+    () => Array.from(new Set(wishlist.map((w) => (w.result ? describeCard(w.result) : w.text)).filter(Boolean))),
+    [wishlist]
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
@@ -407,7 +412,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       </div>
 
       {view === "today" && (
-        <DigestView settings={aiSettings} players={digestPlayers} cacheKey={DIGEST_KEY} />
+        <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
       )}
       {view === "scan" && (
         <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />

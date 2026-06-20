@@ -6,6 +6,7 @@ import { useT } from "../translator";
 interface Props {
   settings: Settings;
   players: string[];
+  wishlist: string[];
   cacheKey: string;
 }
 
@@ -29,7 +30,7 @@ function Bucket({ icon, title, tone, items }: { icon: string; title: string; ton
   );
 }
 
-export default function DigestView({ settings, players, cacheKey }: Props) {
+export default function DigestView({ settings, players, wishlist, cacheKey }: Props) {
   const t = useT();
   const [digest, setDigest] = useState<DigestResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,7 +41,7 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const d = await getDigest(settings.digestSports, players, settings);
+      const d = await getDigest(settings.digestSports, players, wishlist, settings);
       const withTime = { ...d, generatedAt: Date.now() };
       setDigest(withTime);
       try { localStorage.setItem(cacheKey, JSON.stringify(withTime)); } catch { /* quota */ }
@@ -56,7 +57,7 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
     let cached: DigestResult | null = null;
     try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch { /* ignore */ }
     // Only reuse a cache from today that matches the current digest shape.
-    const valid = cached && isToday(cached.generatedAt) && Array.isArray(cached.yourCards);
+    const valid = cached && isToday(cached.generatedAt) && Array.isArray(cached.yourWishlist);
     if (valid) {
       setDigest(cached);
     } else if (settings.morningUpdate) {
@@ -101,6 +102,26 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
           </ul>
         </div>
       )}
+
+      {digest && digest.yourWishlist.length > 0 && (
+        <div className="card digest-yours">
+          <h3 style={{ marginTop: 0 }}>♡ {t("From your wishlist")}</h3>
+          <ul className="digest-yours-list">
+            {digest.yourWishlist.map((it, i) => <li key={i}>{it}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {digest &&
+        !digest.yourCards.length &&
+        !digest.yourWishlist.length &&
+        digest.sections.every(
+          (s) => !(s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length)
+        ) && (
+          <div className="card">
+            <p className="muted" style={{ margin: 0 }}>{t("No major card news today — enjoy the quiet, and check back tomorrow.")}</p>
+          </div>
+        )}
 
       {digest?.sections.map((sec, i) => {
         const empty =
