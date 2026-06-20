@@ -66,6 +66,13 @@ export default function ResultCard({
               {result.parallel && <span className="pill gold">{result.parallel}</span>}
               {result.specialEdition && <span className="pill gold">★ {result.specialEdition}</span>}
               {result.serialNumber && <span className="pill gold">/{result.serialNumber.replace(/^.*\//, "")}</span>}
+              {result.pokemon?.edition && result.pokemon.edition !== "Unlimited" && (
+                <span className="pill gold">{result.pokemon.edition}</span>
+              )}
+              {result.pokemon?.variant && result.pokemon.variant !== "Non-holo" && (
+                <span className="pill gold">{result.pokemon.variant}</span>
+              )}
+              {result.pokemon?.rarity && <span className="pill">{result.pokemon.rarity}</span>}
             </div>
           </div>
           <div style={{ textAlign: "center" }}>
@@ -109,6 +116,23 @@ export default function ResultCard({
         <p style={{ marginTop: 0 }}>{result.rating.summary}</p>
         <p style={{ marginBottom: 0 }} className="muted">{result.generalAssessment}</p>
       </div>
+
+      {result.pokemon && Object.values(result.pokemon).some(Boolean) && (
+        <div className="card">
+          <h3>{tr("Pokémon details")}</h3>
+          <div className="kv">
+            {result.pokemon.setNumber && (<><span className="k">{tr("Set number")}</span><span>{result.pokemon.setNumber}</span></>)}
+            {result.pokemon.rarity && (<><span className="k">{tr("Rarity")}</span><span>{result.pokemon.rarity}</span></>)}
+            {result.pokemon.variant && (<><span className="k">{tr("Variant")}</span><span>{result.pokemon.variant}</span></>)}
+            {result.pokemon.edition && (<><span className="k">{tr("Edition")}</span><span>{result.pokemon.edition}</span></>)}
+            {result.pokemon.hp && (<><span className="k">{tr("HP")}</span><span>{result.pokemon.hp}</span></>)}
+            {result.pokemon.types && (<><span className="k">{tr("Type")}</span><span>{result.pokemon.types}</span></>)}
+            {result.pokemon.stage && (<><span className="k">{tr("Stage")}</span><span>{result.pokemon.stage}</span></>)}
+            {result.pokemon.language && (<><span className="k">{tr("Language")}</span><span>{result.pokemon.language}</span></>)}
+            {result.pokemon.regulationMark && (<><span className="k">{tr("Regulation mark")}</span><span>{result.pokemon.regulationMark}</span></>)}
+          </div>
+        </div>
+      )}
 
       {result.conditionReport && (
         <div className="card">

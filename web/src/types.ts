@@ -116,6 +116,17 @@ export interface ScanResult {
   rating: { score: number; label: string; summary: string };
   hiddenInsights: { label: string; detail: string }[];
   playerOutlook: { trend: string; summary: string };
+  pokemon?: {
+    setNumber: string | null;
+    rarity: string | null;
+    variant: string | null;
+    edition: string | null;
+    hp: string | null;
+    types: string | null;
+    stage: string | null;
+    language: string | null;
+    regulationMark: string | null;
+  } | null;
   recommendedTrades: {
     player: string;
     cardSuggestion: string;
