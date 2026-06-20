@@ -498,14 +498,28 @@ app.post("/api/translate", async (req: Request, res: Response) => {
 });
 
 // --- Welcome email on sign-up ----------------------------------------------
-// Sends a fixed welcome email via Resend (https://resend.com). Configure with
-// RESEND_API_KEY (and optionally EMAIL_FROM). The endpoint only sends a fixed
-// template to the address given, so it can't be used to send arbitrary content.
+// Sends a fixed welcome email. Two ways to configure it (Gmail is checked
+// first): Gmail SMTP via GMAIL_USER + GMAIL_APP_PASSWORD (free, no domain), or
+// Resend via RESEND_API_KEY (+ EMAIL_FROM). The endpoint only ever sends a
+// fixed template to the address given, so it can't send arbitrary content.
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "Card-O-Rama <onboarding@resend.dev>";
+const GMAIL_USER = process.env.GMAIL_USER || "";
+const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
 const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+
+function welcomeHtml(name: string): string {
+  return (
+    `<div style="font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.6;color:#1a2030">` +
+    `<h2 style="margin:0 0 8px">Welcome to Card-O-Rama, ${name}! 🎴</h2>` +
+    `<p>Your account is all set. Scan a card to get its value, hidden stats, a condition read, and smart trade ideas — across Pokémon, baseball, soccer, cricket, basketball, football, and hockey.</p>` +
+    `<p>Build your binder, track a wishlist, check if a trade is fair, and rack up achievements as your collection grows.</p>` +
+    `<p style="color:#5c6884">Happy collecting! 🃏</p>` +
+    `</div>`
+  );
+}
 
 app.post("/api/notify", async (req: Request, res: Response) => {
   const { email, username } = req.body as { email?: string; username?: string };
@@ -514,35 +528,39 @@ app.post("/api/notify", async (req: Request, res: Response) => {
     res.status(400).json({ ok: false, error: "Invalid email." });
     return;
   }
-  if (!RESEND_API_KEY) {
-    // Not configured — succeed quietly so sign-up isn't blocked.
-    res.json({ ok: false, reason: "email-not-configured" });
-    return;
-  }
   const name = escapeHtml((username || "there").toString().slice(0, 60));
+  const subject = "Welcome to Card-O-Rama 🎴";
+  const html = welcomeHtml(name);
+
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to,
-        subject: "Welcome to Card-O-Rama 🎴",
-        html:
-          `<div style="font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.6;color:#1a2030">` +
-          `<h2 style="margin:0 0 8px">Welcome to Card-O-Rama, ${name}! 🎴</h2>` +
-          `<p>Your account is all set. Scan a card to get its value, hidden stats, a condition read, and smart trade ideas — across Pokémon, baseball, soccer, cricket, basketball, football, and hockey.</p>` +
-          `<p>Build your binder, track a wishlist, check if a trade is fair, and rack up achievements as your collection grows.</p>` +
-          `<p style="color:#5c6884">Happy collecting! 🃏</p>` +
-          `</div>`,
-      }),
-    });
-    if (!r.ok) {
-      const text = await r.text().catch(() => "");
-      res.status(502).json({ ok: false, error: `Email send failed (${r.status}). ${text.slice(0, 200)}` });
+    // 1) Gmail SMTP (free, no domain needed).
+    if (GMAIL_USER && GMAIL_APP_PASSWORD) {
+      const nodemailer = (await import("nodemailer")).default;
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+      });
+      await transporter.sendMail({ from: `Card-O-Rama <${GMAIL_USER}>`, to, subject, html });
+      res.json({ ok: true, via: "gmail" });
       return;
     }
-    res.json({ ok: true });
+    // 2) Resend (needs a verified domain to email anyone).
+    if (RESEND_API_KEY) {
+      const r = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: EMAIL_FROM, to, subject, html }),
+      });
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        res.status(502).json({ ok: false, error: `Email send failed (${r.status}). ${text.slice(0, 200)}` });
+        return;
+      }
+      res.json({ ok: true, via: "resend" });
+      return;
+    }
+    // Not configured — succeed quietly so sign-up isn't blocked.
+    res.json({ ok: false, reason: "email-not-configured" });
   } catch (e) {
     res.status(502).json({ ok: false, error: e instanceof Error ? e.message : "Email send failed." });
   }
