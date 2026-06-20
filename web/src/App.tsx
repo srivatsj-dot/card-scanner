@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ScanResult, Settings, SavedCard, WishItem, Theme } from "./types";
+import type { ScanResult, Settings, SavedCard, WishItem, Theme, WantedTrade } from "./types";
 import { defaultSettings } from "./types";
 import { searchCard, scanCard } from "./api";
 import { describeCard, sleep, DAY_MS, makeThumbnail } from "./utils";
@@ -49,6 +49,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const EARNED_KEY = `card-scanner-earned:${user}`;
   const AUTO_REFRESH_KEY = `card-scanner-last-auto-refresh:${user}`;
   const DIGEST_KEY = `card-scanner-digest:${user}`;
+  const WANTED_KEY = `card-scanner-wanted:${user}`;
 
   const [view, setView] = useState<View>("scan");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -64,6 +65,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
   const [saved, setSaved] = useState<SavedCard[]>(() => loadJSON<SavedCard[]>(BINDER_KEY, []));
   const [wishlist, setWishlist] = useState<WishItem[]>(() => loadJSON<WishItem[]>(WISHLIST_KEY, []));
+  const [wanted, setWanted] = useState<WantedTrade[]>(() => loadJSON<WantedTrade[]>(WANTED_KEY, []));
   const [theme, setTheme] = useState<Theme>(() => loadJSON<Theme>(THEME_KEY, "dark"));
   const [scans, setScans] = useState<number>(() => loadJSON<number>(SCANS_KEY, 0));
   const [trades, setTrades] = useState<number>(() => loadJSON<number>(TRADES_KEY, 0));
@@ -158,6 +160,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(BINDER_KEY, JSON.stringify(saved)); }, [saved]);
   useEffect(() => { localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist)); }, [wishlist]);
+  useEffect(() => { localStorage.setItem(WANTED_KEY, JSON.stringify(wanted)); }, [wanted]);
   useEffect(() => { localStorage.setItem(SCANS_KEY, JSON.stringify(scans)); }, [scans]);
   useEffect(() => { localStorage.setItem(TRADES_KEY, JSON.stringify(trades)); }, [trades]);
   // Unlock-achievement toasts.
@@ -245,6 +248,46 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     } catch {
       /* leave text-only; user can retry via refresh */
     }
+  }
+
+  // --- Wanted trades (saved trade-up plans) --------------------------------
+  function saveWanted(target: string, result: import("./types").TradeUpResult) {
+    setWanted((prev) => [{ id: uid(), target, savedAt: Date.now(), result }, ...prev]);
+    toast(t("Saved to wanted trades"));
+  }
+  function removeWanted(id: string) {
+    setWanted((prev) => prev.filter((w) => w.id !== id));
+  }
+  // Mark a planned trade done: add the card you got to the binder and remove the
+  // originals you traded away (best-effort match on the first step).
+  async function completeWanted(wt: WantedTrade) {
+    if (!confirm(`${t("Mark this trade done?")} ${t("It adds")} "${wt.target}" ${t("to your binder and removes the cards you traded away.")}`)) return;
+    let r: ScanResult;
+    try {
+      r = await searchCard(wt.target, aiSettings);
+    } catch (e) {
+      toast(isRateLimit(e) ? t("Rate limited — try again in a minute") : t("Couldn't look that up — try again"));
+      return;
+    }
+    // Remove the originals used in the first step (loose token match).
+    const give = wt.result.steps[0]?.giveUp || [];
+    setSaved((prev) => {
+      const list = prev.slice();
+      for (const g of give) {
+        const tokens = g.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 2);
+        let bestIdx = -1, bestScore = 0;
+        list.forEach((c, i) => {
+          const desc = describeCard(c.result).toLowerCase();
+          const score = tokens.filter((tk) => desc.includes(tk)).length;
+          if (score > bestScore) { bestScore = score; bestIdx = i; }
+        });
+        if (bestIdx >= 0 && bestScore >= 2) list.splice(bestIdx, 1);
+      }
+      return list;
+    });
+    saveCard(r, undefined);
+    removeWanted(wt.id);
+    setView("binder");
   }
 
   function wishToBinder(item: WishItem) {
@@ -442,7 +485,16 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       )}
       {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />}
       {view === "trade" && <TradeView settings={aiSettings} saved={saved} onTrade={() => setTrades((n) => n + 1)} onWishAll={addWishMany} />}
-      {view === "tradeup" && <TradeUpView settings={aiSettings} saved={saved} />}
+      {view === "tradeup" && (
+        <TradeUpView
+          settings={aiSettings}
+          saved={saved}
+          wanted={wanted}
+          onSaveWanted={saveWanted}
+          onRemoveWanted={removeWanted}
+          onCompleteWanted={completeWanted}
+        />
+      )}
       {view === "binder" && (
         <BinderView
           saved={saved}

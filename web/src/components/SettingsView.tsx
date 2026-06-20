@@ -171,38 +171,13 @@ export default function SettingsView({ settings, onChange, onExport, onImport, o
         </select>
       </label>
 
-      <h3 style={{ marginTop: 18 }}>{t("Recommendation rules")}</h3>
-      <label className="toggle">
+      <label className="toggle" style={{ marginTop: 14 }}>
         <input
           type="checkbox"
           checked={settings.sameKindOnly}
           onChange={(e) => set("sameKindOnly", e.target.checked)}
         />
         {t("Only suggest cards of the same kind as the card (e.g. baseball → baseball)")}
-      </label>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={settings.gradedOnly}
-          onChange={(e) => set("gradedOnly", e.target.checked)}
-        />
-        {t("Only suggest graded / slabbed cards (PSA, BGS, SGC, CGC)")}
-      </label>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={settings.excludeMinorLeague}
-          onChange={(e) => set("excludeMinorLeague", e.target.checked)}
-        />
-        {t("Don't suggest minor-league players or unproven prospects")}
-      </label>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={settings.excludeRookies}
-          onChange={(e) => set("excludeRookies", e.target.checked)}
-        />
-        {t("Skip rookie cards — favor established veterans")}
       </label>
 
       <h3 style={{ marginTop: 18 }}>{t("Block card types")}</h3>

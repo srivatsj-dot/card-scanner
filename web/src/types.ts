@@ -35,13 +35,12 @@ export const BLOCKABLE_CATEGORIES = CATEGORIES.filter((c) => c !== "Any");
 
 // Market regions for pricing ("" = global/auto).
 export const REGIONS = [
-  "United States",
-  "Canada",
-  "United Kingdom",
-  "Europe",
-  "Japan",
-  "Australia",
-  "India",
+  "United States", "Canada", "Mexico", "Brazil", "Argentina", "Chile", "Colombia", "Peru", "Venezuela", "Ecuador", "Uruguay", "Paraguay", "Bolivia",
+  "United Kingdom", "Ireland", "France", "Germany", "Spain", "Portugal", "Italy", "Netherlands", "Belgium", "Switzerland", "Austria", "Sweden", "Norway", "Denmark", "Finland", "Iceland", "Poland", "Czechia", "Slovakia", "Hungary", "Romania", "Bulgaria", "Greece", "Croatia", "Serbia", "Ukraine", "Russia", "Turkey", "Luxembourg", "Slovenia", "Lithuania", "Latvia", "Estonia",
+  "Japan", "China", "South Korea", "Taiwan", "Hong Kong", "Singapore", "Malaysia", "Indonesia", "Thailand", "Vietnam", "Philippines", "India", "Pakistan", "Bangladesh", "Sri Lanka", "Nepal", "Kazakhstan",
+  "Australia", "New Zealand", "Fiji",
+  "United Arab Emirates", "Saudi Arabia", "Qatar", "Kuwait", "Bahrain", "Oman", "Israel", "Jordan", "Lebanon",
+  "South Africa", "Nigeria", "Kenya", "Egypt", "Morocco", "Ghana", "Tanzania", "Ethiopia", "Uganda",
 ] as const;
 
 // Top ~20 most-spoken languages for translated results.
@@ -225,6 +224,14 @@ export interface TradeUpResult {
   steps: { giveUp: string[]; receive: string; valueNote: string; rationale: string }[];
   summary: string;
   note: string;
+}
+
+/** A saved trade-up plan kept on the "wanted trades" list. */
+export interface WantedTrade {
+  id: string;
+  target: string;
+  savedAt: number;
+  result: TradeUpResult;
 }
 
 /** The daily "morning update" digest, grouped by sport. */
