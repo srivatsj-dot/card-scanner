@@ -24,6 +24,7 @@ let rid = 1;
 export default function BulkView({ settings, onSave }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [running, setRunning] = useState(false);
+  const [accurate, setAccurate] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const t = useT();
@@ -46,9 +47,10 @@ export default function BulkView({ settings, onSave }: Props) {
 
   async function scanAll() {
     setRunning(true);
-    // One call per photo (each photo may hold several cards). Skip grounding so a
-    // stack of photos doesn't trip the free tier; rate-limited photos back off.
-    const fastSettings = { ...settings, liveData: false };
+    // One call per photo (each photo may hold several cards). Default skips
+    // grounding so a stack of photos doesn't trip the free tier; "accurate mode"
+    // turns live verification on. Rate-limited photos back off and retry.
+    const fastSettings = accurate ? settings : { ...settings, liveData: false };
     const pending = rows.filter((r) => r.status === "pending" || r.status === "error");
     for (let i = 0; i < pending.length; i++) {
       const row = pending[i];
@@ -122,6 +124,10 @@ export default function BulkView({ settings, onSave }: Props) {
             <button className="btn ghost" onClick={() => setRows([])} disabled={running}>{t("Clear")}</button>
           )}
         </div>
+        <label className="toggle" style={{ marginTop: 12, marginBottom: 0 }}>
+          <input type="checkbox" checked={accurate} onChange={(e) => setAccurate(e.target.checked)} disabled={running} />
+          {t("Accurate mode — verify with live data (slower, uses more quota)")}
+        </label>
         <input
           ref={fileRef}
           type="file"
