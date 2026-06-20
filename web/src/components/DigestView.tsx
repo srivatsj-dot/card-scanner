@@ -101,29 +101,31 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
     } catch { return {}; }
   }
 
-  async function load() {
-    if (loading) return;
+  // Generate the briefing for a specific date. Immutable: never regenerate a
+  // day that already has one saved.
+  async function load(target: string) {
+    if (loading || archive[target] || target < LAUNCH || target > today) return;
     setLoading(true);
     setError(null);
     try {
-      const d = await getDigest(settings.digestSports, players, wishlist, settings);
+      const d = await getDigest(target, settings.digestSports, players, wishlist, settings);
       const withTime = { ...d, generatedAt: Date.now() };
-      const next = { ...readArchive(), [today]: withTime };
+      const next = { ...readArchive(), [target]: withTime };
       setArchive(next);
-      setDate(today);
+      setDate(target);
       try { localStorage.setItem(cacheKey, JSON.stringify(next)); } catch { /* quota */ }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load the update.");
+      setError(e instanceof Error ? e.message : "Couldn't load the briefing.");
     } finally {
       setLoading(false);
     }
   }
 
-  // On open: load the archive; auto-fetch today's briefing if missing.
+  // On open: load the saved archive; auto-generate today's briefing if missing.
   useEffect(() => {
     const arc = readArchive();
     setArchive(arc);
-    if (!arc[today] && settings.morningUpdate) load();
+    if (!arc[today] && settings.morningUpdate) load(today);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -144,9 +146,9 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
             </div>
             {digest && <h2 style={{ margin: "8px 0 0", fontSize: 22 }}>{digest.overview}</h2>}
           </div>
-          {isToday && (
-            <button className="btn secondary small" onClick={load} disabled={loading}>
-              {loading ? <><span className="spinner" />{t("Updating…")}</> : `↻ ${t("Refresh")}`}
+          {!digest && !loading && date >= LAUNCH && date <= today && (
+            <button className="btn secondary small" onClick={() => load(date)}>
+              {isToday ? t("Load briefing") : t("Generate this day's briefing")}
             </button>
           )}
         </div>
@@ -161,12 +163,11 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
           />
         )}
 
+        {loading && <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}><span className="spinner" />{t("Reading the wire…")}</p>}
         {error && <div className="error-box" style={{ marginTop: 12 }}>{error}</div>}
         {!digest && !loading && !error && (
           <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>
-            {isToday
-              ? (settings.morningUpdate ? t("Reading the wire…") : t("The morning update is off. Turn it on in Settings, or hit Refresh."))
-              : t("No briefing was saved for this day.")}
+            {t("No briefing saved for this day yet — generate one to lock it in. Once made, a day's briefing never changes.")}
           </p>
         )}
       </div>

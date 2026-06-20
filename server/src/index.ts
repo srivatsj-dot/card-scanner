@@ -426,7 +426,8 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 // --- Morning digest: daily market update grouped by sport ------------------
 app.post("/api/digest", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
-  const { sports, players, wishlist, settings } = req.body as {
+  const { date, sports, players, wishlist, settings } = req.body as {
+    date?: string;
     sports?: string[];
     players?: string[];
     wishlist?: string[];
@@ -437,17 +438,22 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Enable at least one category for the morning update." });
     return;
   }
+  // Target date, clamped to [launch, today].
+  const reqDate = /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? (date as string) : today();
+  const target = reqDate > today() ? today() : reqDate < LAUNCH_DATE ? LAUNCH_DATE : reqDate;
   const sys = digestSystemPrompt(settings || {}, cats);
   const mine = (players || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
   const want = (wishlist || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 60);
   const parts: Part[] = [
     {
       text:
-        `Today's date: ${today()}.\n` +
-        `IMPORTANT: This service launched on ${LAUNCH_DATE}. Only report news from ${LAUNCH_DATE} onward — NEVER mention or reference anything that happened before ${LAUNCH_DATE}. If nothing has happened since then, return empty arrays.\n\n` +
+        `Today's actual date: ${today()}. Target briefing date: ${target}.\n` +
+        `STRICT TIME WINDOW: cover ONLY news from roughly the 24 hours ENDING on the morning of ${target} — i.e. the early morning of ${target} plus the day before it. ` +
+        `NEVER include anything dated BEFORE ${LAUNCH_DATE} (the service launch). NEVER include anything AFTER ${target}. ` +
+        `If an event happened earlier than this window, leave it out ENTIRELY — even if it is still trending, relevant, or recently released. A product or story from days ago does NOT belong here. If nothing real happened in the window, return empty arrays.\n\n` +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
-        `Write the morning market update for these categories: ${cats.join(", ")}.`,
+        `Write the briefing for ${target}, for these categories: ${cats.join(", ")}.`,
     },
   ];
   try {

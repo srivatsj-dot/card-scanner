@@ -87,14 +87,15 @@ export function planTradeUp(target: string, owned: string[], settings: Settings)
   return postJson<TradeUpResult>("/api/tradeup", { target, owned, settings });
 }
 
-/** Daily morning market digest for the given categories. */
+/** Daily briefing for a specific date (YYYY-MM-DD) and the given categories. */
 export function getDigest(
+  date: string,
   sports: string[],
   players: string[],
   wishlist: string[],
   settings: Settings
 ): Promise<DigestResult> {
-  return postJson<DigestResult>("/api/digest", { sports, players, wishlist, settings });
+  return postJson<DigestResult>("/api/digest", { date, sports, players, wishlist, settings });
 }
 
 export function suggestAsks(yourSide: CardEntry[], settings: Settings): Promise<AskResult> {
