@@ -642,6 +642,8 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .digest-bucket.tone-chase { border-left-color: var(--accent); }
 .digest-bucket.tone-news { border-left-color: var(--muted); }
 
+.thumb.placeholder.photo-pick { flex-direction: column; gap: 5px; padding: 4px; }
+
 /* Bulk-scan detected cards */
 .bulk-card {
   display: flex;

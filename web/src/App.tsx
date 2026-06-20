@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme } from "./types";
 import { defaultSettings } from "./types";
 import { searchCard, scanCard } from "./api";
-import { describeCard, sleep, DAY_MS } from "./utils";
+import { describeCard, sleep, DAY_MS, makeThumbnail } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
@@ -228,6 +228,25 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     }
   }
 
+  // Attach (or replace) a photo on a saved binder card.
+  async function setCardPhoto(id: string, dataUrl: string) {
+    const thumb = await makeThumbnail(dataUrl);
+    setSaved((prev) => prev.map((c) => (c.id === id ? { ...c, thumbnail: thumb } : c)));
+  }
+
+  // Edit a wishlist card's description and re-look up its data.
+  async function editWish(id: string, newText: string) {
+    const text = newText.trim();
+    if (!text) return;
+    setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, text, result: undefined, previousMid: null } : w)));
+    try {
+      const r = await searchCard(text, aiSettings);
+      setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, result: r, lastRefreshedAt: Date.now() } : w)));
+    } catch {
+      /* leave text-only; user can retry via refresh */
+    }
+  }
+
   function wishToBinder(item: WishItem) {
     if (!item.result) return;
     saveCard(item.result, undefined);
@@ -432,6 +451,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           onRefresh={() => refreshAll(true)}
           refreshing={refreshing}
           onConditionCheck={checkCondition}
+          onSetPhoto={setCardPhoto}
         />
       )}
       {view === "wishlist" && (
@@ -440,6 +460,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           onAdd={addWish}
           onRemove={(id) => setWishlist((prev) => prev.filter((w) => w.id !== id))}
           onAddToBinder={wishToBinder}
+          onEdit={editWish}
           onRefresh={() => refreshAll(true)}
           refreshing={refreshing}
           adding={adding}

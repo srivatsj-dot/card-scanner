@@ -9,6 +9,7 @@ interface Props {
   onAdd: (text: string) => void;
   onRemove: (id: string) => void;
   onAddToBinder: (item: WishItem) => void;
+  onEdit: (id: string, text: string) => void;
   onRefresh: () => void;
   refreshing: boolean;
   adding: boolean;
@@ -28,10 +29,21 @@ function ChangeBadge({ item }: { item: WishItem }) {
   );
 }
 
-export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder, onRefresh, refreshing, adding }: Props) {
+export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder, onEdit, onRefresh, refreshing, adding }: Props) {
   const t = useT();
   const [text, setText] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+
+  function startEdit(w: WishItem) {
+    setEditId(w.id);
+    setEditText(w.text);
+  }
+  function saveEdit() {
+    if (editId && editText.trim()) onEdit(editId, editText.trim());
+    setEditId(null);
+  }
 
   function add() {
     if (!text.trim()) return;
@@ -82,6 +94,25 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
       {wishlist.map((w) => {
         const r = w.result;
         const open = openId === w.id;
+        if (editId === w.id) {
+          return (
+            <div className="card" key={w.id}>
+              <span className="muted" style={{ fontSize: 12 }}>{t("Edit card — we'll re-look up the price")}</span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                <input
+                  type="text"
+                  value={editText}
+                  autoFocus
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditId(null); }}
+                  style={{ flex: 1, minWidth: 200 }}
+                />
+                <button className="btn" onClick={saveEdit} disabled={!editText.trim()}>{t("Save")}</button>
+                <button className="btn ghost" onClick={() => setEditId(null)}>{t("Cancel")}</button>
+              </div>
+            </div>
+          );
+        }
         return (
           <div className="card" key={w.id}>
             <div className="binder-row">
@@ -119,6 +150,7 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
                       ★ {t("Got it → binder")}
                     </button>
                   )}
+                  <button className="btn ghost small" onClick={() => startEdit(w)}>✏️ {t("Edit")}</button>
                   <button className="btn ghost small" onClick={() => onRemove(w.id)}>{t("Remove")}</button>
                 </div>
               </div>

@@ -15,9 +15,11 @@ let currentLang = "English";
 const cache: Record<string, Record<string, string>> = {};
 let pending = new Set<string>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-let inFlight = false;
+const inProgress = new Set<string>(); // texts currently being fetched
+let active = 0; // in-flight requests
 const attempts = new Map<string, number>(); // `${lang}\n${text}` -> tries
 const BATCH = 25;
+const MAX_CONCURRENT = 4; // translate several batches at once for a fast flip
 
 // Every English string the app has shown, so a new language can translate it all.
 const known = new Set<string>();
@@ -56,6 +58,7 @@ export function setLanguage(lang: string) {
   if (lang === currentLang) return;
   currentLang = lang;
   pending = new Set();
+  inProgress.clear();
   if (lang !== "English") {
     loadCache(lang);
     // Pre-warm: queue every string we've ever shown that isn't translated yet,
@@ -81,26 +84,30 @@ export function translate(text: string): string {
 
 function scheduleFlush(delay = 250) {
   if (flushTimer != null) return;
-  flushTimer = setTimeout(flush, delay);
+  flushTimer = setTimeout(pump, delay);
 }
 
-async function flush() {
+// Fill the request pool: dispatch as many batches as concurrency allows.
+function pump() {
   flushTimer = null;
-  if (inFlight) {
-    scheduleFlush();
-    return;
-  }
   const lang = currentLang;
   if (lang === "English") {
     pending.clear();
+    inProgress.clear();
     return;
   }
-  const batch = [...pending].filter((t) => cache[lang][t] === undefined).slice(0, BATCH);
-  if (batch.length === 0) {
-    pending.clear();
-    return;
+  while (active < MAX_CONCURRENT) {
+    const batch = [...pending]
+      .filter((t) => cache[lang][t] === undefined && !inProgress.has(t))
+      .slice(0, BATCH);
+    if (batch.length === 0) break;
+    batch.forEach((t) => inProgress.add(t));
+    active++;
+    void runBatch(lang, batch);
   }
-  inFlight = true;
+}
+
+async function runBatch(lang: string, batch: string[]) {
   let ok = false;
   try {
     const res = await fetch("/api/translate", {
@@ -118,10 +125,11 @@ async function flush() {
   } catch {
     /* offline / error — retried below */
   } finally {
-    inFlight = false;
+    active--;
     // Keep anything that didn't translate so it retries (up to 4 attempts),
-    // rather than dropping it and leaving the UI half-translated forever.
+    // rather than dropping it and leaving the UI half-translated.
     for (const t of batch) {
+      inProgress.delete(t);
       const ak = `${lang}\n${t}`;
       const tries = (attempts.get(ak) || 0) + 1;
       if (cache[lang][t] !== undefined || tries >= 4) {
@@ -132,7 +140,10 @@ async function flush() {
       }
     }
     notify();
-    if (pending.size > 0) scheduleFlush(ok ? 120 : 1500);
+    if (pending.size > 0) {
+      if (ok) pump();
+      else scheduleFlush(1500);
+    }
   }
 }
 

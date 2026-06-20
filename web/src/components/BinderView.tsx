@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { SavedCard } from "../types";
 import { money } from "../utils";
 import { useT } from "../translator";
@@ -13,6 +13,7 @@ interface Props {
   onRefresh: () => void;
   refreshing: boolean;
   onConditionCheck: (id: string, dataUrl: string) => Promise<void>;
+  onSetPhoto: (id: string, dataUrl: string) => void;
 }
 
 /** Condition history, newest first, flagging flaws new since the prior check. */
@@ -59,7 +60,7 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto }: Props) {
   const t = useT();
   const [openId, setOpenId] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("recent");
@@ -67,6 +68,14 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
   const [query, setQuery] = useState("");
   const [camFor, setCamFor] = useState<string | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
+  const [photoFor, setPhotoFor] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const uploadTargetRef = useRef<string | null>(null);
+
+  function uploadPhoto(id: string) {
+    uploadTargetRef.current = id;
+    photoInputRef.current?.click();
+  }
 
   const sports = useMemo(() => {
     const set = new Set<string>();
@@ -161,7 +170,13 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               {s.thumbnail ? (
                 <img className="thumb" src={s.thumbnail} alt={r.player || "card"} />
               ) : (
-                <div className="thumb placeholder">★</div>
+                <div className="thumb placeholder photo-pick">
+                  <span className="muted" style={{ fontSize: 11 }}>{t("Add photo")}</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="btn ghost small" onClick={() => setPhotoFor(s.id)} title={t("Camera")}>📷</button>
+                    <button className="btn ghost small" onClick={() => uploadPhoto(s.id)} title={t("Upload")}>⬆</button>
+                  </div>
+                </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="name" style={{ fontWeight: 700, fontSize: 16 }}>{r.player || "Unknown card"}</div>
@@ -211,6 +226,29 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
           onClose={() => setCamFor(null)}
         />
       )}
+
+      {photoFor && (
+        <CameraModal
+          onCapture={(d) => { onSetPhoto(photoFor, d); setPhotoFor(null); }}
+          onClose={() => setPhotoFor(null)}
+        />
+      )}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          const id = uploadTargetRef.current;
+          if (f && id) {
+            const reader = new FileReader();
+            reader.onload = () => onSetPhoto(id, reader.result as string);
+            reader.readAsDataURL(f);
+          }
+          e.target.value = "";
+        }}
+      />
 
       <div className="card" style={{ textAlign: "center" }}>
         <button className="btn ghost" onClick={onClear}>Clear binder</button>
