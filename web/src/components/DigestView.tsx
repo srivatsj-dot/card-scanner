@@ -88,7 +88,7 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
       </div>
 
       {digest?.sections.map((sec, i) => {
-        const empty = !sec.risingStars.length && !sec.declining.length && !sec.majorTrades.length && !sec.other.length;
+        const empty = !sec.risingStars.length && !sec.declining.length && !sec.majorTrades.length && !sec.toChase.length && !sec.other.length;
         return (
           <div className="card" key={i}>
             <h3 style={{ fontSize: 15, textTransform: "none", letterSpacing: 0, color: "var(--text)" }}>
@@ -98,6 +98,7 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
             <Bucket title={`📈 ${t("Rising stars")}`} items={sec.risingStars} />
             <Bucket title={`📉 ${t("Cooling off")}`} items={sec.declining} />
             <Bucket title={`🔄 ${t("Trades & moves")}`} items={sec.majorTrades} />
+            <Bucket title={`🎯 ${t("Worth chasing")}`} items={sec.toChase} />
             <Bucket title={`📰 ${t("Other news")}`} items={sec.other} />
           </div>
         );

@@ -225,6 +225,7 @@ export interface DigestResult {
     risingStars: string[];
     declining: string[];
     majorTrades: string[];
+    toChase: string[];
     other: string[];
   }[];
 }

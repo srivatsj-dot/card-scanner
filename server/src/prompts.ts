@@ -172,7 +172,13 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
   const list = sports.length ? sports.join(", ") : "all major card categories";
   return (
     APPRAISER_ROLE +
-    `\n\nWrite a concise MORNING MARKET UPDATE for a card collector — like a daily stock review — covering ONLY these categories: ${list}. For EACH category, report recent, real developments that affect card values, sorted into: "risingStars" (players or cards heating up), "declining" (players cooling off or with bad news), "majorTrades" (trades, signings, call-ups, debuts), and "other" (set releases, notable sales, grading/market news). When the collector's own players/cards are listed, prioritize news about them. Use live search for genuinely recent info; make each item ONE short, specific sentence. If a category has nothing notable, return empty arrays for it. Begin with a one-line "overview" of the day. Only include a section for each requested category.` +
+    `\n\nWrite a concise MORNING MARKET UPDATE for a card collector — like a daily stock review — covering ONLY these categories: ${list}. Cover the WHOLE hobby, not just the collector's own cards. For EACH category, report recent, real developments sorted into:` +
+    `\n- "risingStars": players or cards heating up in value right now (including names the collector likely does NOT own).` +
+    `\n- "declining": players cooling off, injured, or with bad news that hurts their cards.` +
+    `\n- "majorTrades": notable real-world trades, signings, call-ups, and debuts across the league/sport.` +
+    `\n- "toChase": specific cards or players worth buying/chasing now — good value, breakouts, or smart targets the collector should consider.` +
+    `\n- "other": set releases, big public sales, grading/market news, and general sports news that moves the market.` +
+    `\n\nWhen the collector's own players/cards are listed, give them a little extra attention, but ALWAYS include wider-market names and new targets to watch. Use live search for genuinely recent info; make each item ONE short, specific sentence. If a category bucket has nothing notable, return an empty array. Begin with a one-line "overview" of the day. Only include a section for each requested category.` +
     buildConstraints(settings)
   );
 }
