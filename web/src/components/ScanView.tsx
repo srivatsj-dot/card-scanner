@@ -12,23 +12,25 @@ interface Props {
   onResult: (r: ScanResult | null) => void;
   onSave: (result: ScanResult, frontDataUrl: string | undefined) => void;
   onWishAll?: (texts: string[]) => void;
+  onWishResult?: (result: ScanResult) => void;
 }
 
 const MAX_IMAGES = 4;
 
-export default function ScanView({ settings, result, onResult, onSave, onWishAll }: Props) {
+export default function ScanView({ settings, result, onResult, onSave, onWishAll, onWishResult }: Props) {
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [wished, setWished] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const t = useT();
 
   function addImage(dataUrl: string) {
     setImages((prev) => (prev.length >= MAX_IMAGES ? prev : [...prev, dataUrl]));
     onResult(null);
-    setSaved(false);
+    setSaved(false); setWished(false);
   }
 
   function handleFiles(files: FileList) {
@@ -81,7 +83,7 @@ export default function ScanView({ settings, result, onResult, onSave, onWishAll
                 <span className="img-label">{t(labels[i] || `Photo ${i + 1}`)}</span>
                 <button
                   className="img-remove"
-                  onClick={() => { setImages(images.filter((_, j) => j !== i)); onResult(null); setSaved(false); }}
+                  onClick={() => { setImages(images.filter((_, j) => j !== i)); onResult(null); setSaved(false); setWished(false); }}
                   aria-label="Remove"
                 >
                   ×
@@ -122,7 +124,7 @@ export default function ScanView({ settings, result, onResult, onSave, onWishAll
             <button className="btn" onClick={runScan} disabled={loading}>
               {loading ? <><span className="spinner" />{t("Analyzing…")}</> : `${t("Analyze card")}${images.length > 1 ? ` (${images.length})` : ""}`}
             </button>
-            <button className="btn ghost" onClick={() => { setImages([]); onResult(null); setError(null); setSaved(false); }} disabled={loading}>
+            <button className="btn ghost" onClick={() => { setImages([]); onResult(null); setError(null); setSaved(false); setWished(false); }} disabled={loading}>
               {t("Clear")}
             </button>
           </div>
@@ -145,9 +147,16 @@ export default function ScanView({ settings, result, onResult, onSave, onWishAll
           {result.identified && (
             <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span className="muted" style={{ fontSize: 14 }}>{t("Keep this in your collection?")}</span>
-              <button className="btn" onClick={save} disabled={saved}>
-                {t(saved ? "✓ Saved to binder" : "★ Save to binder")}
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {onWishResult && (
+                  <button className="btn secondary" onClick={() => { onWishResult(result); setWished(true); }} disabled={wished}>
+                    {wished ? t("✓ Wishlisted") : `♡ ${t("Add to wishlist")}`}
+                  </button>
+                )}
+                <button className="btn" onClick={save} disabled={saved}>
+                  {t(saved ? "✓ Saved to binder" : "★ Save to binder")}
+                </button>
+              </div>
             </div>
           )}
           <ResultCard result={result} onWishAll={onWishAll} />

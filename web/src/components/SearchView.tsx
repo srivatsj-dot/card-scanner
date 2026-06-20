@@ -10,13 +10,15 @@ interface Props {
   onResult: (r: ScanResult | null) => void;
   onSave: (result: ScanResult, frontDataUrl: string | undefined) => void;
   onWishAll?: (texts: string[]) => void;
+  onWishResult?: (result: ScanResult) => void;
 }
 
-export default function SearchView({ settings, result, onResult, onSave, onWishAll }: Props) {
+export default function SearchView({ settings, result, onResult, onSave, onWishAll, onWishResult }: Props) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [wished, setWished] = useState(false);
   const t = useT();
 
   async function run() {
@@ -24,6 +26,7 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
     setLoading(true);
     setError(null);
     setSaved(false);
+    setWished(false);
     try {
       onResult(await searchCard(text.trim(), settings));
     } catch (e) {
@@ -61,13 +64,20 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
           {result.identified && (
             <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span className="muted" style={{ fontSize: 14 }}>{t("Keep this in your collection?")}</span>
-              <button
-                className="btn"
-                onClick={() => { onSave(result, undefined); setSaved(true); }}
-                disabled={saved}
-              >
-                {t(saved ? "✓ Saved to binder" : "★ Save to binder")}
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {onWishResult && (
+                  <button className="btn secondary" onClick={() => { onWishResult(result); setWished(true); }} disabled={wished}>
+                    {wished ? t("✓ Wishlisted") : `♡ ${t("Add to wishlist")}`}
+                  </button>
+                )}
+                <button
+                  className="btn"
+                  onClick={() => { onSave(result, undefined); setSaved(true); }}
+                  disabled={saved}
+                >
+                  {t(saved ? "✓ Saved to binder" : "★ Save to binder")}
+                </button>
+              </div>
             </div>
           )}
           <ResultCard result={result} onWishAll={onWishAll} />

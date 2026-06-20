@@ -17,6 +17,7 @@ interface Row {
   status: "pending" | "scanning" | "done" | "error";
   cards?: BulkCard[];
   saved: number[]; // indices of cards already saved to the binder
+  wished: number[]; // indices already added to the wishlist
   error?: string;
 }
 
@@ -31,7 +32,7 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
   const t = useT();
 
   function addImage(dataUrl: string) {
-    setRows((prev) => [...prev, { id: rid++, dataUrl, status: "pending", saved: [] }]);
+    setRows((prev) => [...prev, { id: rid++, dataUrl, status: "pending", saved: [], wished: [] }]);
   }
   function handleFiles(files: FileList) {
     Array.from(files).forEach((file) => {
@@ -84,6 +85,13 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
     const thumb = await makeThumbnail(row.dataUrl);
     onSave(bulkCardToResult(card), thumb);
     patch(row.id, { saved: [...row.saved, idx] });
+  }
+
+  function wishCard(row: Row, idx: number) {
+    const card = row.cards?.[idx];
+    if (!card || row.wished.includes(idx)) return;
+    onWish([bulkCardToResult(card)]);
+    patch(row.id, { wished: [...row.wished, idx] });
   }
 
   async function saveAll() {
@@ -193,14 +201,23 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
                           <div className="value-big" style={{ fontSize: 17 }}>
                             {money(c.estimatedValue.mid, c.estimatedValue.currency)}
                           </div>
-                          <button
-                            className="btn ghost small"
-                            style={{ marginTop: 6 }}
-                            onClick={() => saveCard(row, idx)}
-                            disabled={row.saved.includes(idx)}
-                          >
-                            {row.saved.includes(idx) ? t("✓ Saved") : t("★ Save")}
-                          </button>
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, justifyContent: "flex-end" }}>
+                            <button
+                              className="btn ghost small"
+                              onClick={() => wishCard(row, idx)}
+                              disabled={row.wished.includes(idx)}
+                              title={t("Add to wishlist")}
+                            >
+                              {row.wished.includes(idx) ? "♥" : "♡"}
+                            </button>
+                            <button
+                              className="btn ghost small"
+                              onClick={() => saveCard(row, idx)}
+                              disabled={row.saved.includes(idx)}
+                            >
+                              {row.saved.includes(idx) ? t("✓ Saved") : t("★ Save")}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
