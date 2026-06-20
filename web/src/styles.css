@@ -579,13 +579,42 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .tradeup-flow .arrow { color: var(--accent); font-weight: 800; }
 .tradeup-flow .get { color: var(--text); font-weight: 700; }
 
-/* Morning digest buckets */
-.digest-bucket {
+/* Morning digest */
+.digest-hero { background: linear-gradient(150deg, var(--panel-2), var(--panel)); border-color: rgba(91,140,255,0.35); }
+.digest-eyebrow {
   font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.03em;
+  color: var(--accent); text-transform: uppercase;
 }
+.digest-yours { border-color: rgba(91,140,255,0.4); }
+.digest-yours-list { margin: 0; padding-left: 18px; }
+.digest-yours-list li { font-size: 14px; line-height: 1.6; margin-bottom: 4px; }
+.digest-sport {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800; font-size: 17px; margin-bottom: 10px;
+}
+.digest-buckets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 680px) { .digest-buckets { grid-template-columns: 1fr; } }
+.digest-bucket {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.digest-bucket-head {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+  text-transform: uppercase; color: var(--muted);
+}
+.digest-bucket ul { margin: 6px 0 0; padding-left: 16px; }
+.digest-bucket li { font-size: 13.5px; line-height: 1.5; margin-bottom: 4px; }
+.digest-bucket.tone-up { border-left-color: var(--green); }
+.digest-bucket.tone-down { border-left-color: var(--red); }
+.digest-bucket.tone-hot { border-left-color: #ff8a3c; }
+.digest-bucket.tone-info { border-left-color: var(--blue); }
+.digest-bucket.tone-chase { border-left-color: var(--accent); }
+.digest-bucket.tone-news { border-left-color: var(--muted); }
 
 /* Bulk-scan detected cards */
 .bulk-card {

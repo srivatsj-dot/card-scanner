@@ -206,7 +206,8 @@ export const tradeUpSchema = {
 export const digestSchema = {
   type: "OBJECT",
   properties: {
-    overview: { ...STR, description: "One-line overall summary of the day." },
+    overview: { ...STR, description: "One-line energetic summary of the day across the hobby." },
+    yourCards: { ...STR_ARR, description: "What's happening to the collector's OWN players/cards." },
     sections: {
       type: "ARRAY",
       description: "One section per requested category.",
@@ -216,15 +217,16 @@ export const digestSchema = {
           sport: STR,
           risingStars: STR_ARR,
           declining: STR_ARR,
-          majorTrades: STR_ARR,
-          toChase: STR_ARR,
-          other: STR_ARR,
+          storylines: { ...STR_ARR, description: "Team momentum, streaks, playoff/award races." },
+          trades: { ...STR_ARR, description: "Recent/midseason trades, signings, call-ups, debuts." },
+          chase: { ...STR_ARR, description: "Timely, reasoned cards/players to buy now." },
+          news: { ...STR_ARR, description: "Set releases, notable sales, grading/market news." },
         },
-        required: ["sport", "risingStars", "declining", "majorTrades", "toChase", "other"],
+        required: ["sport", "risingStars", "declining", "storylines", "trades", "chase", "news"],
       },
     },
   },
-  required: ["overview", "sections"],
+  required: ["overview", "yourCards", "sections"],
 } as const;
 
 export const tradeSchema = {

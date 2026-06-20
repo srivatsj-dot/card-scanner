@@ -17,13 +17,13 @@ const emojiFor = (s: string) => SPORT_EMOJI[s.toLowerCase()] || "🃏";
 
 const isToday = (t: number) => new Date(t).toDateString() === new Date().toDateString();
 
-function Bucket({ title, items }: { title: string; items: string[] }) {
+function Bucket({ icon, title, tone, items }: { icon: string; title: string; tone: string; items: string[] }) {
   if (!items || items.length === 0) return null;
   return (
-    <div style={{ marginTop: 8 }}>
-      <div className="digest-bucket">{title}</div>
-      <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-        {items.map((it, i) => <li key={i} style={{ fontSize: 14, lineHeight: 1.5 }}>{it}</li>)}
+    <div className={`digest-bucket tone-${tone}`}>
+      <div className="digest-bucket-head">{icon} {title}</div>
+      <ul>
+        {items.map((it, i) => <li key={i}>{it}</li>)}
       </ul>
     </div>
   );
@@ -35,7 +35,7 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(force: boolean) {
+  async function load() {
     if (loading) return;
     setLoading(true);
     setError(null);
@@ -49,17 +49,18 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
     } finally {
       setLoading(false);
     }
-    void force;
   }
 
   // Load today's update once; reuse the cache if it's already from today.
   useEffect(() => {
     let cached: DigestResult | null = null;
     try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch { /* ignore */ }
-    if (cached && isToday(cached.generatedAt)) {
+    // Only reuse a cache from today that matches the current digest shape.
+    const valid = cached && isToday(cached.generatedAt) && Array.isArray(cached.yourCards);
+    if (valid) {
       setDigest(cached);
     } else if (settings.morningUpdate) {
-      load(false);
+      load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -68,38 +69,58 @@ export default function DigestView({ settings, players, cacheKey }: Props) {
 
   return (
     <div>
-      <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0 }}>☀️ {t("Morning update")}</h2>
-          <button className="btn secondary small" onClick={() => load(true)} disabled={loading}>
+      <div className="card digest-hero">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div className="digest-eyebrow">☀️ {t("Morning update")} · {dateLabel}</div>
+            {digest ? (
+              <h2 style={{ margin: "6px 0 0", fontSize: 22 }}>{digest.overview}</h2>
+            ) : (
+              <h2 style={{ margin: "6px 0 0", fontSize: 22 }}>
+                {loading ? t("Reading the wire…") : t("Your daily card market briefing")}
+              </h2>
+            )}
+          </div>
+          <button className="btn secondary small" onClick={load} disabled={loading}>
             {loading ? <><span className="spinner" />{t("Updating…")}</> : `↻ ${t("Refresh")}`}
           </button>
         </div>
-        <p className="muted" style={{ marginTop: 6, marginBottom: 0 }}>{dateLabel}</p>
-        {digest && <p style={{ marginBottom: 0 }}>{digest.overview}</p>}
         {error && <div className="error-box" style={{ marginTop: 12 }}>{error}</div>}
-        {!digest && !loading && !error && (
-          <p className="muted" style={{ marginBottom: 0 }}>
-            {settings.morningUpdate
-              ? t("Loading your daily market update…")
-              : t("The morning update is turned off. Enable it in Settings, or hit Refresh to load it now.")}
+        {!digest && !loading && !error && !settings.morningUpdate && (
+          <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>
+            {t("The morning update is off. Turn it on in Settings, or hit Refresh to load it now.")}
           </p>
         )}
       </div>
 
+      {digest && digest.yourCards.length > 0 && (
+        <div className="card digest-yours">
+          <h3 style={{ marginTop: 0 }}>📒 {t("In your binder")}</h3>
+          <ul className="digest-yours-list">
+            {digest.yourCards.map((it, i) => <li key={i}>{it}</li>)}
+          </ul>
+        </div>
+      )}
+
       {digest?.sections.map((sec, i) => {
-        const empty = !sec.risingStars.length && !sec.declining.length && !sec.majorTrades.length && !sec.toChase.length && !sec.other.length;
+        const empty =
+          !sec.risingStars.length && !sec.declining.length && !sec.storylines.length &&
+          !sec.trades.length && !sec.chase.length && !sec.news.length;
         return (
           <div className="card" key={i}>
-            <h3 style={{ fontSize: 15, textTransform: "none", letterSpacing: 0, color: "var(--text)" }}>
-              {emojiFor(sec.sport)} {sec.sport}
-            </h3>
-            {empty && <p className="muted" style={{ margin: 0, fontSize: 14 }}>{t("Nothing major today.")}</p>}
-            <Bucket title={`📈 ${t("Rising stars")}`} items={sec.risingStars} />
-            <Bucket title={`📉 ${t("Cooling off")}`} items={sec.declining} />
-            <Bucket title={`🔄 ${t("Trades & moves")}`} items={sec.majorTrades} />
-            <Bucket title={`🎯 ${t("Worth chasing")}`} items={sec.toChase} />
-            <Bucket title={`📰 ${t("Other news")}`} items={sec.other} />
+            <div className="digest-sport">{emojiFor(sec.sport)} {sec.sport}</div>
+            {empty ? (
+              <p className="muted" style={{ margin: 0, fontSize: 14 }}>{t("Quiet day here.")}</p>
+            ) : (
+              <div className="digest-buckets">
+                <Bucket icon="📈" title={t("Rising stars")} tone="up" items={sec.risingStars} />
+                <Bucket icon="📉" title={t("Cooling off")} tone="down" items={sec.declining} />
+                <Bucket icon="🔥" title={t("Storylines")} tone="hot" items={sec.storylines} />
+                <Bucket icon="🔄" title={t("Trades & moves")} tone="info" items={sec.trades} />
+                <Bucket icon="🎯" title={t("Worth chasing")} tone="chase" items={sec.chase} />
+                <Bucket icon="📰" title={t("Market news")} tone="news" items={sec.news} />
+              </div>
+            )}
           </div>
         );
       })}

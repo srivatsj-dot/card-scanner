@@ -172,13 +172,17 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
   const list = sports.length ? sports.join(", ") : "all major card categories";
   return (
     APPRAISER_ROLE +
-    `\n\nWrite a concise MORNING MARKET UPDATE for a card collector — like a daily stock review — covering ONLY these categories: ${list}. Cover the WHOLE hobby, not just the collector's own cards. For EACH category, report recent, real developments sorted into:` +
-    `\n- "risingStars": players or cards heating up in value right now (including names the collector likely does NOT own).` +
-    `\n- "declining": players cooling off, injured, or with bad news that hurts their cards.` +
-    `\n- "majorTrades": notable real-world trades, signings, call-ups, and debuts across the league/sport.` +
-    `\n- "toChase": specific cards or players worth buying/chasing now — good value, breakouts, or smart targets the collector should consider.` +
-    `\n- "other": set releases, big public sales, grading/market news, and general sports news that moves the market.` +
-    `\n\nWhen the collector's own players/cards are listed, give them a little extra attention, but ALWAYS include wider-market names and new targets to watch. Use live search for genuinely recent info; make each item ONE short, specific sentence. If a category bucket has nothing notable, return an empty array. Begin with a one-line "overview" of the day. Only include a section for each requested category.` +
+    `\n\nWrite a LIVELY morning market update for a card collector — punchy and specific, like a sports-card newsletter, NOT a dry list. Cover ONLY these categories: ${list}, and cover the whole hobby plus the collector's own cards. Every item must be ONE vivid sentence with real names, teams, and numbers — no vague filler like "some players are doing well."` +
+    `\n\nStart with a one-line, energetic "overview" of the day across the hobby.` +
+    `\n\n"yourCards": 2-6 specific notes about what's happening to the COLLECTOR'S OWN players/cards (listed below) — price moves, hot/cold streaks, injuries, big games. If none are listed or nothing's happening, return an empty array.` +
+    `\n\nFor EACH requested category, fill these buckets:` +
+    `\n- "risingStars": players or cards heating up market-wide right now (including names the collector doesn't own).` +
+    `\n- "declining": players cooling off, slumping, injured, or with bad news dragging their cards down. ALWAYS try to include at least one or two when there's any news.` +
+    `\n- "storylines": team momentum and narratives that move cards — winning/losing streaks, playoff and award races, breakout runs (e.g. "the Brewers are on a 10-game heater, lifting their young core's cards").` +
+    `\n- "trades": real, recent trades, signings, call-ups, and debuts, including midseason moves.` +
+    `\n- "chase": timely, REASONED buys — say WHY now (a breakout, a call-up, undervalued ahead of the playoffs), not just a card name.` +
+    `\n- "news": set releases, big public sales, and grading/market news.` +
+    `\n\nUse live search for genuinely recent, real information — today's standings, last night's games, this week's moves. If a bucket has nothing notable, return an empty array. Only include a section for each requested category.` +
     buildConstraints(settings)
   );
 }

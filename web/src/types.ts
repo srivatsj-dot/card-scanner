@@ -220,12 +220,14 @@ export interface TradeUpResult {
 export interface DigestResult {
   generatedAt: number;
   overview: string;
+  yourCards: string[];
   sections: {
     sport: string;
     risingStars: string[];
     declining: string[];
-    majorTrades: string[];
-    toChase: string[];
-    other: string[];
+    storylines: string[];
+    trades: string[];
+    chase: string[];
+    news: string[];
   }[];
 }
