@@ -376,23 +376,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           <Logo size={34} />
           <h1>Card-O-Rama</h1>
         </div>
-        <div className="topbar-right">
-          <nav className="nav">
-            <button className={view === "today" ? "active" : ""} onClick={() => setView("today")}>☀️ {t("Today")}</button>
-            <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>{t("Scan")}</button>
-            <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>{t("Search")}</button>
-            <button className={view === "bulk" ? "active" : ""} onClick={() => setView("bulk")}>{t("Bulk")}</button>
-            <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>{t("Trade")}</button>
-            <button className={view === "tradeup" ? "active" : ""} onClick={() => setView("tradeup")}>📈 {t("Trade-Up")}</button>
-            <button className={view === "binder" ? "active" : ""} onClick={() => setView("binder")}>
-              {t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}
-            </button>
-            <button className={view === "wishlist" ? "active" : ""} onClick={() => setView("wishlist")}>
-              {t("Wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
-            </button>
-            <button className={view === "awards" ? "active" : ""} onClick={() => setView("awards")}>🏆 {t("Awards")}</button>
-            <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>{t("Settings")}</button>
-          </nav>
+        <div className="topbar-controls">
           <button
             className="theme-toggle"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -410,6 +394,23 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           </div>
         </div>
       </div>
+
+      <nav className="nav">
+        <button className={view === "today" ? "active" : ""} onClick={() => setView("today")}>☀️ {t("Today")}</button>
+        <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>{t("Scan")}</button>
+        <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>{t("Search")}</button>
+        <button className={view === "bulk" ? "active" : ""} onClick={() => setView("bulk")}>{t("Bulk")}</button>
+        <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>{t("Trade")}</button>
+        <button className={view === "tradeup" ? "active" : ""} onClick={() => setView("tradeup")}>📈 {t("Trade-Up")}</button>
+        <button className={view === "binder" ? "active" : ""} onClick={() => setView("binder")}>
+          {t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}
+        </button>
+        <button className={view === "wishlist" ? "active" : ""} onClick={() => setView("wishlist")}>
+          {t("Wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
+        </button>
+        <button className={view === "awards" ? "active" : ""} onClick={() => setView("awards")}>🏆 {t("Awards")}</button>
+        <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>{t("Settings")}</button>
+      </nav>
 
       {view === "today" && (
         <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />

@@ -563,8 +563,9 @@ app.post("/api/translate", async (req: Request, res: Response) => {
   try {
     const prompt =
       `Translate these UI strings for a trading-card collector app into ${language}. ` +
-      `Return ONLY a JSON object that maps each ORIGINAL English string (exact key) to its natural ${language} translation. ` +
-      `Keep emojis, numbers, currency, punctuation, and placeholders like "(3)" or "/150" intact. Keep it concise for a mobile UI. ` +
+      `Return ONLY a JSON object that maps each ORIGINAL English string (exact key) to its ${language} translation. ` +
+      `These are buttons, tabs, and labels, so make them SHORT, natural, and idiomatic — prefer the common everyday term and the shortest accurate wording (avoid long compound phrasings); use the standard term a native speaker would see in an app. ` +
+      `Keep emojis, numbers, currency, punctuation, and placeholders like "(3)" or "/150" intact, and preserve any leading/trailing spaces. ` +
       `Do not add keys that aren't in the list.\n\nStrings:\n${JSON.stringify(texts)}`;
     // Use flash-lite (higher free quota) so translation doesn't compete with scans.
     const response = await ai.models.generateContent({

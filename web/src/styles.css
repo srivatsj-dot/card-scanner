@@ -62,7 +62,7 @@ body {
 
 button, input, textarea, select {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .app {
@@ -76,16 +76,14 @@ button, input, textarea, select {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  flex-wrap: nowrap;
-  margin-bottom: 22px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
 }
-.topbar-right {
+.topbar-controls {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
-  flex: 1 1 auto;
-  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .brand {
@@ -106,20 +104,17 @@ button, input, textarea, select {
 }
 .brand .dot { color: var(--gold); }
 
+/* Full-width tab bar that wraps so long (translated) labels never clip. */
 .nav {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 3px;
+  flex-wrap: wrap;
+  gap: 6px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 4px;
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow-x: auto;
-  scrollbar-width: none;
+  border-radius: 16px;
+  padding: 6px;
+  margin-bottom: 22px;
 }
-.nav::-webkit-scrollbar { display: none; }
 
 .binder-controls {
   display: flex;
@@ -136,11 +131,11 @@ button, input, textarea, select {
   background: transparent;
   border: none;
   color: var(--muted);
-  padding: 7px 11px;
+  padding: 9px 16px;
   border-radius: 999px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 15px;
   white-space: nowrap;
 }
 .nav button:not(.active):hover { color: var(--text); }
