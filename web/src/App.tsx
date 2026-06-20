@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme } from "./types";
 import { defaultSettings } from "./types";
-import { searchCard } from "./api";
+import { searchCard, scanCard } from "./api";
 import { describeCard, sleep, DAY_MS } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
@@ -198,6 +198,29 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       ...prev,
     ]);
     toast(`${t("Saved to binder")}: ${result.player || t("card")}`);
+  }
+
+  // Re-scan a saved card's photo to log its condition over time and flag new damage.
+  async function checkCondition(id: string, dataUrl: string) {
+    const card = saved.find((c) => c.id === id);
+    if (!card) return;
+    try {
+      const res = await scanCard([dataUrl], { ...aiSettings, liveData: false });
+      const cr = res.conditionReport;
+      const grade = cr?.grade || res.estimatedCondition || "Unknown";
+      const flaws = cr?.flaws || [];
+      const prev = card.conditionLog?.[card.conditionLog.length - 1];
+      const newFlaws = prev ? flaws.filter((f) => !prev.flaws.includes(f)) : [];
+      setSaved((p) =>
+        p.map((c) =>
+          c.id === id ? { ...c, conditionLog: [...(c.conditionLog || []), { t: Date.now(), grade, flaws }] } : c
+        )
+      );
+      if (newFlaws.length) toast(`⚠ ${newFlaws.length} ${t("new flaw(s) spotted")}: ${newFlaws[0]}`);
+      else toast(`${t("Condition logged")}: ${grade}`);
+    } catch (e) {
+      toast(isRateLimit(e) ? t("Rate limited — try again in a minute") : t("Condition check failed"));
+    }
   }
 
   function wishToBinder(item: WishItem) {
@@ -402,6 +425,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           onClear={() => { if (confirm(t("Remove all saved cards from your binder?"))) setSaved([]); }}
           onRefresh={() => refreshAll(true)}
           refreshing={refreshing}
+          onConditionCheck={checkCondition}
         />
       )}
       {view === "wishlist" && (
