@@ -173,18 +173,25 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
   const list = sports.length ? sports.join(", ") : "all major card categories";
   return (
     APPRAISER_ROLE +
-    `\n\nWrite a LIVELY morning market update for a card collector — punchy and specific, like a sports-card newsletter, NOT a dry list. Cover ONLY these categories: ${list}, and cover the whole hobby plus the collector's own cards. Every item must be ONE vivid sentence with real names, teams, and numbers — no vague filler like "some players are doing well."` +
-    `\n\nStart with a one-line, energetic "overview" of the day across the hobby.` +
-    `\n\n"yourCards": 2-6 specific notes about what's happening to the COLLECTOR'S OWN players/cards (their BINDER, listed below) — price moves, hot/cold streaks, injuries, big games. Empty array if none are listed or nothing's happening.` +
-    `\n\n"yourWishlist": 1-6 notes about cards/players on the collector's WISHLIST (listed below) — price drops worth pouncing on, momentum, or news. Empty array if none are listed or nothing's happening. Keep these SEPARATE from yourCards (binder).` +
-    `\n\nFor EACH requested category, fill these buckets:` +
-    `\n- "risingStars": players or cards heating up market-wide right now (including names the collector doesn't own).` +
-    `\n- "declining": players cooling off, slumping, injured, or with bad news dragging their cards down. ALWAYS try to include at least one or two when there's any news.` +
-    `\n- "storylines": team momentum and narratives that move cards — winning/losing streaks, playoff and award races, breakout runs (e.g. "the Brewers are on a 10-game heater, lifting their young core's cards").` +
-    `\n- "trades": real, recent trades, signings, call-ups, and debuts, including midseason moves.` +
-    `\n- "chase": timely, REASONED buys — say WHY now (a breakout, a call-up, undervalued ahead of the playoffs), not just a card name.` +
-    `\n- "news": set releases, big public sales, and grading/market news.` +
-    `\n\nCRUCIAL: report ONLY genuinely recent news — TODAY or the last day or two. Use live search to verify it actually happened recently. Do NOT pad with old, generic, or evergreen facts, and never invent anything. If there is no real, recent news for a bucket or a whole section, return an EMPTY array — a quiet day with little to report is fine and expected. Only include a section for each requested category.` +
+    `\n\nWrite a LIVELY morning update for a card collector — punchy and specific, like a sports/TCG newsletter. Cover ONLY these categories: ${list}. Every item is ONE vivid sentence with real names, teams, and numbers — no vague filler.` +
+    `\n\nTHIS UPDATE IS ABOUT TALENT AND PERFORMANCE — how players and teams are actually DOING on the field/court — NOT card prices. The ONLY bucket where value, prices, sales, or set releases belong is "news" (the Market section). Keep money talk OUT of every other bucket.` +
+    `\n\nStart with a one-line, energetic "overview" of the day.` +
+    `\n\n"yourCards" (binder) and "yourWishlist": how the collector's OWN players/Pokémon are performing right now — big games, hot/cold streaks, injuries, tournament results. About the player/Pokémon, not the price. Empty arrays if none listed or nothing's happening; keep the two separate.` +
+    `\n\nFor SPORTS categories (baseball, basketball, football, soccer, cricket, hockey), fill each section's buckets as:` +
+    `\n- "risingStars": players raising their game — breakouts, hot streaks, standout performances.` +
+    `\n- "declining": players slumping, struggling, or injured. Always include one or two when there's news.` +
+    `\n- "storylines": team momentum and races — win/loss streaks, playoff and award races.` +
+    `\n- "trades": real roster moves — trades, signings, call-ups, debuts.` +
+    `\n- "chase": up-and-coming talent worth keeping an eye on (prospects, rising young players) — about their TALENT, not buying.` +
+    `\n- "news": THE MARKET section — card prices, notable sales, grading, and set/product releases.` +
+    `\n\nFor POKÉMON there are no athletes, so frame "talent" as COMPETITIVE PERFORMANCE and POPULARITY — how much each card/Pokémon is "improving":` +
+    `\n- "risingStars": cards or decks climbing the competitive metagame or surging in popularity (tournament results, deck usage).` +
+    `\n- "declining": cards or archetypes falling off or rotating out of the format.` +
+    `\n- "storylines": format and set storylines — rotations, new mechanics, big tournaments.` +
+    `\n- "trades": leave empty unless there's a relevant reprint, ban, or errata.` +
+    `\n- "chase": emerging cards/Pokémon gaining steam worth watching.` +
+    `\n- "news": THE MARKET section — prices, big sales, set releases, grading news.` +
+    `\n\nCRUCIAL: report ONLY genuinely recent info — today or the last day or two — verified by live search. Do NOT pad with old or generic facts, and never invent anything. If a bucket or section has nothing real and recent, return an EMPTY array. Only include a section for each requested category.` +
     buildConstraints(settings)
   );
 }

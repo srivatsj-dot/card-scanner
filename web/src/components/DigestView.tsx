@@ -199,11 +199,11 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
             <div className="digest-sport">{emojiFor(sec.sport)} {sec.sport}</div>
             <div className="digest-buckets">
               <Bucket icon="📈" title={t("Rising stars")} tone="up" items={sec.risingStars} />
-              <Bucket icon="📉" title={t("Cooling off")} tone="down" items={sec.declining} />
+              <Bucket icon="📉" title={t("Slumping")} tone="down" items={sec.declining} />
               <Bucket icon="🔥" title={t("Storylines")} tone="hot" items={sec.storylines} />
-              <Bucket icon="🔄" title={t("Trades & moves")} tone="info" items={sec.trades} />
-              <Bucket icon="🎯" title={t("Worth chasing")} tone="chase" items={sec.chase} />
-              <Bucket icon="📰" title={t("Market news")} tone="news" items={sec.news} />
+              <Bucket icon="🔄" title={t("Roster moves")} tone="info" items={sec.trades} />
+              <Bucket icon="👀" title={t("Ones to watch")} tone="chase" items={sec.chase} />
+              <Bucket icon="💰" title={t("Market")} tone="news" items={sec.news} />
             </div>
           </div>
         );
