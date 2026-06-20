@@ -1,8 +1,11 @@
 // Runtime UI translation. Components wrap visible English strings with t(text);
-// any string not yet translated for the current language is batched, sent to
-// the server (Gemini) once, cached in localStorage, and re-rendered. English
-// passes through untouched. This makes ALL wrapped text translate into any
-// supported language without hand-written dictionaries.
+// untranslated strings are batched, sent to the server (Gemini) once, cached in
+// localStorage, and re-rendered. English passes through untouched.
+//
+// Reliability: small batches (long strings used to overflow the model's output
+// limit and truncate the JSON), failed/partial batches are retried instead of
+// dropped, and switching language pre-warms every string the app has ever shown
+// so the whole UI flips over — not just what's currently on screen.
 import { useSyncExternalStore } from "react";
 
 type Listener = () => void;
@@ -13,6 +16,19 @@ const cache: Record<string, Record<string, string>> = {};
 let pending = new Set<string>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight = false;
+const attempts = new Map<string, number>(); // `${lang}\n${text}` -> tries
+const BATCH = 25;
+
+// Every English string the app has shown, so a new language can translate it all.
+const known = new Set<string>();
+const KNOWN_KEY = "i18n-known";
+try { (JSON.parse(localStorage.getItem(KNOWN_KEY) || "[]") as string[]).forEach((s) => known.add(s)); } catch { /* ignore */ }
+function rememberKnown(text: string) {
+  if (text && !known.has(text)) {
+    known.add(text);
+    try { localStorage.setItem(KNOWN_KEY, JSON.stringify([...known])); } catch { /* quota */ }
+  }
+}
 
 const key = (lang: string) => `i18n-cache-${lang}`;
 
@@ -39,12 +55,19 @@ function notify() {
 export function setLanguage(lang: string) {
   if (lang === currentLang) return;
   currentLang = lang;
-  if (lang !== "English") loadCache(lang);
   pending = new Set();
+  if (lang !== "English") {
+    loadCache(lang);
+    // Pre-warm: queue every string we've ever shown that isn't translated yet,
+    // so the whole app flips, not just the current screen.
+    for (const text of known) if (cache[lang][text] === undefined) pending.add(text);
+    if (pending.size) scheduleFlush(0);
+  }
   notify();
 }
 
 export function translate(text: string): string {
+  rememberKnown(text);
   if (!text || currentLang === "English") return text;
   loadCache(currentLang);
   const hit = cache[currentLang][text];
@@ -56,9 +79,9 @@ export function translate(text: string): string {
   return text; // English placeholder until the translation arrives
 }
 
-function scheduleFlush() {
+function scheduleFlush(delay = 250) {
   if (flushTimer != null) return;
-  flushTimer = setTimeout(flush, 450);
+  flushTimer = setTimeout(flush, delay);
 }
 
 async function flush() {
@@ -72,31 +95,44 @@ async function flush() {
     pending.clear();
     return;
   }
-  const texts = [...pending].filter((t) => cache[lang][t] === undefined).slice(0, 120);
-  if (texts.length === 0) {
+  const batch = [...pending].filter((t) => cache[lang][t] === undefined).slice(0, BATCH);
+  if (batch.length === 0) {
     pending.clear();
     return;
   }
   inFlight = true;
+  let ok = false;
   try {
     const res = await fetch("/api/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texts, language: lang }),
+      body: JSON.stringify({ texts: batch, language: lang }),
     });
     if (res.ok) {
       const data = await res.json();
       const tr = (data.translations || {}) as Record<string, string>;
-      for (const k of texts) if (typeof tr[k] === "string") cache[lang][k] = tr[k];
+      for (const k of batch) if (typeof tr[k] === "string" && tr[k]) cache[lang][k] = tr[k];
       saveCache(lang);
+      ok = true;
     }
   } catch {
-    /* offline / error — keep English */
+    /* offline / error — retried below */
   } finally {
     inFlight = false;
-    for (const t of texts) pending.delete(t);
+    // Keep anything that didn't translate so it retries (up to 4 attempts),
+    // rather than dropping it and leaving the UI half-translated forever.
+    for (const t of batch) {
+      const ak = `${lang}\n${t}`;
+      const tries = (attempts.get(ak) || 0) + 1;
+      if (cache[lang][t] !== undefined || tries >= 4) {
+        pending.delete(t);
+        attempts.delete(ak);
+      } else {
+        attempts.set(ak, tries);
+      }
+    }
     notify();
-    if (pending.size > 0) scheduleFlush();
+    if (pending.size > 0) scheduleFlush(ok ? 120 : 1500);
   }
 }
 
