@@ -232,6 +232,8 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   border: 1px solid var(--line);
 }
 .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.btn.danger { background: transparent; color: var(--red); border: 1px solid var(--red); box-shadow: none; }
+.btn.danger:hover:not(:disabled) { background: var(--red); color: #fff; }
 
 .dropzone {
   border: 2px dashed var(--line);

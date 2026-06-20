@@ -141,6 +141,16 @@ export function logout(): void {
   localStorage.removeItem(SESSION_KEY);
 }
 
+// Permanently remove an account and all of its data from this device.
+export function deleteAccount(key: string): void {
+  const users = loadUsers();
+  delete users[key];
+  saveUsers(users);
+  localStorage.removeItem(SESSION_KEY);
+  for (const base of DATA_BASES) localStorage.removeItem(`${base}:${key}`);
+  localStorage.removeItem(`card-scanner-last-auto-refresh:${key}`);
+}
+
 // --- Google sign-in --------------------------------------------------------
 // The browser receives a signed Google ID token (JWT). We read the profile from
 // it to key a local account by the Google user id (`sub`), which is globally

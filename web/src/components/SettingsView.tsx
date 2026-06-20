@@ -9,9 +9,10 @@ interface Props {
   onChange: (s: Settings) => void;
   onExport: () => void;
   onImport: (file: File) => void;
+  onDeleteAccount: () => void;
 }
 
-export default function SettingsView({ settings, onChange, onExport, onImport }: Props) {
+export default function SettingsView({ settings, onChange, onExport, onImport, onDeleteAccount }: Props) {
   const importRef = useRef<HTMLInputElement>(null);
   const t = useT();
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
@@ -215,6 +216,19 @@ export default function SettingsView({ settings, onChange, onExport, onImport }:
           }}
         />
       </div>
+
+      <h3 style={{ marginTop: 22 }}>{t("Account")}</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        {t("Deleting your account removes it and its binder, wishlist, and settings from this device. This can't be undone.")}
+      </p>
+      <button
+        className="btn danger small"
+        onClick={() => {
+          if (confirm(t("Delete this account and all its data? This can't be undone."))) onDeleteAccount();
+        }}
+      >
+        {t("Delete account")}
+      </button>
     </div>
   );
 }

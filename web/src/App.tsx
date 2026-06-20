@@ -17,7 +17,7 @@ import AwardsView from "./components/AwardsView";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
 import Logo from "./components/Logo";
-import { currentUser, displayNameOf, logout } from "./auth";
+import { currentUser, displayNameOf, logout, deleteAccount } from "./auth";
 
 type View = "scan" | "search" | "bulk" | "trade" | "binder" | "wishlist" | "awards" | "settings";
 
@@ -35,7 +35,7 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const isRateLimit = (e: unknown) =>
   String(e instanceof Error ? e.message : e).toLowerCase().includes("rate limit");
 
-function MainApp({ user, onLogout }: { user: string; onLogout: () => void }) {
+function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: () => void; onDeleteAccount: () => void }) {
   // All persisted state is namespaced per account, so each user has their own
   // binder, wishlist, settings, and progress in the same browser.
   const SETTINGS_KEY = `card-scanner-settings:${user}`;
@@ -396,7 +396,7 @@ function MainApp({ user, onLogout }: { user: string; onLogout: () => void }) {
       )}
       {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
-        <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} />
+        <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} onDeleteAccount={onDeleteAccount} />
       )}
 
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("Ask a question")}</button>
@@ -448,6 +448,10 @@ export default function App() {
       user={user}
       onLogout={() => {
         logout();
+        setUser(null);
+      }}
+      onDeleteAccount={() => {
+        deleteAccount(user);
         setUser(null);
       }}
     />
