@@ -115,6 +115,10 @@ export async function register(name: string, password: string, email: string): P
   if (password.length < 4) throw new Error("Password needs at least 4 characters.");
   const users = loadUsers();
   if (users[key]) throw new Error("That username is already taken.");
+  const lowerEmail = email.trim().toLowerCase();
+  if (Object.values(users).some((u) => u.email?.toLowerCase() === lowerEmail)) {
+    throw new Error("An account with that email already exists.");
+  }
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const hash = await derive(password, salt);
   users[key] = { display, salt: toHex(salt), hash, createdAt: Date.now(), provider: "local", email: email.trim() };
@@ -159,13 +163,27 @@ export function loginWithGoogle(credential: string): { key: string; email?: stri
   const claims = decodeJwt(credential);
   const sub = String(claims.sub || "");
   if (!sub) throw new Error("Google sign-in didn't return a valid account.");
-  const key = `google:${sub}`;
   const email = claims.email ? String(claims.email) : undefined;
   const users = loadUsers();
+
+  // If you already have an account using this email (e.g. you signed up with a
+  // username + password and that email), Google signs you straight into it.
+  if (email) {
+    const lower = email.toLowerCase();
+    const existing = Object.keys(users).find((k) => users[k].email?.toLowerCase() === lower);
+    if (existing) {
+      migrateLegacy(existing);
+      localStorage.setItem(SESSION_KEY, existing);
+      return { key: existing, email, isNew: false };
+    }
+  }
+
+  // Otherwise use (or create) a Google-keyed account.
+  const key = `google:${sub}`;
   const isNew = !users[key];
   if (isNew) {
     users[key] = {
-      display: String(claims.name || claims.email || "Google user"),
+      display: String(claims.name || email || "Google user"),
       salt: "",
       hash: "",
       createdAt: Date.now(),
