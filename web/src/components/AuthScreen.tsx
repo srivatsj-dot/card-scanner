@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { login, register, hasAnyAccount, loginWithGoogle } from "../auth";
+import { notifySignup } from "../api";
 import { useT } from "../translator";
 import Logo from "./Logo";
 
@@ -9,6 +10,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   const t = useT();
   const [mode, setMode] = useState<"login" | "register">(hasAnyAccount() ? "login" : "register");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,8 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
         callback: (resp: { credential?: string }) => {
           try {
             if (!resp.credential) throw new Error("Google sign-in was cancelled.");
-            loginWithGoogle(resp.credential);
+            const { email: gEmail, isNew } = loginWithGoogle(resp.credential);
+            if (isNew && gEmail) notifySignup(gEmail, gEmail.split("@")[0]);
             onAuthedRef.current();
           } catch (e) {
             setError(e instanceof Error ? e.message : "Google sign-in failed.");
@@ -64,8 +67,12 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
     setError(null);
     setBusy(true);
     try {
-      if (mode === "register") await register(username, password);
-      else await login(username, password);
+      if (mode === "register") {
+        await register(username, password, email);
+        notifySignup(email, username);
+      } else {
+        await login(username, password);
+      }
       onAuthed();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -139,6 +146,20 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             placeholder={t("e.g. cardshark22")}
           />
         </label>
+        {mode === "register" && (
+          <label className="field">
+            <span>{t("Email")}</span>
+            <input
+              type="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+              placeholder={t("you@example.com")}
+            />
+          </label>
+        )}
         <label className="field">
           <span>{t("Password")}</span>
           <input
@@ -156,7 +177,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
           className="btn"
           style={{ marginTop: 14, width: "100%" }}
           onClick={submit}
-          disabled={busy || !username.trim() || !password}
+          disabled={busy || !username.trim() || !password || (mode === "register" && !email.trim())}
         >
           {busy ? <><span className="spinner" />{t("Please wait…")}</> : mode === "register" ? t("Create account") : t("Log in")}
         </button>

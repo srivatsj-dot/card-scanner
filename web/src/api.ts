@@ -33,6 +33,17 @@ export function searchCard(text: string, settings: Settings): Promise<ScanResult
   return postJson<ScanResult>("/api/scan", { text, settings });
 }
 
+/** Fire-and-forget welcome email on sign-up. No-op if email isn't configured. */
+export function notifySignup(email: string, username: string): Promise<void> {
+  return fetch("/api/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, username }),
+  })
+    .then(() => undefined)
+    .catch(() => undefined);
+}
+
 /** Bulk scan one photo that may contain several cards; returns every card found. */
 export function bulkScan(dataUrl: string, settings: Settings): Promise<{ cards: BulkCard[] }> {
   const { base64, mediaType } = splitDataUrl(dataUrl);

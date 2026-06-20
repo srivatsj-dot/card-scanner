@@ -70,6 +70,12 @@ async function derive(password: string, salt: BufferSource): Promise<string> {
 
 const keyOf = (name: string) => name.trim().toLowerCase();
 
+export const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
+export function emailOf(key: string): string | undefined {
+  return loadUsers()[key]?.email;
+}
+
 export function currentUser(): string | null {
   const key = localStorage.getItem(SESSION_KEY);
   if (!key) return null;
@@ -100,17 +106,18 @@ function migrateLegacy(userKey: string) {
   }
 }
 
-export async function register(name: string, password: string): Promise<void> {
+export async function register(name: string, password: string, email: string): Promise<void> {
   const display = name.trim();
   const key = keyOf(name);
   if (display.length < 2) throw new Error("Username needs at least 2 characters.");
   if (display.includes(":")) throw new Error("Username can't contain a colon.");
+  if (!isValidEmail(email)) throw new Error("Enter a valid email address.");
   if (password.length < 4) throw new Error("Password needs at least 4 characters.");
   const users = loadUsers();
   if (users[key]) throw new Error("That username is already taken.");
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const hash = await derive(password, salt);
-  users[key] = { display, salt: toHex(salt), hash, createdAt: Date.now() };
+  users[key] = { display, salt: toHex(salt), hash, createdAt: Date.now(), provider: "local", email: email.trim() };
   saveUsers(users);
   migrateLegacy(key);
   localStorage.setItem(SESSION_KEY, key);
@@ -148,24 +155,26 @@ function decodeJwt(token: string): Record<string, unknown> {
   return JSON.parse(json) as Record<string, unknown>;
 }
 
-export function loginWithGoogle(credential: string): string {
+export function loginWithGoogle(credential: string): { key: string; email?: string; isNew: boolean } {
   const claims = decodeJwt(credential);
   const sub = String(claims.sub || "");
   if (!sub) throw new Error("Google sign-in didn't return a valid account.");
   const key = `google:${sub}`;
+  const email = claims.email ? String(claims.email) : undefined;
   const users = loadUsers();
-  if (!users[key]) {
+  const isNew = !users[key];
+  if (isNew) {
     users[key] = {
       display: String(claims.name || claims.email || "Google user"),
       salt: "",
       hash: "",
       createdAt: Date.now(),
       provider: "google",
-      email: claims.email ? String(claims.email) : undefined,
+      email,
     };
     saveUsers(users);
   }
   migrateLegacy(key);
   localStorage.setItem(SESSION_KEY, key);
-  return key;
+  return { key, email, isNew };
 }

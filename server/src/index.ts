@@ -497,6 +497,57 @@ app.post("/api/translate", async (req: Request, res: Response) => {
   }
 });
 
+// --- Welcome email on sign-up ----------------------------------------------
+// Sends a fixed welcome email via Resend (https://resend.com). Configure with
+// RESEND_API_KEY (and optionally EMAIL_FROM). The endpoint only sends a fixed
+// template to the address given, so it can't be used to send arbitrary content.
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const EMAIL_FROM = process.env.EMAIL_FROM || "Card-O-Rama <onboarding@resend.dev>";
+const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+
+app.post("/api/notify", async (req: Request, res: Response) => {
+  const { email, username } = req.body as { email?: string; username?: string };
+  const to = (email || "").trim();
+  if (!emailOk(to)) {
+    res.status(400).json({ ok: false, error: "Invalid email." });
+    return;
+  }
+  if (!RESEND_API_KEY) {
+    // Not configured — succeed quietly so sign-up isn't blocked.
+    res.json({ ok: false, reason: "email-not-configured" });
+    return;
+  }
+  const name = escapeHtml((username || "there").toString().slice(0, 60));
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to,
+        subject: "Welcome to Card-O-Rama 🎴",
+        html:
+          `<div style="font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.6;color:#1a2030">` +
+          `<h2 style="margin:0 0 8px">Welcome to Card-O-Rama, ${name}! 🎴</h2>` +
+          `<p>Your account is all set. Scan a card to get its value, hidden stats, a condition read, and smart trade ideas — across Pokémon, baseball, soccer, cricket, basketball, football, and hockey.</p>` +
+          `<p>Build your binder, track a wishlist, check if a trade is fair, and rack up achievements as your collection grows.</p>` +
+          `<p style="color:#5c6884">Happy collecting! 🃏</p>` +
+          `</div>`,
+      }),
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => "");
+      res.status(502).json({ ok: false, error: `Email send failed (${r.status}). ${text.slice(0, 200)}` });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e instanceof Error ? e.message : "Email send failed." });
+  }
+});
+
 // In production, serve the built web app from the same origin as the API, so
 // the whole thing deploys as ONE unit on ONE domain: no CORS, and the UI's
 // relative /api calls just work. In dev the Vite server serves the UI instead,
