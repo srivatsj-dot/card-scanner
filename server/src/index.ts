@@ -1,6 +1,9 @@
 import "./env.js";
 import express from "express";
 import cors from "cors";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
@@ -447,9 +450,25 @@ app.post("/api/translate", async (req: Request, res: Response) => {
   }
 });
 
+// In production, serve the built web app from the same origin as the API, so
+// the whole thing deploys as ONE unit on ONE domain: no CORS, and the UI's
+// relative /api calls just work. In dev the Vite server serves the UI instead,
+// so this only kicks in once `web/dist` has been built.
+const webDist = resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+const servingWeb = existsSync(join(webDist, "index.html"));
+if (servingWeb) {
+  app.use(express.static(webDist));
+  // SPA fallback: any non-API GET returns index.html so client routing works.
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
+    res.sendFile(join(webDist, "index.html"));
+  });
+}
+
 app.listen(PORT, () => {
   console.log(`card-scanner API listening on http://localhost:${PORT}`);
   console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
+  if (servingWeb) console.log(`  serving web app from ${webDist}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }

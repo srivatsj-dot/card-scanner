@@ -58,8 +58,14 @@ To ship it:
 
 ```bash
 npm run build      # web app builds to web/dist
-npm start          # runs the API; serve web/dist with whatever static host you like
+npm start          # runs the API — and serves the built web app from the same
+                   # origin, so it's one thing to deploy on one domain
 ```
+
+Once `web/dist` exists, the server hosts the UI and the `/api` routes together,
+so there's no CORS to worry about and the front end's relative `/api` calls just
+work. Set `GEMINI_API_KEY` (and, for Google sign-in, `VITE_GOOGLE_CLIENT_ID`
+*before* `npm run build`, since Vite bakes it in) in the host's environment.
 
 ## How it's wired up
 
