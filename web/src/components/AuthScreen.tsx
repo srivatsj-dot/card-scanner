@@ -18,9 +18,10 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   const onAuthedRef = useRef(onAuthed);
   onAuthedRef.current = onAuthed;
 
-  // Render Google's "Continue with Google" button when a client ID is configured.
+  // Render Google's "Continue with Google" button — only on the Log in tab,
+  // since Google signs into existing accounts and never creates one.
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID) return;
+    if (!GOOGLE_CLIENT_ID || mode !== "login") return;
     function init() {
       const gsi = (window as unknown as { google?: any }).google;
       if (!gsi?.accounts?.id || !googleBtnRef.current) return;
@@ -59,7 +60,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
     }
     script.addEventListener("load", init);
     return () => script?.removeEventListener("load", init);
-  }, []);
+  }, [mode]);
 
   async function submit() {
     if (busy) return;
@@ -101,22 +102,26 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
               : t("Log in to your collection.")}
           </p>
 
-        {GOOGLE_CLIENT_ID ? (
-          <div ref={googleBtnRef} className="google-btn-host" />
-        ) : (
-          <button
-            className="btn-google"
-            onClick={() =>
-              setError(
-                t("Google sign-in isn't set up yet — add a VITE_GOOGLE_CLIENT_ID to your .env to turn it on. For now, use a username and password below.")
-              )
-            }
-          >
-            <GoogleG />
-            {t("Continue with Google")}
-          </button>
+        {mode === "login" && (
+          <>
+            {GOOGLE_CLIENT_ID ? (
+              <div ref={googleBtnRef} className="google-btn-host" />
+            ) : (
+              <button
+                className="btn-google"
+                onClick={() =>
+                  setError(
+                    t("Google sign-in isn't set up yet — add a VITE_GOOGLE_CLIENT_ID to your .env to turn it on. For now, use a username and password below.")
+                  )
+                }
+              >
+                <GoogleG />
+                {t("Continue with Google")}
+              </button>
+            )}
+            <div className="auth-divider"><span>{t("or")}</span></div>
+          </>
         )}
-        <div className="auth-divider"><span>{t("or")}</span></div>
 
         <div className="auth-tabs">
           <button
