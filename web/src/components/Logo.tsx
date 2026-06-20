@@ -11,9 +11,8 @@ export default function Logo({ size = 32 }: { size?: number }) {
     >
       <defs>
         <linearGradient id="cardo-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#7c5cff" />
-          <stop offset="0.55" stopColor="#ff5fa2" />
-          <stop offset="1" stopColor="#ffa53c" />
+          <stop offset="0" stopColor="#5b8cff" />
+          <stop offset="1" stopColor="#7b5cff" />
         </linearGradient>
       </defs>
       <g transform="rotate(-7 24 24)">
