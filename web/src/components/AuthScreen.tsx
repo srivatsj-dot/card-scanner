@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { signInOrUp, register, hasAnyAccount, loginWithGoogle } from "../auth";
+import { login, register, hasAnyAccount, loginWithGoogle } from "../auth";
 import { notifySignup } from "../api";
 import { useT } from "../translator";
 import Logo from "./Logo";
@@ -66,14 +66,12 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
     setError(null);
     setBusy(true);
     try {
-      let isNew: boolean;
       if (mode === "register") {
         await register(username, password, email);
-        isNew = true;
+        notifySignup(email, username);
       } else {
-        isNew = (await signInOrUp(username, password, email)).isNew;
+        await login(username, password);
       }
-      if (isNew) notifySignup(email, username);
       onAuthed();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -147,18 +145,20 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             placeholder={t("e.g. cardshark22")}
           />
         </label>
-        <label className="field">
-          <span>{t("Email")}</span>
-          <input
-            type="email"
-            autoCapitalize="none"
-            autoCorrect="off"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-            placeholder={t("you@example.com")}
-          />
-        </label>
+        {mode === "register" && (
+          <label className="field">
+            <span>{t("Email")}</span>
+            <input
+              type="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+              placeholder={t("you@example.com")}
+            />
+          </label>
+        )}
         <label className="field">
           <span>{t("Password")}</span>
           <input
@@ -176,7 +176,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
           className="btn"
           style={{ marginTop: 14, width: "100%" }}
           onClick={submit}
-          disabled={busy || !username.trim() || !password || !email.trim()}
+          disabled={busy || !username.trim() || !password || (mode === "register" && !email.trim())}
         >
           {busy ? <><span className="spinner" />{t("Please wait…")}</> : mode === "register" ? t("Create account") : t("Log in")}
         </button>
