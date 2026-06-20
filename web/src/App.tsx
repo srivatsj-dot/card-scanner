@@ -17,9 +17,11 @@ import AwardsView from "./components/AwardsView";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
 import Logo from "./components/Logo";
+import TradeUpView from "./components/TradeUpView";
+import DigestView from "./components/DigestView";
 import { currentUser, displayNameOf, logout, deleteAccount } from "./auth";
 
-type View = "scan" | "search" | "bulk" | "trade" | "binder" | "wishlist" | "awards" | "settings";
+type View = "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "binder" | "wishlist" | "awards" | "settings";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -46,6 +48,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const TRADES_KEY = `card-scanner-trades:${user}`;
   const EARNED_KEY = `card-scanner-earned:${user}`;
   const AUTO_REFRESH_KEY = `card-scanner-last-auto-refresh:${user}`;
+  const DIGEST_KEY = `card-scanner-digest:${user}`;
 
   const [view, setView] = useState<View>("scan");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -88,6 +91,18 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       wishlist: wishlist.map((w) => (w.result ? describeCard(w.result) : w.text)).filter(Boolean),
     }),
     [settings, wishlist]
+  );
+  // Players in the binder, for the morning digest to prioritize.
+  const digestPlayers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          saved
+            .filter((s) => s.result.player)
+            .map((s) => `${s.result.player}${s.result.sport ? ` (${s.result.sport})` : ""}`)
+        )
+      ),
+    [saved]
   );
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -335,10 +350,12 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
         </div>
         <div className="topbar-right">
           <nav className="nav">
+            <button className={view === "today" ? "active" : ""} onClick={() => setView("today")}>☀️ {t("Today")}</button>
             <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>{t("Scan")}</button>
             <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>{t("Search")}</button>
             <button className={view === "bulk" ? "active" : ""} onClick={() => setView("bulk")}>{t("Bulk")}</button>
             <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>{t("Trade")}</button>
+            <button className={view === "tradeup" ? "active" : ""} onClick={() => setView("tradeup")}>📈 {t("Trade-Up")}</button>
             <button className={view === "binder" ? "active" : ""} onClick={() => setView("binder")}>
               {t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}
             </button>
@@ -366,6 +383,9 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
         </div>
       </div>
 
+      {view === "today" && (
+        <DigestView settings={aiSettings} players={digestPlayers} cacheKey={DIGEST_KEY} />
+      )}
       {view === "scan" && (
         <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
       )}
@@ -374,6 +394,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       )}
       {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />}
       {view === "trade" && <TradeView settings={aiSettings} saved={saved} onTrade={() => setTrades((n) => n + 1)} onWishAll={addWishMany} />}
+      {view === "tradeup" && <TradeUpView settings={aiSettings} saved={saved} />}
       {view === "binder" && (
         <BinderView
           saved={saved}

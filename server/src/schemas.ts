@@ -176,6 +176,56 @@ export const bulkSchema = {
   required: ["cards"],
 } as const;
 
+// Trade-up path: a chain of fair trades from owned cards toward a target.
+const STR_ARR = { type: "ARRAY", items: STR } as const;
+export const tradeUpSchema = {
+  type: "OBJECT",
+  properties: {
+    feasible: { type: "BOOLEAN", description: "Whether a realistic path to the target exists from what they own." },
+    steps: {
+      type: "ARRAY",
+      description: "Ordered trade steps, each climbing toward the target.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          giveUp: { ...STR_ARR, description: "Card(s) to trade away this step." },
+          receive: { ...STR, description: "The single card to receive this step." },
+          valueNote: { ...STR, description: "Rough value on each side." },
+          rationale: { ...STR, description: "Why the other side would accept." },
+        },
+        required: ["giveUp", "receive", "valueNote", "rationale"],
+      },
+    },
+    summary: { ...STR, description: "Plain-language summary of the whole path." },
+    note: { ...STR, description: "Caveats, or why it's infeasible." },
+  },
+  required: ["feasible", "steps", "summary", "note"],
+} as const;
+
+// Daily morning digest, grouped by sport/category.
+export const digestSchema = {
+  type: "OBJECT",
+  properties: {
+    overview: { ...STR, description: "One-line overall summary of the day." },
+    sections: {
+      type: "ARRAY",
+      description: "One section per requested category.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          sport: STR,
+          risingStars: STR_ARR,
+          declining: STR_ARR,
+          majorTrades: STR_ARR,
+          other: STR_ARR,
+        },
+        required: ["sport", "risingStars", "declining", "majorTrades", "other"],
+      },
+    },
+  },
+  required: ["overview", "sections"],
+} as const;
+
 export const tradeSchema = {
   type: "OBJECT",
   properties: {

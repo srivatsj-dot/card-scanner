@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type { Settings } from "../types";
-import { CATEGORIES, BLOCKABLE_CATEGORIES } from "../types";
+import { CATEGORIES, BLOCKABLE_CATEGORIES, REGIONS } from "../types";
 import { LANGS } from "../i18n";
 import { useT } from "../translator";
 
@@ -24,6 +24,14 @@ export default function SettingsView({ settings, onChange, onExport, onImport, o
     set(
       "blockedCategories",
       has ? settings.blockedCategories.filter((c) => c !== cat) : [...settings.blockedCategories, cat]
+    );
+  }
+
+  function toggleDigestSport(cat: string) {
+    const has = settings.digestSports.includes(cat);
+    set(
+      "digestSports",
+      has ? settings.digestSports.filter((c) => c !== cat) : [...settings.digestSports, cat]
     );
   }
 
@@ -56,6 +64,16 @@ export default function SettingsView({ settings, onChange, onExport, onImport, o
           </select>
         </label>
       </div>
+
+      <label className="field">
+        <span>{t("Market / location (for regional pricing)")}</span>
+        <select value={settings.region} onChange={(e) => set("region", e.target.value)}>
+          <option value="">{t("Global / auto")}</option>
+          {REGIONS.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
+      </label>
 
       <label className="field">
         <span>{t("Language (app & results)")}</span>
@@ -112,6 +130,34 @@ export default function SettingsView({ settings, onChange, onExport, onImport, o
           &nbsp;— {t("turn off to save quota; you can still refresh manually")}
         </span>
       </label>
+
+      <h3 style={{ marginTop: 18 }}>☀️ {t("Morning update")}</h3>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={settings.morningUpdate}
+          onChange={(e) => set("morningUpdate", e.target.checked)}
+        />
+        {t("Show a daily market update on the Today tab")}
+      </label>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        {t("Include these categories in the update:")}
+      </p>
+      <div className="chips">
+        {BLOCKABLE_CATEGORIES.map((c) => {
+          const on = settings.digestSports.includes(c);
+          return (
+            <button
+              key={c}
+              type="button"
+              className={`chip ${on ? "" : "off"}`}
+              onClick={() => toggleDigestSport(c)}
+            >
+              {on ? "✓ " : ""}{c}
+            </button>
+          );
+        })}
+      </div>
 
       <label className="field">
         <span>{t("What kind of collector are you?")}</span>

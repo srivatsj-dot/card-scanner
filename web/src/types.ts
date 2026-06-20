@@ -14,6 +14,9 @@ export interface Settings {
   collectorType: "any" | "money" | "talent";
   sport: string; // preferred category; "" means any
   currency: string;
+  region: string; // market location for pricing, "" = global/auto
+  morningUpdate: boolean; // show the daily card digest
+  digestSports: string[]; // sports included in the morning update
 }
 
 export const CATEGORIES = [
@@ -29,6 +32,17 @@ export const CATEGORIES = [
 
 // Categories that can be blocked (everything except "Any").
 export const BLOCKABLE_CATEGORIES = CATEGORIES.filter((c) => c !== "Any");
+
+// Market regions for pricing ("" = global/auto).
+export const REGIONS = [
+  "United States",
+  "Canada",
+  "United Kingdom",
+  "Europe",
+  "Japan",
+  "Australia",
+  "India",
+] as const;
 
 // Top ~20 most-spoken languages for translated results.
 export const LANGUAGES = [
@@ -69,6 +83,9 @@ export const defaultSettings: Settings = {
   collectorType: "any",
   sport: "",
   currency: "USD",
+  region: "",
+  morningUpdate: true,
+  digestSports: [...BLOCKABLE_CATEGORIES],
 };
 
 export interface ScanResult {
@@ -163,6 +180,7 @@ export interface SavedCard {
   lastRefreshedAt?: number; // when the value was last auto-refreshed
   previousMid?: number | null; // prior mid value, to show ▲/▼ change
   history?: { t: number; mid: number }[]; // value points over time, for the chart
+  conditionLog?: { t: number; grade: string; flaws: string[] }[]; // condition over time
 }
 
 /** A card on the wishlist (wanted, with an estimated price). */
@@ -188,4 +206,25 @@ export interface TradeResult {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+/** A planned chain of fair trades from cards you own toward a target card. */
+export interface TradeUpResult {
+  feasible: boolean;
+  steps: { giveUp: string[]; receive: string; valueNote: string; rationale: string }[];
+  summary: string;
+  note: string;
+}
+
+/** The daily "morning update" digest, grouped by sport. */
+export interface DigestResult {
+  generatedAt: number;
+  overview: string;
+  sections: {
+    sport: string;
+    risingStars: string[];
+    declining: string[];
+    majorTrades: string[];
+    other: string[];
+  }[];
 }

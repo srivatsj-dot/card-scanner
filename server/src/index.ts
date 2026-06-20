@@ -7,12 +7,14 @@ import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
-import { scanSchema, tradeSchema, askSchema, bulkSchema } from "./schemas.js";
+import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
   bulkSystemPrompt,
   tradeSystemPrompt,
   askSystemPrompt,
+  tradeUpSystemPrompt,
+  digestSystemPrompt,
   chatSystemPrompt,
   type Settings,
 } from "./prompts.js";
@@ -376,6 +378,74 @@ app.post("/api/trade", async (req: Request, res: Response) => {
       ...sideToParts("Cards I receive (their side)", receiving),
     ];
     res.json(await analyze(sys, parts, tradeSchema, groundedFor(settings)));
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
+// --- Trade-up path: chain of fair trades from owned cards to a target -------
+app.post("/api/tradeup", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  const { target, owned, settings } = req.body as {
+    target?: string;
+    owned?: string[];
+    settings?: Settings;
+  };
+  const goal = (target || "").trim();
+  const have = (owned || []).map((s) => String(s).trim()).filter(Boolean);
+  if (!goal) {
+    res.status(400).json({ error: "Name the target card you want to trade up to." });
+    return;
+  }
+  if (have.length === 0) {
+    res.status(400).json({ error: "Add cards to your binder first — the path starts from what you own." });
+    return;
+  }
+  const sys = tradeUpSystemPrompt(settings || {});
+  const parts: Part[] = [
+    {
+      text:
+        `TARGET (grail) the collector wants: ${goal}\n\n` +
+        `Cards they OWN to start from:\n- ${have.slice(0, 60).join("\n- ")}\n\n` +
+        `Plan a realistic, fair trade-up path from these cards to the target.`,
+    },
+  ];
+  try {
+    res.json(await analyze(sys, parts, tradeUpSchema, groundedFor(settings)));
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
+// --- Morning digest: daily market update grouped by sport ------------------
+app.post("/api/digest", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  const { sports, players, settings } = req.body as {
+    sports?: string[];
+    players?: string[];
+    settings?: Settings;
+  };
+  const cats = (sports || []).map((s) => String(s).trim()).filter(Boolean);
+  if (cats.length === 0) {
+    res.status(400).json({ error: "Enable at least one category for the morning update." });
+    return;
+  }
+  const sys = digestSystemPrompt(settings || {}, cats);
+  const mine = (players || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
+  const parts: Part[] = [
+    {
+      text:
+        `Today's date: ${today()}.\n` +
+        (mine.length
+          ? `The collector's players/cards to prioritize:\n- ${mine.join("\n- ")}\n\n`
+          : "") +
+        `Write the morning market update for these categories: ${cats.join(", ")}.`,
+    },
+  ];
+  try {
+    res.json(await analyze(sys, parts, digestSchema, groundedFor(settings)));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });

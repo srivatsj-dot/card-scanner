@@ -13,6 +13,7 @@ export interface Settings {
   collectorType?: "any" | "money" | "talent";
   sport?: string;
   currency?: string;
+  region?: string;
 }
 
 const APPRAISER_ROLE = `You are an expert trading card appraiser and sports analyst. You can:
@@ -47,6 +48,11 @@ export function buildConstraints(settings: Settings): string {
     );
   }
 
+  if (settings.region && settings.region.trim()) {
+    lines.push(
+      `MARKET: Price for the ${settings.region.trim()} collector market, and call out when regional pricing differs materially (e.g. Japanese vs US Pokémon, UK vs US).`
+    );
+  }
   if (settings.sport && settings.sport.trim()) {
     lines.push(`The collector mainly follows: ${settings.sport.trim()}. Prefer trade ideas in that area when reasonable.`);
   }
@@ -150,6 +156,23 @@ export function tradeSystemPrompt(settings: Settings): string {
     `\n\nYou are evaluating whether a proposed trade is fair. Each side may contain MULTIPLE cards and/or photos of cards — identify any card shown in an image. "Your side" is everything the collector GIVES UP (it leaves their collection — a cost). "Their side" is everything the collector RECEIVES (a gain). Value each side as a package, weighing estimated value AND forward-looking factors (player trajectory, scarcity, condition).` +
     `\n\nDIRECTION IS CRITICAL AND EASY TO GET WRONG. A trade favors the collector ("favors_you") ONLY when what they RECEIVE (their side) is worth MORE than what they GIVE UP (your side) — i.e. they come out ahead. If they give up more than they receive, it "favors_them" (a bad deal for the collector), even when the card they're giving up is the better/more famous card. Worked example: giving up a $30 refractor to receive a $1 base card means the collector LOSES about $29 — that is "favors_them" (or "lopsided"), NEVER "favors_you".` +
     `\n\nChoose "fairness" from exactly: fair (values roughly even), favors_you (collector gains clear value), favors_them (collector loses clear value), lopsided (very unequal in either direction). Make verdict, valueGapNote, reasoning, and suggestions all consistent with this direction — if the collector is overpaying, say so plainly and advise against it.` +
+    buildConstraints(settings)
+  );
+}
+
+export function tradeUpSystemPrompt(settings: Settings): string {
+  return (
+    APPRAISER_ROLE +
+    `\n\nThe collector wants a TRADE-UP PATH: a realistic chain of fair trades that starts from cards they already own and ends at a target "grail" card they can't reach in a single trade. Each step trades away one or more cards (from their binder, or cards acquired in earlier steps) for a SINGLE more valuable card, staying roughly fair at every step — a small premium to move up is fine, but never wildly lopsided. Build 2-6 steps that climb in value toward the target. If the gap is too big to bridge realistically from what they own, set "feasible" to false and explain why in "note". For each step, fill "giveUp" (the cards to trade away), "receive" (the one card to get), "valueNote" (rough values on each side), and "rationale" (why the other side accepts). End with "summary" describing the whole path. Respect the collector's filters.` +
+    buildConstraints(settings)
+  );
+}
+
+export function digestSystemPrompt(settings: Settings, sports: string[]): string {
+  const list = sports.length ? sports.join(", ") : "all major card categories";
+  return (
+    APPRAISER_ROLE +
+    `\n\nWrite a concise MORNING MARKET UPDATE for a card collector — like a daily stock review — covering ONLY these categories: ${list}. For EACH category, report recent, real developments that affect card values, sorted into: "risingStars" (players or cards heating up), "declining" (players cooling off or with bad news), "majorTrades" (trades, signings, call-ups, debuts), and "other" (set releases, notable sales, grading/market news). When the collector's own players/cards are listed, prioritize news about them. Use live search for genuinely recent info; make each item ONE short, specific sentence. If a category has nothing notable, return empty arrays for it. Begin with a one-line "overview" of the day. Only include a section for each requested category.` +
     buildConstraints(settings)
   );
 }

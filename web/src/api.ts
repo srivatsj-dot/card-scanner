@@ -1,4 +1,4 @@
-import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry, BulkCard } from "./types";
+import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry, BulkCard, TradeUpResult, DigestResult } from "./types";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -80,6 +80,16 @@ export function evaluateTrade(
     theirSide: entriesToServer(theirSide),
     settings,
   });
+}
+
+/** Plan a chain of fair trades from owned cards toward a target grail. */
+export function planTradeUp(target: string, owned: string[], settings: Settings): Promise<TradeUpResult> {
+  return postJson<TradeUpResult>("/api/tradeup", { target, owned, settings });
+}
+
+/** Daily morning market digest for the given categories. */
+export function getDigest(sports: string[], players: string[], settings: Settings): Promise<DigestResult> {
+  return postJson<DigestResult>("/api/digest", { sports, players, settings });
 }
 
 export function suggestAsks(yourSide: CardEntry[], settings: Settings): Promise<AskResult> {
