@@ -426,10 +426,11 @@ function MainApp({ user, onLogout }: { user: string; onLogout: () => void }) {
 }
 
 export default function App() {
-  const [user, setUser] = useState<string | null>(() => currentUser());
+  const [user, setUser] = useState<string | null>(null);
 
-  // Keep a theme on the documentElement even before sign-in (for the auth screen).
+  // Always open to the login screen — don't auto-resume a saved session.
   useEffect(() => {
+    logout();
     if (!document.documentElement.dataset.theme) {
       document.documentElement.dataset.theme = "dark";
     }
