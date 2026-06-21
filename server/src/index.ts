@@ -57,20 +57,50 @@ function addDaysISO(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Digest items are required to start with the event's real date as
-// "[YYYY-MM-DD]". Keep only items whose tagged date falls inside the window;
-// drop anything older, newer, or undated — then strip the tag for display.
-// This enforces the time window deterministically instead of trusting prose.
+const MONTHS: Record<string, number> = {
+  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+  may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9,
+  september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
+};
+
+// Pull any calendar dates MENTIONED in an item's prose ("June 19", "6/19",
+// "2026-06-19") and return them as YYYY-MM-DD against a reference year. Lets us
+// drop items that brag about an out-of-window day even when their leading tag
+// was (mis)stamped inside the window to sneak past the tag filter.
+function datesInProse(text: string, year: number): string[] {
+  const out: string[] = [];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const lower = text.toLowerCase();
+  let m: RegExpExecArray | null;
+  const reMD = /\b([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/g;
+  while ((m = reMD.exec(lower))) { const mo = MONTHS[m[1]]; const d = Number(m[2]); if (mo && d >= 1 && d <= 31) out.push(`${year}-${pad(mo)}-${pad(d)}`); }
+  const reDM = /\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})\b/g;
+  while ((m = reDM.exec(lower))) { const mo = MONTHS[m[2]]; const d = Number(m[1]); if (mo && d >= 1 && d <= 31) out.push(`${year}-${pad(mo)}-${pad(d)}`); }
+  const reISO = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
+  while ((m = reISO.exec(lower))) out.push(`${m[1]}-${m[2]}-${m[3]}`);
+  const reSlash = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g;
+  while ((m = reSlash.exec(lower))) { const mo = Number(m[1]); const d = Number(m[2]); if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) out.push(`${year}-${pad(mo)}-${pad(d)}`); }
+  return out;
+}
+
+// Digest items must start with the event's real date as "[YYYY-MM-DD]". Keep
+// only items whose tagged date AND every date mentioned in the prose fall inside
+// the window; drop anything older, newer, or undated — then strip the tag for
+// display. Enforces the window deterministically instead of trusting the model.
 function keepInWindow(items: unknown, start: string, end: string): string[] {
   if (!Array.isArray(items)) return [];
+  const year = Number(start.slice(0, 4));
   const out: string[] = [];
   for (const raw of items) {
     if (typeof raw !== "string") continue;
     const m = /^\s*[\[(]?(\d{4}-\d{2}-\d{2})[\])]?[\s:.,-]*/.exec(raw);
     if (!m) continue; // no verifiable date → drop
-    if (m[1] < start || m[1] > end) continue; // outside the window → drop
+    if (m[1] < start || m[1] > end) continue; // tagged outside the window → drop
     const text = raw.slice(m[0].length).trim();
-    if (text) out.push(text);
+    if (!text) continue;
+    // Reject if the sentence itself cites a day outside the window.
+    if (datesInProse(text, year).some((d) => d < start || d > end)) continue;
+    out.push(text);
   }
   return out;
 }
@@ -586,7 +616,8 @@ app.post("/api/digest", async (req: Request, res: Response) => {
         `ANTI-HALLUCINATION (critical — the last briefing invented a fake "Aaron Judge hit his 11th homer vs the Reds"): only state a specific fact — a score, a stat line, a home-run/point total, an "Nth of the season", an injury, a transaction, an opponent, a date — if live Google Search results EXPLICITLY confirm it for this window. If you cannot verify the specifics from search, DROP the item entirely. Do not guess numbers, opponents, or dates. A wrong specific is far worse than an omission. When unsure, leave it out.\n` +
         `If live search turns up little or nothing verifiable for ${windowStart}, RETURN EMPTY ARRAYS rather than filling space with plausible-sounding but unconfirmed events. An honest quiet day is correct; a fabricated busy day is a failure.\n\n` +
         `Among VERIFIED events only, lead with the biggest: top performances (multi-homer games, 40-point nights, no-hitters, hat tricks, walk-offs), milestones, and marquee results. Skip minor transactions, independent/minor leagues, and routine IL moves.\n\n` +
-        `MANDATORY FORMAT — every single item in every array (yourCards, yourWishlist, and every bucket) MUST begin with the event's real date in square brackets, e.g. "[${windowStart}] Aaron Judge homered twice as the Yankees beat the Reds." The date is the day the event actually happened, taken from your search results — not a guess. Items are MACHINE-FILTERED after you respond: anything dated outside ${windowStart} to ${target}, or missing a leading [date], is automatically DELETED. So if you can't pin an event to a date inside that range, do not include it at all. Better to return empty arrays than to include undated or out-of-window items.\n\n` +
+        `MANDATORY FORMAT — every single item in every array (yourCards, yourWishlist, and every bucket) MUST begin with the event's real date in square brackets, e.g. "[${windowStart}] Aaron Judge homered twice as the Yankees beat the Reds." The date is the day the event actually happened, taken from your search results — not a guess. Items are MACHINE-FILTERED after you respond: anything dated outside ${windowStart} to ${target}, or missing a leading [date], is automatically DELETED. So if you can't pin an event to a date inside that range, do not include it at all. Better to return empty arrays than to include undated or out-of-window items.\n` +
+        `Do NOT write any calendar date inside the sentence itself (no "on June 19", no "6/19") — the leading [date] tag is the ONLY place a date goes, and the sentence is stripped of nothing else. An item whose sentence mentions a day outside ${windowStart}–${target} is also deleted, so never reference an out-of-window day. Do not tag an item with an in-window date while describing something that actually happened earlier — that is dishonest and will be discarded.\n\n` +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
         `Write the briefing for ${target} (covering ${windowStart}), for these categories: ${cats.join(", ")}.`,
