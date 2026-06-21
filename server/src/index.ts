@@ -841,6 +841,9 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "Card-O-Rama <onboarding@resend.dev>";
 const GMAIL_USER = process.env.GMAIL_USER || "";
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
+// Outlook/Hotmail shortcut — same convenience as Gmail (no host to remember).
+const OUTLOOK_USER = process.env.OUTLOOK_USER || "";
+const OUTLOOK_APP_PASSWORD = (process.env.OUTLOOK_APP_PASSWORD || "").replace(/\s+/g, "");
 // Generic SMTP — use ANY provider that sends to any recipient (Gmail, Brevo,
 // SendGrid, Outlook, your own server). No domain needed if the provider allows
 // a verified single sender. Takes priority when SMTP_HOST is set.
@@ -891,6 +894,16 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
       });
       await transporter.sendMail({ from: `Card-O-Rama <${GMAIL_USER}>`, to, subject, html });
       return { ok: true, via: "gmail" };
+    }
+    // 2) Outlook/Hotmail (free, no domain, sends to anyone).
+    if (OUTLOOK_USER && OUTLOOK_APP_PASSWORD) {
+      const nodemailer = (await import("nodemailer")).default;
+      const transporter = nodemailer.createTransport({
+        host: "smtp-mail.outlook.com", port: 587, secure: false,
+        auth: { user: OUTLOOK_USER, pass: OUTLOOK_APP_PASSWORD },
+      });
+      await transporter.sendMail({ from: `Card-O-Rama <${OUTLOOK_USER}>`, to, subject, html });
+      return { ok: true, via: "outlook" };
     }
     if (RESEND_API_KEY) {
       const r = await fetch("https://api.resend.com/emails", {
@@ -985,9 +998,10 @@ app.listen(PORT, () => {
   console.log(`  Pokémon TCG results: ${hasLimitless ? "on (Limitless)" : "off (set LIMITLESS_API_KEY for real tournament results)"}`);
   const emailMode = hasSmtp ? `SMTP (${SMTP_HOST}, sends to anyone)`
     : GMAIL_USER && GMAIL_APP_PASSWORD ? `Gmail (${GMAIL_USER}, sends to anyone)`
+    : OUTLOOK_USER && OUTLOOK_APP_PASSWORD ? `Outlook (${OUTLOOK_USER}, sends to anyone)`
     : RESEND_API_KEY ? "Resend (needs a verified domain to email anyone)"
     : "off";
-  console.log(`  email: ${emailMode}${emailMode === "off" ? " (set GMAIL_USER+GMAIL_APP_PASSWORD, SMTP_*, or RESEND_API_KEY)" : ""}`);
+  console.log(`  email: ${emailMode}${emailMode === "off" ? " (set GMAIL_USER+GMAIL_APP_PASSWORD, OUTLOOK_USER+OUTLOOK_APP_PASSWORD, SMTP_*, or RESEND_API_KEY)" : ""}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
