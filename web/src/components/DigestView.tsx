@@ -121,11 +121,12 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
     }
   }
 
-  // On open: load the saved archive; auto-generate today's briefing if missing.
+  // On open: load the saved archive and auto-generate today's briefing if it
+  // isn't there yet — you never have to kick it off yourself.
   useEffect(() => {
     const arc = readArchive();
     setArchive(arc);
-    if (!arc[today] && settings.morningUpdate) load(today);
+    if (!arc[today]) load(today);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

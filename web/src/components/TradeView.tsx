@@ -323,13 +323,34 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
       </div>
 
-      {trade && (
+      {trade && (() => {
+        const yMid = (trade.yourSide.valueLow + trade.yourSide.valueHigh) / 2;
+        const thMid = (trade.theirSide.valueLow + trade.theirSide.valueHigh) / 2;
+        const gap = thMid - yMid; // + = you come out ahead
+        const big = Math.max(yMid, thMid, 1);
+        const fairish = Math.abs(gap) / big < 0.1;
+        const cur = settings.currency;
+        const fmt = (n: number) => `${cur} ${Math.round(n)}`;
+        const verdict = fairish
+          ? { cls: "blue", text: t("Fair trade — roughly even") }
+          : gap > 0
+          ? { cls: "green", text: `${t("Favours you by about")} ${fmt(gap)}` }
+          : { cls: "red", text: `${t("Favours them — you'd overpay by about")} ${fmt(-gap)}` };
+        return (
         <div className="card">
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            {fairnessPill(trade.fairness, t)}
-            <h2 style={{ margin: 0 }}>{trade.verdict}</h2>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span className={`pill ${verdict.cls}`}>{verdict.text}</span>
+            </div>
+            <button
+              className="btn ghost small"
+              onClick={() => onSaveLater({ target: receivingText || trade.verdict, give: givingText ? [givingText] : [] })}
+            >
+              🔖 {t("Save for later")}
+            </button>
           </div>
-          <div className="grid2" style={{ marginTop: 14 }}>
+          <p style={{ fontWeight: 600, marginTop: 10 }}>{trade.verdict}</p>
+          <div className="grid2" style={{ marginTop: 6 }}>
             <div>
               <h3>{t("Your side")}</h3>
               <div className="value-big" style={{ fontSize: 22 }}>
@@ -356,7 +377,8 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
             </>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {ask && (
         <div className="card">

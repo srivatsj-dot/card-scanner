@@ -170,13 +170,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               {s.thumbnail ? (
                 <img className="thumb" src={s.thumbnail} alt={r.player || "card"} />
               ) : (
-                <div className="thumb placeholder photo-pick">
-                  <span className="muted" style={{ fontSize: 11 }}>{t("Add photo")}</span>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn ghost small" onClick={() => setPhotoFor(s.id)} title={t("Camera")}>📷</button>
-                    <button className="btn ghost small" onClick={() => uploadPhoto(s.id)} title={t("Upload")}>⬆</button>
-                  </div>
-                </div>
+                <div className="thumb placeholder">🖼️</div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="name" style={{ fontWeight: 700, fontSize: 16 }}>{r.player || "Unknown card"}</div>
@@ -199,6 +193,12 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  {!s.thumbnail && (
+                    <>
+                      <button className="btn ghost small" onClick={() => setPhotoFor(s.id)} title={t("Camera")}>📷 {t("Add photo")}</button>
+                      <button className="btn ghost small" onClick={() => uploadPhoto(s.id)} title={t("Upload")}>⬆</button>
+                    </>
+                  )}
                   <button className="btn ghost small" onClick={() => setCamFor(s.id)} disabled={checking === s.id} title={t("Re-scan to log condition")}>
                     {checking === s.id ? <><span className="spinner" />{t("Checking…")}</> : `🩺 ${t("Condition")}`}
                   </button>

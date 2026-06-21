@@ -131,34 +131,6 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     setTimeout(() => setUnlocks((u) => u.filter((x) => x.id !== id)), 4800);
   }
 
-  function exportData() {
-    const data = { version: 1, exportedAt: Date.now(), settings, saved, wishlist };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `card-scanner-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast(t("Backup downloaded"));
-  }
-
-  function importData(file: File) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const d = JSON.parse(reader.result as string);
-        if (d.settings) setSettings({ ...defaultSettings, ...d.settings });
-        if (Array.isArray(d.saved)) setSaved(d.saved);
-        if (Array.isArray(d.wishlist)) setWishlist(d.wishlist);
-        toast(t("Data imported"));
-      } catch {
-        toast(t("Couldn't read that backup file"));
-      }
-    };
-    reader.readAsText(file);
-  }
-
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(BINDER_KEY, JSON.stringify(saved)); }, [saved]);
   useEffect(() => { localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist)); }, [wishlist]);
@@ -542,7 +514,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       )}
       {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
-        <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} onDeleteAccount={onDeleteAccount} />
+        <SettingsView settings={settings} onChange={setSettings} onDeleteAccount={onDeleteAccount} />
       )}
       </div>
 
