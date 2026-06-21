@@ -1004,7 +1004,9 @@ if (servingWeb) {
 }
 
 app.listen(PORT, () => {
-  console.log(`card-scanner API listening on http://localhost:${PORT}`);
+  // On a host (e.g. Render) show the real public URL; locally show localhost.
+  const publicUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || `http://localhost:${PORT}`;
+  console.log(`card-scanner API listening on ${publicUrl}`);
   console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
