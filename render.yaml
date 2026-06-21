@@ -1,0 +1,28 @@
+# Render blueprint — deploy Card-O-Rama as one Node service (the server serves
+# the built web app from the same origin). Connect this repo at render.com and
+# it reads this file. Set secret env vars in the dashboard.
+#
+# Build-time note: VITE_* vars (Google sign-in, AdSense) are baked into the web
+# bundle during build, so set them in the dashboard BEFORE the first deploy.
+services:
+  - type: web
+    name: card-o-rama
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Lets the build install dev tools (vite, typescript) it needs.
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      # Required — set the value in the Render dashboard (kept secret).
+      - key: GEMINI_API_KEY
+        sync: false
+      # Optional — add any you use as dashboard env vars too:
+      #   GMAIL_USER, GMAIL_APP_PASSWORD  (welcome + reset emails)
+      #   VITE_GOOGLE_CLIENT_ID           (Google sign-in; BUILD-time)
+      #   VITE_ADSENSE_CLIENT, VITE_ADSENSE_SLOT  (AdSense; BUILD-time)
+      #   EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, LIMITLESS_API_KEY

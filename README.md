@@ -67,6 +67,37 @@ so there's no CORS to worry about and the front end's relative `/api` calls just
 work. Set `GEMINI_API_KEY` (and, for Google sign-in, `VITE_GOOGLE_CLIENT_ID`
 *before* `npm run build`, since Vite bakes it in) in the host's environment.
 
+## Deploying it live
+
+It's one Node service (the server serves the built web app), so any Node host
+works. A domain registrar like **GoDaddy is for the domain name only** — host
+the app on a Node platform and point the domain at it.
+
+**Render (easiest):**
+
+1. Push this repo to GitHub and create a new **Web Service** at render.com from
+   it. The included `render.yaml` sets the build/start commands for you:
+   - Build: `npm install && npm run build`
+   - Start: `npm start`
+2. In the dashboard, add env vars: `GEMINI_API_KEY` (required) and any optional
+   ones (`GMAIL_USER`/`GMAIL_APP_PASSWORD`, `VITE_GOOGLE_CLIENT_ID`,
+   `VITE_ADSENSE_CLIENT`/`VITE_ADSENSE_SLOT`, `EBAY_*`, `LIMITLESS_API_KEY`).
+   `NPM_CONFIG_PRODUCTION=false` is already set so the build tools install.
+   **Set `VITE_*` vars before the first deploy** — they're baked in at build time.
+3. Deploy. You'll get a `*.onrender.com` URL.
+
+**Point your GoDaddy domain at it:** in Render → Settings → Custom Domain, add
+`card-o-rama.com`. Render shows the DNS records to create. In GoDaddy → your
+domain → DNS, add them (typically a `CNAME` for `www` to the Render host, and
+Render's instructions for the root). HTTPS is issued automatically.
+
+**Any other host / a VPS:** the included `Dockerfile` builds and runs the whole
+thing — pass `VITE_*` values as `--build-arg`s. Works on Railway, Fly.io, or a
+plain server.
+
+A `/privacy.html` page, `robots.txt`, and `sitemap.xml` ship in `web/public` —
+the privacy policy is required before you can get approved for Google AdSense.
+
 ## How it's wired up
 
 ```
