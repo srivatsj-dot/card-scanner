@@ -139,7 +139,9 @@ const ESPN_BY_CAT: Record<string, EspnLeague[]> = {
   basketball: [
     { sport: "basketball", league: "nba", label: "Basketball (NBA)", leaders: true },
     { sport: "basketball", league: "wnba", label: "Basketball (WNBA)", leaders: true },
-    { sport: "basketball", league: "mens-college-basketball", label: "Basketball (NCAA M)", leaders: true },
+    // NCAA tourney (March Madness) games flow through these college feeds in season.
+    { sport: "basketball", league: "mens-college-basketball", label: "Basketball (NCAA M / March Madness)", leaders: true },
+    { sport: "basketball", league: "womens-college-basketball", label: "Basketball (NCAA W / March Madness)", leaders: true },
   ],
   football: [
     { sport: "football", league: "nfl", label: "Football (NFL)", leaders: true },
@@ -196,6 +198,54 @@ export async function espnFacts(cfg: EspnLeague, date: string): Promise<SportFac
   return lines.length ? { sport: cfg.label, lines: ["Final scores:", ...lines] } : null;
 }
 
+// --- Cricket: ESPNcricinfo (all formats/leagues incl. IPL, internationals) --
+// Cricket doesn't fit the generic ESPN handler — scores are innings strings
+// ("186/4") and results read "India won by 5 wickets". This uses ESPNcricinfo's
+// public match API, which spans every series (IPL, international T20/ODI/Test,
+// franchise leagues) without per-league IDs, then filters to the target date.
+const CRICINFO_BASE = "https://hs-consumer-api.espncricinfo.com/v1/pages/matches";
+
+function cricketTeamLine(t: any): string | null {
+  const name = t?.team?.abbreviation || t?.team?.longName || t?.team?.name || t?.name;
+  if (!name) return null;
+  const score = t?.score || t?.scoreInfo || "";
+  return score ? `${name} ${score}` : String(name);
+}
+
+export async function cricketFacts(date: string): Promise<SportFacts | null> {
+  // "results" = finished matches; "current" catches just-completed/live ones.
+  const [resData, curData] = await Promise.all([
+    getJson(`${CRICINFO_BASE}/results?lang=en`),
+    getJson(`${CRICINFO_BASE}/current?lang=en`),
+  ]);
+  const raw = [
+    ...(resData?.content?.matches || resData?.matches || []),
+    ...(curData?.content?.matches || curData?.matches || []),
+  ];
+  if (raw.length === 0) return null;
+
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const m of raw) {
+    const id = String(m?.objectId || m?.id || m?.slug || "");
+    if (id && seen.has(id)) continue;
+    if (id) seen.add(id);
+    // Only completed matches whose date matches the window day.
+    const start = String(m?.startDate || m?.startTime || "").slice(0, 10);
+    const end = String(m?.endDate || "").slice(0, 10);
+    if (start !== date && end !== date) continue;
+    const state = String(m?.state || m?.status || "").toUpperCase();
+    if (state && !/POST|COMPLETE|RESULT|FINISH/.test(state)) continue;
+    const teams = m?.teams || m?.teamInfo || [];
+    const matchup = teams.map(cricketTeamLine).filter(Boolean).join(" vs ");
+    if (!matchup) continue;
+    const series = m?.series?.name || m?.series?.longName || m?.series?.abbreviation || "";
+    const status = m?.statusText || m?.statusInfo || m?.resultText || "";
+    lines.push(`  • ${series ? series + ": " : ""}${matchup}${status ? ` — ${status}` : ""}`);
+  }
+  return lines.length ? { sport: "Cricket", lines: ["Results:", ...lines] } : null;
+}
+
 // Assemble a verified-facts block for the requested categories on a date.
 // Returns "" when nothing is available so the caller can omit it cleanly.
 export async function verifiedSportsFacts(cats: string[], date: string): Promise<string> {
@@ -210,8 +260,9 @@ export async function verifiedSportsFacts(cats: string[], date: string): Promise
   if (has("football")) ESPN_BY_CAT.football.forEach((l) => jobs.push(espnFacts(l, date)));
   if (has("soccer")) ESPN_BY_CAT.soccer.forEach((l) => jobs.push(espnFacts(l, date)));
   if (has("hockey", "nhl")) jobs.push(nhlFacts(date));
-  // Cricket and Pokémon have no reliable free feed here — they fall back to the
-  // model's search-grounded prose (still date-filtered downstream).
+  if (has("cricket")) jobs.push(cricketFacts(date));
+  // Pokémon has no reliable free results feed — it falls back to the model's
+  // search-grounded prose (still date-filtered downstream).
 
   if (jobs.length === 0) return "";
   const facts = (await Promise.all(jobs.map((j) => j.catch(() => null)))).filter(
