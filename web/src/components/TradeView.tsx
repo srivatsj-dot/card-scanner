@@ -11,9 +11,9 @@ const newEntry = (): CardEntry => ({ id: nextId++, text: "" });
 
 function fairnessPill(f: string, t: (s: string) => string) {
   switch (f) {
-    case "fair": return <span className="pill green">{t("Fair trade")}</span>;
-    case "favors_you": return <span className="pill green">{t("Favors you")}</span>;
-    case "favors_them": return <span className="pill red">{t("Favors them")}</span>;
+    case "fair": return <span className="pill blue">{t("Fair — roughly even")}</span>;
+    case "favors_you": return <span className="pill green">{t("Good for you — you gain")}</span>;
+    case "favors_them": return <span className="pill red">{t("Bad for you — you give more")}</span>;
     case "lopsided": return <span className="pill red">{t("Lopsided")}</span>;
     default: return <span className="pill">{f}</span>;
   }
@@ -323,24 +323,12 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
       </div>
 
-      {trade && (() => {
-        const yMid = (trade.yourSide.valueLow + trade.yourSide.valueHigh) / 2;
-        const thMid = (trade.theirSide.valueLow + trade.theirSide.valueHigh) / 2;
-        const gap = thMid - yMid; // + = you come out ahead
-        const big = Math.max(yMid, thMid, 1);
-        const fairish = Math.abs(gap) / big < 0.1;
-        const cur = settings.currency;
-        const fmt = (n: number) => `${cur} ${Math.round(n)}`;
-        const verdict = fairish
-          ? { cls: "blue", text: t("Fair trade — roughly even") }
-          : gap > 0
-          ? { cls: "green", text: `${t("Favours you by about")} ${fmt(gap)}` }
-          : { cls: "red", text: `${t("Favours them — you'd overpay by about")} ${fmt(-gap)}` };
-        return (
+      {trade && (
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <span className={`pill ${verdict.cls}`}>{verdict.text}</span>
+              {fairnessPill(trade.fairness, t)}
+              <h2 style={{ margin: 0 }}>{trade.verdict}</h2>
             </div>
             <button
               className="btn ghost small"
@@ -349,8 +337,7 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
               🔖 {t("Save for later")}
             </button>
           </div>
-          <p style={{ fontWeight: 600, marginTop: 10 }}>{trade.verdict}</p>
-          <div className="grid2" style={{ marginTop: 6 }}>
+          <div className="grid2" style={{ marginTop: 14 }}>
             <div>
               <h3>{t("Your side")}</h3>
               <div className="value-big" style={{ fontSize: 22 }}>
@@ -377,8 +364,7 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
             </>
           )}
         </div>
-        );
-      })()}
+      )}
 
       {ask && (
         <div className="card">
