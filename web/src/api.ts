@@ -33,15 +33,25 @@ export function searchCard(text: string, settings: Settings): Promise<ScanResult
   return postJson<ScanResult>("/api/scan", { text, settings });
 }
 
-/** Fire-and-forget welcome email on sign-up. No-op if email isn't configured. */
-export function notifySignup(email: string, username: string): Promise<void> {
-  return fetch("/api/notify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, username }),
-  })
-    .then(() => undefined)
-    .catch(() => undefined);
+export interface NotifyResult {
+  ok: boolean;
+  via?: string;
+  reason?: string;
+  error?: string;
+}
+
+/** Send the welcome email. Resolves with the server's result (never throws). */
+export async function notifySignup(email: string, username: string): Promise<NotifyResult> {
+  try {
+    const res = await fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, username }),
+    });
+    return (await res.json().catch(() => ({ ok: false, error: "Bad response." }))) as NotifyResult;
+  } catch {
+    return { ok: false, error: "Couldn't reach the server." };
+  }
 }
 
 /** Bulk scan one photo that may contain several cards; returns every card found. */

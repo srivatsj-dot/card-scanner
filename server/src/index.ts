@@ -853,15 +853,24 @@ app.post("/api/notify", async (req: Request, res: Response) => {
       });
       if (!r.ok) {
         const text = await r.text().catch(() => "");
-        res.status(502).json({ ok: false, error: `Email send failed (${r.status}). ${text.slice(0, 200)}` });
+        // The most common cause: no verified domain, so Resend's sandbox only
+        // lets you email your OWN address (and only from onboarding@resend.dev).
+        const hint =
+          r.status === 403 || /domain|verif|testing|own email/i.test(text)
+            ? " Resend can only email arbitrary addresses once you've verified a domain (and set EMAIL_FROM to it). Without one it only sends to your own Resend account email. For emailing anyone with no domain, use Gmail (GMAIL_USER + GMAIL_APP_PASSWORD)."
+            : "";
+        console.warn(`[notify] Resend send failed (${r.status}): ${text.slice(0, 300)}`);
+        res.status(502).json({ ok: false, error: `Email send failed (${r.status}). ${text.slice(0, 200)}${hint}` });
         return;
       }
       res.json({ ok: true, via: "resend" });
       return;
     }
     // Not configured — succeed quietly so sign-up isn't blocked.
+    console.warn("[notify] No email provider configured (set GMAIL_USER+GMAIL_APP_PASSWORD or RESEND_API_KEY).");
     res.json({ ok: false, reason: "email-not-configured" });
   } catch (e) {
+    console.warn(`[notify] send threw: ${e instanceof Error ? e.message : e}`);
     res.status(502).json({ ok: false, error: e instanceof Error ? e.message : "Email send failed." });
   }
 });
@@ -888,6 +897,8 @@ app.listen(PORT, () => {
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
   console.log(`  Pokémon TCG results: ${hasLimitless ? "on (Limitless)" : "off (set LIMITLESS_API_KEY for real tournament results)"}`);
+  const emailMode = GMAIL_USER && GMAIL_APP_PASSWORD ? `Gmail (${GMAIL_USER})` : RESEND_API_KEY ? "Resend" : "off";
+  console.log(`  welcome email: ${emailMode}${emailMode === "off" ? " (set GMAIL_USER+GMAIL_APP_PASSWORD or RESEND_API_KEY)" : ""}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }

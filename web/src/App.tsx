@@ -21,7 +21,7 @@ import Logo from "./components/Logo";
 import TradeUpView from "./components/TradeUpView";
 import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
-import { currentUser, displayNameOf, logout, deleteAccount } from "./auth";
+import { currentUser, displayNameOf, emailOf, logout, deleteAccount } from "./auth";
 
 type View = "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "awards" | "settings";
 
@@ -565,7 +565,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       )}
       {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
-        <SettingsView settings={settings} onChange={setSettings} onDeleteAccount={onDeleteAccount} />
+        <SettingsView settings={settings} onChange={setSettings} onDeleteAccount={onDeleteAccount} email={emailOf(user)} displayName={displayNameOf(user)} />
       )}
       </div>
 
