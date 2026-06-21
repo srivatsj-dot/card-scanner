@@ -959,6 +959,35 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 }
 .cam-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: center; flex-wrap: wrap; }
 
+/* Card alignment guide — line the card up inside this box; we crop to it.
+   The huge box-shadow dims everything outside the guide (spotlight effect). */
+.cam-guide {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  border: 2.5px solid rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+  z-index: 2;
+}
+.cam-stage.portrait .cam-guide { height: 88%; aspect-ratio: 5 / 7; }
+.cam-stage.landscape .cam-guide { width: 92%; aspect-ratio: 7 / 5; }
+/* Corner ticks for a clearer target */
+.cam-guide::before, .cam-guide::after {
+  content: ""; position: absolute; width: 22px; height: 22px;
+  border: 3px solid var(--accent); border-radius: 3px;
+}
+.cam-guide::before { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+.cam-guide::after { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+.cam-blur-warn {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  z-index: 3; background: rgba(0, 0, 0, 0.72); color: #ffd27a;
+  font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px;
+  padding: 7px 12px; border-radius: 999px; white-space: nowrap;
+  max-width: 92%; text-align: center;
+}
+
 /* Small buttons */
 .btn.small { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
 
