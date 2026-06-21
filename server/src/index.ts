@@ -7,6 +7,7 @@ import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
+import { ebayPrice, hasEbay } from "./ebay.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
@@ -261,12 +262,49 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   ];
 
   try {
-    res.json(await analyze(sys, scanParts, scanSchema, groundedFor(settings)));
+    const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, groundedFor(settings));
+    await applyEbayPrice(result, settings);
+    res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
   }
 });
+
+// Minimal shape we need to read/override on a scan result.
+interface ScanResultShape {
+  identified?: boolean;
+  player?: string | null;
+  year?: string | null;
+  manufacturer?: string | null;
+  setName?: string | null;
+  cardNumber?: string | null;
+  parallel?: string | null;
+  specialEdition?: string | null;
+  serialNumber?: string | null;
+  estimatedValue?: { low: number; mid: number; high: number; currency: string; note: string };
+}
+
+function cardQuery(r: ScanResultShape): string {
+  return [r.year, r.manufacturer, r.setName, r.player, r.parallel, r.cardNumber ? `#${r.cardNumber}` : "", r.serialNumber]
+    .map((x) => (x || "").toString().trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+// Replace the model's value with a real eBay-listings range when available.
+async function applyEbayPrice(result: ScanResultShape, settings?: Settings) {
+  if (!hasEbay || !result?.identified || !result.estimatedValue) return;
+  const ep = await ebayPrice(cardQuery(result), settings?.region);
+  if (!ep) return;
+  result.estimatedValue = {
+    low: Math.round(ep.low),
+    mid: Math.round(ep.mid),
+    high: Math.round(ep.high),
+    currency: ep.currency,
+    note: `Based on ${ep.count} current eBay listings (${ep.currency}). Asking prices — actual sold prices run a bit lower.`,
+  };
+}
 
 // --- Bulk scan: identify EVERY card in a photo (a stack/spread/binder page) --
 app.post("/api/bulk", async (req: Request, res: Response) => {
@@ -687,6 +725,7 @@ app.listen(PORT, () => {
   console.log(`card-scanner API listening on http://localhost:${PORT}`);
   console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
+  console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
