@@ -8,7 +8,7 @@ import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
-import { verifiedSportsFacts } from "./sports.js";
+import { verifiedSportsFacts, hasLimitless } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
@@ -861,7 +861,8 @@ app.listen(PORT, () => {
   console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
-  console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key; needs outbound to statsapi.mlb.com, api-web.nhle.com, site.api.espn.com, hs-consumer-api.espncricinfo.com`);
+  console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
+  console.log(`  Pokémon TCG results: ${hasLimitless ? "on (Limitless)" : "off (set LIMITLESS_API_KEY for real tournament results)"}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }

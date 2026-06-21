@@ -15,11 +15,11 @@ const NHL_BASE = "https://api-web.nhle.com/v1";
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getJson(url: string, ms = 8000): Promise<any | null> {
+async function getJson(url: string, ms = 8000, headers: Record<string, string> = {}): Promise<any | null> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), ms);
-    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json", ...headers } });
     clearTimeout(timer);
     if (!res.ok) return null;
     return await res.json();
@@ -27,6 +27,12 @@ async function getJson(url: string, ms = 8000): Promise<any | null> {
     return null;
   }
 }
+
+// Pokémon TCG competitive results via the Limitless TCG API. Optional — needs a
+// free key (LIMITLESS_API_KEY); without it, the Pokémon section falls back to
+// search-grounded prose. Get a key at https://play.limitlesstcg.com/account.
+const LIMITLESS_KEY = process.env.LIMITLESS_API_KEY || "";
+export const hasLimitless = Boolean(LIMITLESS_KEY);
 
 export interface SportFacts {
   sport: string;
@@ -246,6 +252,52 @@ export async function cricketFacts(date: string): Promise<SportFacts | null> {
   return lines.length ? { sport: "Cricket", lines: ["Results:", ...lines] } : null;
 }
 
+// --- Pokémon TCG: tournament results + winning decks (Limitless, keyed) -----
+export async function pokemonFacts(date: string): Promise<SportFacts | null> {
+  if (!LIMITLESS_KEY) return null;
+  const auth = { "X-Access-Key": LIMITLESS_KEY };
+  const list = await getJson(
+    "https://play.limitlesstcg.com/api/tournaments?game=PTCG&limit=50",
+    8000,
+    auth
+  );
+  const tournaments = Array.isArray(list) ? list : list?.tournaments || [];
+  if (!Array.isArray(tournaments) || tournaments.length === 0) return null;
+
+  // Tournaments that finished on the window day, biggest first.
+  const onDay = tournaments
+    .filter((t: any) => String(t?.date || t?.endDate || t?.startDate || "").slice(0, 10) === date)
+    .sort((a: any, b: any) => (Number(b?.players) || 0) - (Number(a?.players) || 0))
+    .slice(0, 8);
+  if (onDay.length === 0) return null;
+
+  const lines: string[] = [];
+  await Promise.all(
+    onDay.map(async (t: any) => {
+      const id = t?.id || t?.tournamentId || t?.slug;
+      const name = t?.name || "Tournament";
+      const players = Number(t?.players) || 0;
+      let winnerLine = "";
+      if (id) {
+        const standings = await getJson(
+          `https://play.limitlesstcg.com/api/tournaments/${id}/standings`,
+          8000,
+          auth
+        );
+        const rows = Array.isArray(standings) ? standings : standings?.standings || [];
+        const top = rows.find((r: any) => Number(r?.placing ?? r?.placement) === 1) || rows[0];
+        if (top) {
+          const player = top?.player?.name || top?.name || top?.player || "";
+          const deck = top?.deck?.name || top?.deck || top?.archetype?.name || "";
+          winnerLine = [player && `won by ${player}`, deck && `with ${deck}`].filter(Boolean).join(" ");
+        }
+      }
+      lines.push(`  • ${name}${players ? ` (${players} players)` : ""}${winnerLine ? ` — ${winnerLine}` : ""}`);
+    })
+  );
+  return lines.length ? { sport: "Pokémon TCG", lines: ["Tournament results:", ...lines] } : null;
+}
+
 // Assemble a verified-facts block for the requested categories on a date.
 // Returns "" when nothing is available so the caller can omit it cleanly.
 export async function verifiedSportsFacts(cats: string[], date: string): Promise<string> {
@@ -261,8 +313,7 @@ export async function verifiedSportsFacts(cats: string[], date: string): Promise
   if (has("soccer")) ESPN_BY_CAT.soccer.forEach((l) => jobs.push(espnFacts(l, date)));
   if (has("hockey", "nhl")) jobs.push(nhlFacts(date));
   if (has("cricket")) jobs.push(cricketFacts(date));
-  // Pokémon has no reliable free results feed — it falls back to the model's
-  // search-grounded prose (still date-filtered downstream).
+  if (has("pok")) jobs.push(pokemonFacts(date)); // no-op unless LIMITLESS_API_KEY is set
 
   if (jobs.length === 0) return "";
   const facts = (await Promise.all(jobs.map((j) => j.catch(() => null)))).filter(
