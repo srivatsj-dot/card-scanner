@@ -106,6 +106,16 @@ export function suggestAsks(yourSide: CardEntry[], settings: Settings): Promise<
   });
 }
 
+/** "Who should I give?" — name a card you want; get fair packages to offer. */
+export function suggestOffer(theirSide: CardEntry[], owned: string[], settings: Settings): Promise<AskResult> {
+  return postJson<AskResult>("/api/trade", {
+    mode: "offer",
+    theirSide: entriesToServer(theirSide),
+    owned,
+    settings,
+  });
+}
+
 /** Streamed chat. Calls onDelta for each text chunk; resolves when done. */
 export async function streamChat(
   messages: ChatMessage[],

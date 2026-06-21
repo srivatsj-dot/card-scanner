@@ -13,6 +13,7 @@ import {
   bulkSystemPrompt,
   tradeSystemPrompt,
   askSystemPrompt,
+  offerSystemPrompt,
   tradeUpSystemPrompt,
   digestSystemPrompt,
   chatSystemPrompt,
@@ -344,22 +345,40 @@ function sideToParts(heading: string, entries: CardEntry[]): Part[] {
 app.post("/api/trade", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
 
-  const { mode, yourSide, theirSide, settings } = req.body as {
-    mode?: "fairness" | "suggest";
+  const { mode, yourSide, theirSide, owned, settings } = req.body as {
+    mode?: "fairness" | "suggest" | "offer";
     yourSide?: CardEntry[];
     theirSide?: CardEntry[];
+    owned?: string[];
     settings?: Settings;
   };
 
   const giving = (yourSide || []).filter(entryHasContent);
   const receiving = (theirSide || []).filter(entryHasContent);
-
-  if (giving.length === 0) {
-    res.status(400).json({ error: "Add at least one card you're giving up." });
-    return;
-  }
+  const myCards = (owned || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 60);
 
   try {
+    // "Who should I give?" — you name a card you WANT, it suggests what to give.
+    if (mode === "offer") {
+      if (receiving.length === 0) {
+        res.status(400).json({ error: "Add the card you want to receive." });
+        return;
+      }
+      const sys = offerSystemPrompt(settings || {});
+      const parts: Part[] = [
+        { text: "I want to ACQUIRE the following card(s). Suggest 2-4 distinct, fair packages of cards I could GIVE to get it." },
+        ...sideToParts("Card(s) I want to receive", receiving),
+        ...(myCards.length ? [{ text: `Cards I own (strongly prefer suggesting from these):\n- ${myCards.join("\n- ")}` }] : []),
+      ];
+      res.json(await analyze(sys, parts, askSchema, groundedFor(settings)));
+      return;
+    }
+
+    if (giving.length === 0) {
+      res.status(400).json({ error: "Add at least one card you're giving up." });
+      return;
+    }
+
     if (mode === "suggest") {
       const sys = askSystemPrompt(settings || {});
       const parts: Part[] = [

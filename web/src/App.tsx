@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ScanResult, Settings, SavedCard, WishItem, Theme, WantedTrade } from "./types";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from "./types";
 import { defaultSettings } from "./types";
 import { searchCard, scanCard } from "./api";
 import { describeCard, sleep, DAY_MS, makeThumbnail } from "./utils";
@@ -18,10 +18,11 @@ import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
 import Logo from "./components/Logo";
 import TradeUpView from "./components/TradeUpView";
+import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import { currentUser, displayNameOf, logout, deleteAccount } from "./auth";
 
-type View = "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "binder" | "wishlist" | "awards" | "settings";
+type View = "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "awards" | "settings";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -65,11 +66,12 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
   const [saved, setSaved] = useState<SavedCard[]>(() => loadJSON<SavedCard[]>(BINDER_KEY, []));
   const [wishlist, setWishlist] = useState<WishItem[]>(() => loadJSON<WishItem[]>(WISHLIST_KEY, []));
-  const [wanted, setWanted] = useState<WantedTrade[]>(() => loadJSON<WantedTrade[]>(WANTED_KEY, []));
+  const [later, setLater] = useState<LaterItem[]>(() => loadJSON<LaterItem[]>(WANTED_KEY, []));
   const [theme, setTheme] = useState<Theme>(() => loadJSON<Theme>(THEME_KEY, "dark"));
   const [scans, setScans] = useState<number>(() => loadJSON<number>(SCANS_KEY, 0));
   const [trades, setTrades] = useState<number>(() => loadJSON<number>(TRADES_KEY, 0));
   const [chatOpen, setChatOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const earnedRef = useRef<Set<string>>(
     new Set(
       loadJSON<string[] | null>(EARNED_KEY, null) ??
@@ -160,7 +162,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(BINDER_KEY, JSON.stringify(saved)); }, [saved]);
   useEffect(() => { localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist)); }, [wishlist]);
-  useEffect(() => { localStorage.setItem(WANTED_KEY, JSON.stringify(wanted)); }, [wanted]);
+  useEffect(() => { localStorage.setItem(WANTED_KEY, JSON.stringify(later)); }, [later]);
   useEffect(() => { localStorage.setItem(SCANS_KEY, JSON.stringify(scans)); }, [scans]);
   useEffect(() => { localStorage.setItem(TRADES_KEY, JSON.stringify(trades)); }, [trades]);
   // Unlock-achievement toasts.
@@ -250,27 +252,26 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     }
   }
 
-  // --- Wanted trades (saved trade-up plans) --------------------------------
-  function saveWanted(target: string, result: import("./types").TradeUpResult) {
-    setWanted((prev) => [{ id: uid(), target, savedAt: Date.now(), result }, ...prev]);
-    toast(t("Saved to wanted trades"));
+  // --- "For later" list (saved trades / cards to acquire) ------------------
+  function saveLater(item: Omit<LaterItem, "id" | "savedAt">) {
+    setLater((prev) => [{ id: uid(), savedAt: Date.now(), ...item }, ...prev]);
+    toast(t("Saved to For later"));
   }
-  function removeWanted(id: string) {
-    setWanted((prev) => prev.filter((w) => w.id !== id));
+  function removeLater(id: string) {
+    setLater((prev) => prev.filter((w) => w.id !== id));
   }
-  // Mark a planned trade done: add the card you got to the binder and remove the
-  // originals you traded away (best-effort match on the first step).
-  async function completeWanted(wt: WantedTrade) {
-    if (!confirm(`${t("Mark this trade done?")} ${t("It adds")} "${wt.target}" ${t("to your binder and removes the cards you traded away.")}`)) return;
+  // Land a saved item: add the card you got to the binder and remove the
+  // originals you traded away (best-effort match).
+  async function laterToBinder(item: LaterItem) {
+    if (!confirm(`${t("Add to your binder?")} "${item.target}" ${t("will be added, and the cards you traded away removed.")}`)) return;
     let r: ScanResult;
     try {
-      r = await searchCard(wt.target, aiSettings);
+      r = await searchCard(item.target, aiSettings);
     } catch (e) {
       toast(isRateLimit(e) ? t("Rate limited — try again in a minute") : t("Couldn't look that up — try again"));
       return;
     }
-    // Remove the originals used in the first step (loose token match).
-    const give = wt.result.steps[0]?.giveUp || [];
+    const give = item.give && item.give.length ? item.give : item.steps?.[0]?.giveUp || [];
     setSaved((prev) => {
       const list = prev.slice();
       for (const g of give) {
@@ -286,7 +287,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       return list;
     });
     saveCard(r, undefined);
-    removeWanted(wt.id);
+    removeLater(item.id);
     setView("binder");
   }
 
@@ -431,14 +432,35 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const navBtn = (v: View, label: ReactNode) => (
+    <button className={view === v ? "active" : ""} onClick={() => { setView(v); setSidebarOpen(false); }}>{label}</button>
+  );
+
   return (
-    <div className="app">
-      <div className="topbar">
+    <div className={`shell ${sidebarOpen ? "nav-open" : ""}`}>
+      <aside className="sidebar">
         <div className="brand">
-          <Logo size={34} />
+          <Logo size={30} />
           <h1>Card-O-Rama</h1>
         </div>
-        <div className="topbar-controls">
+        <nav className="side-nav">
+          {navBtn("today", <>☀️ {t("Today")}</>)}
+          <div className="side-group">{t("Identify")}</div>
+          {navBtn("scan", t("Scan"))}
+          {navBtn("search", t("Search"))}
+          {navBtn("bulk", t("Bulk"))}
+          <div className="side-group">{t("Trade")}</div>
+          {navBtn("trade", t("Trade"))}
+          {navBtn("tradeup", <>📈 {t("Trade-Up")}</>)}
+          {navBtn("later", <>🔖 {t("For later")}</>)}
+          <div className="side-group">{t("Collection")}</div>
+          {navBtn("binder", <>{t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}</>)}
+          {navBtn("wishlist", <>{t("Wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}</>)}
+          {navBtn("awards", <>🏆 {t("Awards")}</>)}
+          <div className="side-group">{t("More")}</div>
+          {navBtn("settings", t("Settings"))}
+        </nav>
+        <div className="sidebar-foot">
           <button
             className="theme-toggle"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -455,24 +477,15 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
             <button className="btn ghost small" onClick={onLogout}>{t("Log out")}</button>
           </div>
         </div>
-      </div>
+      </aside>
 
-      <nav className="nav">
-        <button className={view === "today" ? "active" : ""} onClick={() => setView("today")}>☀️ {t("Today")}</button>
-        <button className={view === "scan" ? "active" : ""} onClick={() => setView("scan")}>{t("Scan")}</button>
-        <button className={view === "search" ? "active" : ""} onClick={() => setView("search")}>{t("Search")}</button>
-        <button className={view === "bulk" ? "active" : ""} onClick={() => setView("bulk")}>{t("Bulk")}</button>
-        <button className={view === "trade" ? "active" : ""} onClick={() => setView("trade")}>{t("Trade")}</button>
-        <button className={view === "tradeup" ? "active" : ""} onClick={() => setView("tradeup")}>📈 {t("Trade-Up")}</button>
-        <button className={view === "binder" ? "active" : ""} onClick={() => setView("binder")}>
-          {t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}
-        </button>
-        <button className={view === "wishlist" ? "active" : ""} onClick={() => setView("wishlist")}>
-          {t("Wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
-        </button>
-        <button className={view === "awards" ? "active" : ""} onClick={() => setView("awards")}>🏆 {t("Awards")}</button>
-        <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>{t("Settings")}</button>
-      </nav>
+      {sidebarOpen && <div className="sidebar-scrim" onClick={() => setSidebarOpen(false)} />}
+
+      <div className="content">
+        <div className="mobile-bar">
+          <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Menu">☰</button>
+          <div className="brand"><Logo size={26} /><h1>Card-O-Rama</h1></div>
+        </div>
 
       {view === "today" && (
         <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
@@ -484,16 +497,25 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
         <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
       )}
       {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />}
-      {view === "trade" && <TradeView settings={aiSettings} saved={saved} onTrade={() => setTrades((n) => n + 1)} onWishAll={addWishMany} />}
+      {view === "trade" && (
+        <TradeView
+          settings={aiSettings}
+          saved={saved}
+          wishlist={wishlist}
+          onTrade={() => setTrades((n) => n + 1)}
+          onWishAll={addWishMany}
+          onSaveLater={saveLater}
+        />
+      )}
       {view === "tradeup" && (
         <TradeUpView
           settings={aiSettings}
           saved={saved}
-          wanted={wanted}
-          onSaveWanted={saveWanted}
-          onRemoveWanted={removeWanted}
-          onCompleteWanted={completeWanted}
+          onSaveLater={(target, result) => saveLater({ target, give: result.steps[0]?.giveUp || [], steps: result.steps })}
         />
+      )}
+      {view === "later" && (
+        <LaterView later={later} onRemove={removeLater} onAddToBinder={laterToBinder} />
       )}
       {view === "binder" && (
         <BinderView
@@ -522,6 +544,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       {view === "settings" && (
         <SettingsView settings={settings} onChange={setSettings} onExport={exportData} onImport={importData} onDeleteAccount={onDeleteAccount} />
       )}
+      </div>
 
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("Ask a question")}</button>
 

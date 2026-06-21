@@ -226,12 +226,14 @@ export interface TradeUpResult {
   note: string;
 }
 
-/** A saved trade-up plan kept on the "wanted trades" list. */
-export interface WantedTrade {
+/** Anything saved to the "For later" list — a card to acquire, optionally with a
+ * trade-up path and/or the cards you'd give for it. "Add to binder" lands it. */
+export interface LaterItem {
   id: string;
-  target: string;
   savedAt: number;
-  result: TradeUpResult;
+  target: string; // the card you'd acquire / land
+  give: string[]; // cards you'd trade away (best-effort removed on add-to-binder)
+  steps?: { giveUp: string[]; receive: string; valueNote: string; rationale: string }[];
 }
 
 /** The daily "morning update" digest, grouped by sport. */

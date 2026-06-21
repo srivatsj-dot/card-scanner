@@ -146,7 +146,16 @@ export function bulkSystemPrompt(settings: Settings): string {
 export function askSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +
-    `\n\nThe collector is giving up the card(s) below and wants to know what to ASK FOR in return. Estimate the combined value of what they're giving, then suggest realistic cards of similar total value that the other side would likely accept. Rate each suggestion's likelihood (high, medium, or a stretch). Respect the collector's filters.` +
+    `\n\nThe collector is giving up the card(s) below and wants to know what to ASK FOR in return. Estimate the combined value of what they're giving, then suggest realistic cards of similar total value that the other side would likely accept. Rate each suggestion's likelihood (high, medium, or a stretch).` +
+    `\n\nSTRONGLY prefer cards from the collector's WISHLIST (listed in their preferences) when they are a fair fit for the value — lead with those. Then round out with other fair, sensible asks. Respect the collector's filters.` +
+    buildConstraints(settings)
+  );
+}
+
+export function offerSystemPrompt(settings: Settings): string {
+  return (
+    APPRAISER_ROLE +
+    `\n\nThe collector WANTS to acquire the card(s) listed (the receive side) and is asking WHAT THEY SHOULD GIVE to fairly get it. Estimate the target's value, then suggest 2-4 DISTINCT options of cards to offer that add up to a fair package — each option should be roughly fair (a small premium to land the card is fine, never wildly overpay). STRONGLY prefer cards the collector already OWNS (their binder, listed) so the trade is actionable; you may add a realistic "plus a little cash" note where it helps. For each option, put the card(s) to give in cardSuggestion, the rough total give value in estimatedValue, why the other side accepts in reason, and how likely they accept in likelihood. Respect the collector's filters.` +
     buildConstraints(settings)
   );
 }

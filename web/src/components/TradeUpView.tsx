@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Settings, SavedCard, TradeUpResult, WantedTrade } from "../types";
+import type { Settings, SavedCard, TradeUpResult } from "../types";
 import { planTradeUp } from "../api";
 import { describeCard } from "../utils";
 import { useT } from "../translator";
@@ -7,40 +7,15 @@ import { useT } from "../translator";
 interface Props {
   settings: Settings;
   saved: SavedCard[];
-  wanted: WantedTrade[];
-  onSaveWanted: (target: string, result: TradeUpResult) => void;
-  onRemoveWanted: (id: string) => void;
-  onCompleteWanted: (wt: WantedTrade) => void;
+  onSaveLater: (target: string, result: TradeUpResult) => void;
 }
 
-function Steps({ steps }: { steps: TradeUpResult["steps"] }) {
-  return (
-    <>
-      {steps.map((s, i) => (
-        <div className="tradeup-step" key={i}>
-          <div className="tradeup-num">{i + 1}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="tradeup-flow">
-              <span className="give">{s.giveUp.join(" + ")}</span>
-              <span className="arrow">→</span>
-              <span className="get">{s.receive}</span>
-            </div>
-            <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{s.valueNote}</div>
-            <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14, marginTop: 4 }}>{s.rationale}</div>
-          </div>
-        </div>
-      ))}
-    </>
-  );
-}
-
-export default function TradeUpView({ settings, saved, wanted, onSaveWanted, onRemoveWanted, onCompleteWanted }: Props) {
+export default function TradeUpView({ settings, saved, onSaveLater }: Props) {
   const t = useT();
   const [target, setTarget] = useState("");
   const [result, setResult] = useState<TradeUpResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
   const [savedThis, setSavedThis] = useState(false);
 
   async function plan() {
@@ -82,9 +57,6 @@ export default function TradeUpView({ settings, saved, wanted, onSaveWanted, onR
             </button>
           </div>
         )}
-        <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
-          {t("Starting from your binder of")} {saved.length} {t("cards.")}
-        </p>
         {error && <div className="error-box" style={{ marginTop: 12 }}>{error}</div>}
       </div>
 
@@ -98,45 +70,32 @@ export default function TradeUpView({ settings, saved, wanted, onSaveWanted, onR
               <p style={{ margin: 0, fontWeight: 600 }}>{result.summary}</p>
               <button
                 className="btn secondary small"
-                onClick={() => { onSaveWanted(target.trim() || "Trade-up", result); setSavedThis(true); }}
+                onClick={() => { onSaveLater(target.trim() || "Trade-up", result); setSavedThis(true); }}
                 disabled={savedThis}
               >
-                {savedThis ? t("✓ Saved") : `♡ ${t("Save to wanted trades")}`}
+                {savedThis ? t("✓ Saved") : `🔖 ${t("Save for later")}`}
               </button>
             </div>
           )}
-          <div style={{ marginTop: 10 }}><Steps steps={result.steps} /></div>
+          <div style={{ marginTop: 10 }}>
+            {result.steps.map((s, i) => (
+              <div className="tradeup-step" key={i}>
+                <div className="tradeup-num">{i + 1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="tradeup-flow">
+                    <span className="give">{s.giveUp.join(" + ")}</span>
+                    <span className="arrow">→</span>
+                    <span className="get">{s.receive}</span>
+                  </div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{s.valueNote}</div>
+                  <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14, marginTop: 4 }}>{s.rationale}</div>
+                </div>
+              </div>
+            ))}
+          </div>
           {result.feasible && result.note && (
             <p className="muted" style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>{result.note}</p>
           )}
-        </div>
-      )}
-
-      {wanted.length > 0 && (
-        <div className="card">
-          <h3>♡ {t("Wanted trades")}</h3>
-          {wanted.map((wt) => {
-            const open = openId === wt.id;
-            return (
-              <div key={wt.id} className="wanted-row">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700 }}>{wt.target}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{wt.result.steps.length} {t("steps")} · {new Date(wt.savedAt).toLocaleDateString()}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <button className="btn ghost small" onClick={() => setOpenId(open ? null : wt.id)}>{open ? t("Hide") : t("View")}</button>
-                    <button className="btn small" onClick={() => onCompleteWanted(wt)}>✓ {t("Done")}</button>
-                    <button className="btn ghost small" onClick={() => onRemoveWanted(wt.id)}>{t("Remove")}</button>
-                  </div>
-                </div>
-                {open && <div style={{ marginTop: 10 }}><Steps steps={wt.result.steps} /></div>}
-              </div>
-            );
-          })}
-          <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
-            {t("“Done” adds the card you landed to your binder and removes the ones you traded away.")}
-          </p>
         </div>
       )}
     </div>

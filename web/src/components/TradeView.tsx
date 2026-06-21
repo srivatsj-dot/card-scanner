@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import type { Settings, TradeResult, AskResult, CardEntry, SavedCard } from "../types";
-import { evaluateTrade, suggestAsks } from "../api";
+import type { Settings, TradeResult, AskResult, CardEntry, SavedCard, WishItem, LaterItem } from "../types";
+import { evaluateTrade, suggestAsks, suggestOffer } from "../api";
 import { describeCard } from "../utils";
 import { useT } from "../translator";
 import CameraModal from "./CameraModal";
@@ -35,6 +35,7 @@ function CardRow({
   onRemove,
   canRemove,
   onFromBinder,
+  onFromWishlist,
 }: {
   entry: CardEntry;
   index: number;
@@ -43,6 +44,7 @@ function CardRow({
   onRemove: () => void;
   canRemove: boolean;
   onFromBinder?: () => void;
+  onFromWishlist?: () => void;
 }) {
   const [showCamera, setShowCamera] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -75,6 +77,9 @@ function CardRow({
           <button className="btn ghost small" onClick={() => fileRef.current?.click()}>{t("Upload")}</button>
           {onFromBinder && (
             <button className="btn ghost small" onClick={onFromBinder}>📒 {t("From binder")}</button>
+          )}
+          {onFromWishlist && (
+            <button className="btn ghost small" onClick={onFromWishlist}>♡ {t("From wishlist")}</button>
           )}
           {entry.dataUrl && (
             <button className="btn ghost small" onClick={() => onChange({ ...entry, dataUrl: undefined })}>
@@ -117,6 +122,8 @@ function Side({
   placeholder,
   hasBinder,
   onFromBinder,
+  hasWishlist,
+  onFromWishlist,
 }: {
   title: string;
   hint: string;
@@ -125,6 +132,8 @@ function Side({
   placeholder: string;
   hasBinder: boolean;
   onFromBinder: (entryId: number) => void;
+  hasWishlist?: boolean;
+  onFromWishlist?: (entryId: number) => void;
 }) {
   const t = useT();
   function update(id: number, e: CardEntry) {
@@ -144,6 +153,7 @@ function Side({
           onChange={(e) => update(entry.id, e)}
           onRemove={() => setEntries(entries.filter((x) => x.id !== entry.id))}
           onFromBinder={hasBinder ? () => onFromBinder(entry.id) : undefined}
+          onFromWishlist={hasWishlist && onFromWishlist ? () => onFromWishlist(entry.id) : undefined}
         />
       ))}
       <button className="btn secondary small" onClick={() => setEntries([...entries, newEntry()])}>
@@ -153,14 +163,25 @@ function Side({
   );
 }
 
-export default function TradeView({ settings, saved, onTrade, onWishAll }: { settings: Settings; saved: SavedCard[]; onTrade: () => void; onWishAll?: (texts: string[]) => void }) {
+interface TradeProps {
+  settings: Settings;
+  saved: SavedCard[];
+  wishlist: WishItem[];
+  onTrade: () => void;
+  onWishAll?: (texts: string[]) => void;
+  onSaveLater: (item: Omit<LaterItem, "id" | "savedAt">) => void;
+}
+
+export default function TradeView({ settings, saved, wishlist, onTrade, onWishAll, onSaveLater }: TradeProps) {
   const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
   const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
   const [trade, setTrade] = useState<TradeResult | null>(null);
   const [ask, setAsk] = useState<AskResult | null>(null);
-  const [loading, setLoading] = useState<"" | "fair" | "ask">("");
+  const [offer, setOffer] = useState<AskResult | null>(null);
+  const [loading, setLoading] = useState<"" | "fair" | "ask" | "offer">("");
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState<{ side: "your" | "their"; id: number } | null>(null);
+  const [pickingWish, setPickingWish] = useState<number | null>(null);
   const t = useT();
 
   function applyPick(card: SavedCard) {
@@ -174,13 +195,28 @@ export default function TradeView({ settings, saved, onTrade, onWishAll }: { set
     setPicking(null);
   }
 
+  function applyWishPick(item: WishItem) {
+    if (pickingWish == null) return;
+    const text = item.result ? describeCard(item.result) : item.text;
+    setTheirSide((prev) => prev.map((e) => (e.id === pickingWish ? { ...e, text } : e)));
+    setPickingWish(null);
+  }
+
   const hasGiving = yourSide.some((e) => e.text.trim() || e.dataUrl);
   const hasReceiving = theirSide.some((e) => e.text.trim() || e.dataUrl);
+  const givingText = yourSide.map((e) => e.text.trim()).filter(Boolean).join(" + ");
+  const receivingText = theirSide.map((e) => e.text.trim()).filter(Boolean).join(" + ");
+
+  function reset() {
+    setTrade(null);
+    setAsk(null);
+    setOffer(null);
+    setError(null);
+  }
 
   async function checkFair() {
     setLoading("fair");
-    setError(null);
-    setAsk(null);
+    reset();
     try {
       setTrade(await evaluateTrade(yourSide, theirSide, settings));
       onTrade();
@@ -193,10 +229,23 @@ export default function TradeView({ settings, saved, onTrade, onWishAll }: { set
 
   async function whatToAsk() {
     setLoading("ask");
-    setError(null);
-    setTrade(null);
+    reset();
     try {
       setAsk(await suggestAsks(yourSide, settings));
+      onTrade();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Suggestion failed.");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function whoToGive() {
+    setLoading("offer");
+    reset();
+    try {
+      const owned = saved.map((s) => describeCard(s.result));
+      setOffer(await suggestOffer(theirSide, owned, settings));
       onTrade();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Suggestion failed.");
@@ -225,18 +274,38 @@ export default function TradeView({ settings, saved, onTrade, onWishAll }: { set
           onFromBinder={(id) => setPicking({ side: "your", id })}
         />
         <Side
-          title={t("You receive (optional)")}
-          hint={t("Fill in for a fairness check, or leave blank and ask what to request.")}
+          title={t("You receive / want")}
+          hint={t("Fill in for a fairness check, to ask what to give for it, or leave blank.")}
           entries={theirSide}
           setEntries={setTheirSide}
           placeholder="e.g. 2018 Bowman Chrome Julio Rodríguez refractor"
           hasBinder={saved.length > 0}
           onFromBinder={(id) => setPicking({ side: "their", id })}
+          hasWishlist={wishlist.length > 0}
+          onFromWishlist={(id) => setPickingWish(id)}
         />
       </div>
 
       {picking && (
         <BinderPicker saved={saved} onPick={applyPick} onClose={() => setPicking(null)} />
+      )}
+
+      {pickingWish != null && (
+        <div className="backdrop" onClick={() => setPickingWish(null)}>
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(420px,92vw)", maxHeight: "70vh", overflow: "auto", zIndex: 50 }}>
+            <h3 style={{ marginTop: 0 }}>♡ {t("Pick from wishlist")}</h3>
+            {wishlist.length === 0 ? (
+              <p className="muted">{t("Your wishlist is empty.")}</p>
+            ) : (
+              wishlist.map((w) => (
+                <button key={w.id} className="picker-row" onClick={() => applyWishPick(w)} style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 6 }}>
+                  {w.result?.player || w.text}
+                </button>
+              ))
+            )}
+            <button className="btn ghost small" onClick={() => setPickingWish(null)}>{t("Cancel")}</button>
+          </div>
+        </div>
       )}
 
       <div className="card">
@@ -246,6 +315,9 @@ export default function TradeView({ settings, saved, onTrade, onWishAll }: { set
           </button>
           <button className="btn secondary" onClick={whatToAsk} disabled={!!loading || !hasGiving}>
             {loading === "ask" ? <><span className="spinner" />{t("Thinking…")}</> : t("What should I ask for?")}
+          </button>
+          <button className="btn secondary" onClick={whoToGive} disabled={!!loading || !hasReceiving}>
+            {loading === "offer" ? <><span className="spinner" />{t("Thinking…")}</> : t("Who should I give?")}
           </button>
         </div>
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
@@ -300,20 +372,55 @@ export default function TradeView({ settings, saved, onTrade, onWishAll }: { set
             )}
           </div>
           <p className="muted" style={{ marginTop: 0 }}>{ask.givingValueNote}</p>
-          {ask.targets.map((t, i) => (
+          {ask.targets.map((x, i) => (
             <div className="trade-rec" key={i}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                <div className="name">{t.player}</div>
-                {likelihoodPill(t.likelihood)}
+                <div className="name">{x.player}</div>
+                {likelihoodPill(x.likelihood)}
               </div>
               <div className="sub">
-                {t.cardSuggestion}
-                {t.estimatedValue ? ` · ${t.estimatedValue}` : ""}
+                {x.cardSuggestion}
+                {x.estimatedValue ? ` · ${x.estimatedValue}` : ""}
               </div>
-              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{t.reason}</div>
+              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{x.reason}</div>
+              <button
+                className="btn ghost small"
+                style={{ marginTop: 6 }}
+                onClick={() => onSaveLater({ target: `${x.player} ${x.cardSuggestion}`.trim(), give: givingText ? [givingText] : [] })}
+              >
+                🔖 {t("Save for later")}
+              </button>
             </div>
           ))}
           {ask.note && <p className="muted" style={{ fontSize: 14 }}>{ask.note}</p>}
+        </div>
+      )}
+
+      {offer && (
+        <div className="card">
+          <h2 style={{ marginBottom: 4 }}>{t("What to give")}</h2>
+          <p className="muted" style={{ marginTop: 0 }}>{offer.givingValueNote}</p>
+          {offer.targets.map((x, i) => (
+            <div className="trade-rec" key={i}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                <div className="name">{x.player}</div>
+                {likelihoodPill(x.likelihood)}
+              </div>
+              <div className="sub">
+                {x.cardSuggestion}
+                {x.estimatedValue ? ` · ${x.estimatedValue}` : ""}
+              </div>
+              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{x.reason}</div>
+              <button
+                className="btn ghost small"
+                style={{ marginTop: 6 }}
+                onClick={() => onSaveLater({ target: receivingText || x.player, give: x.cardSuggestion ? [x.cardSuggestion] : [] })}
+              >
+                🔖 {t("Save for later")}
+              </button>
+            </div>
+          ))}
+          {offer.note && <p className="muted" style={{ fontSize: 14 }}>{offer.note}</p>}
         </div>
       )}
     </div>
