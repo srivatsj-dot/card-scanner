@@ -85,6 +85,20 @@ export function accountForReset(username: string): { key: string; email?: string
   return { key, email: u.email, isGoogle: u.provider === "google" };
 }
 
+// Look up a local account by EMAIL for password reset.
+export function accountByEmail(email: string): { key: string; email: string; display: string; isGoogle: boolean } | null {
+  const e = email.trim().toLowerCase();
+  if (!e) return null;
+  const users = loadUsers();
+  for (const key of Object.keys(users)) {
+    const u = users[key];
+    if (u.email && u.email.toLowerCase() === e) {
+      return { key, email: u.email, display: u.display || key, isGoogle: u.provider === "google" };
+    }
+  }
+  return null;
+}
+
 // Set a new password on an existing local account (used by the reset flow).
 export async function resetPassword(key: string, newPassword: string): Promise<void> {
   const users = loadUsers();

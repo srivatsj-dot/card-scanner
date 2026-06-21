@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { login, register, hasAnyAccount, loginWithGoogle, accountForReset, resetPassword, maskEmail } from "../auth";
+import { login, register, hasAnyAccount, loginWithGoogle, accountByEmail, resetPassword, maskEmail } from "../auth";
 import { notifySignup, sendResetCode } from "../api";
 import { useT } from "../translator";
 import Logo from "./Logo";
@@ -18,28 +18,28 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   // the code). Two steps: enter username → enter emailed code + new password.
   const [resetStep, setResetStep] = useState<"id" | "code">("id");
   const [resetKey, setResetKey] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
   const [resetCodeInput, setResetCodeInput] = useState("");
   const [info, setInfo] = useState<string | null>(null);
   const codeRef = useRef<{ code: string; exp: number } | null>(null);
 
   function openReset() {
     setMode("reset"); setResetStep("id"); setError(null); setInfo(null);
-    setPassword(""); setResetCodeInput(""); codeRef.current = null;
+    setPassword(""); setResetCodeInput(""); setResetEmail(""); codeRef.current = null;
   }
 
   async function startReset() {
     if (busy) return;
     setError(null); setInfo(null);
-    const acct = accountForReset(username);
-    if (!acct) { setError(t("No account on this device with that username.")); return; }
+    const acct = accountByEmail(resetEmail);
+    if (!acct) { setError(t("No account on this device uses that email.")); return; }
     if (acct.isGoogle) { setError(t("This account uses Google sign-in — use Continue with Google to get back in.")); return; }
-    if (!acct.email) { setError(t("That account has no email on file, so a code can't be sent.")); return; }
     setBusy(true);
     const buf = new Uint32Array(1);
     crypto.getRandomValues(buf);
     const code = String(buf[0] % 1000000).padStart(6, "0");
     codeRef.current = { code, exp: Date.now() + 15 * 60 * 1000 };
-    const r = await sendResetCode(acct.email, username, code);
+    const r = await sendResetCode(acct.email, acct.display, code);
     setBusy(false);
     if (!r.ok) {
       codeRef.current = null;
@@ -165,17 +165,17 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             {resetStep === "id" ? (
               <>
                 <label className="field">
-                  <span>{t("Username")}</span>
+                  <span>{t("Email")}</span>
                   <input
-                    type="text" autoCapitalize="none" autoCorrect="off"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    type="email" autoCapitalize="none" autoCorrect="off"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") startReset(); }}
-                    placeholder={t("e.g. cardshark22")}
+                    placeholder={t("you@example.com")}
                   />
                 </label>
                 {error && <div className="error-box" style={{ marginTop: 4 }}>{error}</div>}
-                <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={startReset} disabled={busy || !username.trim()}>
+                <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={startReset} disabled={busy || !resetEmail.trim()}>
                   {busy ? <><span className="spinner" />{t("Sending…")}</> : t("Email me a code")}
                 </button>
               </>
