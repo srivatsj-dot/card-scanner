@@ -841,6 +841,16 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || "Card-O-Rama <onboarding@resend.dev>";
 const GMAIL_USER = process.env.GMAIL_USER || "";
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
+// Generic SMTP — use ANY provider that sends to any recipient (Gmail, Brevo,
+// SendGrid, Outlook, your own server). No domain needed if the provider allows
+// a verified single sender. Takes priority when SMTP_HOST is set.
+const SMTP_HOST = process.env.SMTP_HOST || "";
+const SMTP_PORT = Number(process.env.SMTP_PORT) || 587;
+const SMTP_SECURE = process.env.SMTP_SECURE === "true"; // true for port 465
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
+const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `Card-O-Rama <${SMTP_USER}>` : "");
+const hasSmtp = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
@@ -862,6 +872,17 @@ interface SendResult { ok: boolean; via?: string; reason?: string; error?: strin
 // (needs a verified domain to email anyone). Used by welcome + reset emails.
 async function sendEmail(to: string, subject: string, html: string, tag: string): Promise<SendResult> {
   try {
+    // 0) Generic SMTP — any provider, sends to anyone.
+    if (hasSmtp) {
+      const nodemailer = (await import("nodemailer")).default;
+      const transporter = nodemailer.createTransport({
+        host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE,
+        auth: { user: SMTP_USER, pass: SMTP_PASS },
+      });
+      await transporter.sendMail({ from: SMTP_FROM, to, subject, html });
+      return { ok: true, via: "smtp" };
+    }
+    // 1) Gmail SMTP (free, no domain, sends to anyone).
     if (GMAIL_USER && GMAIL_APP_PASSWORD) {
       const nodemailer = (await import("nodemailer")).default;
       const transporter = nodemailer.createTransport({
@@ -962,8 +983,11 @@ app.listen(PORT, () => {
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
   console.log(`  Pokémon TCG results: ${hasLimitless ? "on (Limitless)" : "off (set LIMITLESS_API_KEY for real tournament results)"}`);
-  const emailMode = GMAIL_USER && GMAIL_APP_PASSWORD ? `Gmail (${GMAIL_USER})` : RESEND_API_KEY ? "Resend" : "off";
-  console.log(`  welcome email: ${emailMode}${emailMode === "off" ? " (set GMAIL_USER+GMAIL_APP_PASSWORD or RESEND_API_KEY)" : ""}`);
+  const emailMode = hasSmtp ? `SMTP (${SMTP_HOST}, sends to anyone)`
+    : GMAIL_USER && GMAIL_APP_PASSWORD ? `Gmail (${GMAIL_USER}, sends to anyone)`
+    : RESEND_API_KEY ? "Resend (needs a verified domain to email anyone)"
+    : "off";
+  console.log(`  email: ${emailMode}${emailMode === "off" ? " (set GMAIL_USER+GMAIL_APP_PASSWORD, SMTP_*, or RESEND_API_KEY)" : ""}`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
