@@ -146,10 +146,34 @@ function describeError(err: unknown): { status: number; message: string } {
 }
 
 /** Pull JSON out of a Gemini response, tolerating accidental ```json fences. */
+// Gemini, when asked for raw JSON text (grounded calls), sometimes drops the
+// backslash from a \u00XX escape for accented Latin letters — leaving the literal
+// "00ed" mid-word ("Rodr00edguez" for "Rodríguez", "Pe00f1a" for "Peña"). That's
+// valid JSON, so it survives parsing. Restore those: a "00" + Latin-1 hex byte
+// (C0–FF, the accented-letter range) sitting between two letters.
+function repairBotchedEscapes(s: string): string {
+  // A botched "00XX" must touch a letter on at least one side and never a digit
+  // (so real numbers like "1000ed" or "2.00e9" are left alone).
+  return s.replace(
+    /(?<=[A-Za-zÀ-ÿ])00([c-f][0-9a-f])(?![0-9])|(?<![0-9])00([c-f][0-9a-f])(?=[A-Za-zÀ-ÿ])/gi,
+    (_m, h1, h2) => String.fromCharCode(parseInt(h1 || h2, 16))
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deepRepair(v: any): any {
+  if (typeof v === "string") return repairBotchedEscapes(v);
+  if (Array.isArray(v)) return v.map(deepRepair);
+  if (v && typeof v === "object") {
+    for (const k of Object.keys(v)) v[k] = deepRepair(v[k]);
+  }
+  return v;
+}
+
 function parseJson<T>(text: string | undefined): T {
   if (!text) throw new Error("The model returned an empty response.");
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  return JSON.parse(cleaned) as T;
+  return deepRepair(JSON.parse(cleaned)) as T;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -190,7 +214,8 @@ async function groundedJson<T>(model: string, systemInstruction: string, parts: 
       systemInstruction:
         systemInstruction +
         `\n\nToday's date is ${today()}. Use Google Search to verify the subject's CURRENT form/standing and the card's CURRENT market value — do not rely on memory for anything time-sensitive.` +
-        `\n\nRespond with ONLY a single JSON object (no markdown fences, no commentary) conforming to this JSON schema:\n${JSON.stringify(schema)}`,
+        `\n\nRespond with ONLY a single JSON object (no markdown fences, no commentary) conforming to this JSON schema:\n${JSON.stringify(schema)}` +
+        `\n\nWrite all non-ASCII text (accented names like "Rodríguez", "Peña", "Ohtani") as literal UTF-8 characters. Do NOT use \\uXXXX escape sequences.`,
       tools: [{ googleSearch: {} }],
     },
   });
