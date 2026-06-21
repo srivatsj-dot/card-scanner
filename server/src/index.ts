@@ -8,6 +8,7 @@ import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
+import { verifiedSportsFacts } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
@@ -604,6 +605,9 @@ app.post("/api/digest", async (req: Request, res: Response) => {
   const sys = digestSystemPrompt(settings || {}, cats);
   const mine = (players || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
   const want = (wishlist || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 60);
+  // Real, dated game results for baseball/hockey — accurate scores and
+  // performances the model can't reliably recall. Best-effort; "" if unavailable.
+  const verified = await verifiedSportsFacts(cats, windowStart).catch(() => "");
   const parts: Part[] = [
     {
       text:
@@ -618,6 +622,10 @@ app.post("/api/digest", async (req: Request, res: Response) => {
         `Among VERIFIED events only, lead with the biggest: top performances (multi-homer games, 40-point nights, no-hitters, hat tricks, walk-offs), milestones, and marquee results. Skip minor transactions, independent/minor leagues, and routine IL moves.\n\n` +
         `MANDATORY FORMAT — every single item in every array (yourCards, yourWishlist, and every bucket) MUST begin with the event's real date in square brackets, e.g. "[${windowStart}] Aaron Judge homered twice as the Yankees beat the Reds." The date is the day the event actually happened, taken from your search results — not a guess. Items are MACHINE-FILTERED after you respond: anything dated outside ${windowStart} to ${target}, or missing a leading [date], is automatically DELETED. So if you can't pin an event to a date inside that range, do not include it at all. Better to return empty arrays than to include undated or out-of-window items.\n` +
         `Do NOT write any calendar date inside the sentence itself (no "on June 19", no "6/19") — the leading [date] tag is the ONLY place a date goes, and the sentence is stripped of nothing else. An item whose sentence mentions a day outside ${windowStart}–${target} is also deleted, so never reference an out-of-window day. Do not tag an item with an in-window date while describing something that actually happened earlier — that is dishonest and will be discarded.\n\n` +
+        (verified
+          ? `=== VERIFIED RESULTS (authoritative — pulled directly from official league data for ${windowStart}) ===\n${verified}\n\n` +
+            `For the sports covered by this VERIFIED block, build "risingStars" and "storylines" ONLY from these real results — these scores and stat lines are correct and correctly dated. Do NOT add, invent, search for, or "remember" any other games or performances for those sports. Pick the most notable lines (multi-HR/multi-goal games, gems, marquee or close finals), write each as one vivid sentence, and tag it [${windowStart}]. You may still use search for those sports' "trades" and "news" (transactions, set/market news) and for any sport NOT in the verified block.\n\n`
+          : "") +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
         `Write the briefing for ${target} (covering ${windowStart}), for these categories: ${cats.join(", ")}.`,
@@ -853,6 +861,7 @@ app.listen(PORT, () => {
   console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
+  console.log(`  digest sports data: MLB + NHL live feeds (free, no key) — requires outbound access to statsapi.mlb.com & api-web.nhle.com`);
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
