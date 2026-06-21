@@ -1,7 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { initAnalytics, initAds } from "./analytics";
 import "./styles.css";
+
+// Load the Google tag for ad measurement (no-op unless VITE_GTAG_ID is set)
+// and the AdSense library (no-op unless VITE_ADSENSE_CLIENT is set).
+initAnalytics();
+initAds();
 
 // Note: no React.StrictMode — its dev-only double-mounting tears down and
 // restarts the camera stream, which can leave the preview black.

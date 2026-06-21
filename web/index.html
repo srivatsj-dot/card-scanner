@@ -3,7 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Card-O-Rama · AI trading card appraiser</title>
+    <title>Card-O-Rama · AI trading card scanner &amp; appraiser</title>
+    <meta name="description" content="Scan any trading card and instantly see its value, hidden stats, condition, and smart trade ideas — Pokémon, baseball, basketball, football, soccer, cricket & hockey. Free to start." />
+    <link rel="canonical" href="https://card-o-rama.com/" />
+
+    <!-- Social / ad link previews (Open Graph + Twitter). Update the URLs to your
+         real domain, and drop a 1200×630 og-image.png in web/public for the best
+         preview (SVG falls back below). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Card-O-Rama" />
+    <meta property="og:title" content="Card-O-Rama · AI trading card scanner & appraiser" />
+    <meta property="og:description" content="Scan any card and instantly see its value, stats, condition, and smart trade ideas. Pokémon, baseball, basketball, football, soccer, cricket & hockey." />
+    <meta property="og:url" content="https://card-o-rama.com/" />
+    <meta property="og:image" content="https://card-o-rama.com/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Card-O-Rama · AI trading card scanner & appraiser" />
+    <meta name="twitter:description" content="Scan any card and instantly see its value, stats, condition, and smart trade ideas." />
+    <meta name="twitter:image" content="https://card-o-rama.com/og-image.png" />
+
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#7c5cff" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
@@ -11,6 +28,19 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Card-O-Rama" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Tells Google this is a free web app, for richer search results. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Card-O-Rama",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Web",
+        "description": "AI trading card scanner and appraiser: scan any card for its value, stats, condition, and trade ideas across Pokémon, baseball, basketball, football, soccer, cricket, and hockey.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

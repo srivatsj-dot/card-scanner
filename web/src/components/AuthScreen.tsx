@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { login, register, hasAnyAccount, loginWithGoogle, accountByEmail, resetPassword, maskEmail } from "../auth";
 import { notifySignup, sendResetCode } from "../api";
+import { trackSignup } from "../analytics";
 import { useT } from "../translator";
 import Logo from "./Logo";
 
@@ -125,6 +126,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
     try {
       if (mode === "register") {
         await register(username, password, email);
+        trackSignup(); // ad conversion: a real account was created
         notifySignup(email, username);
       } else {
         await login(username, password);

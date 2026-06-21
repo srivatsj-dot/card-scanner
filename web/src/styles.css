@@ -1004,6 +1004,24 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   color: var(--text); text-shadow: 0 1px 2px rgba(0,0,0,0.25);
 }
 
+/* AdSense unit — only renders when a publisher id + slot are configured. */
+.ad-slot {
+  position: relative;
+  margin: 18px auto 0;
+  max-width: 760px;
+  min-height: 90px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+.ad-slot .ad-label {
+  position: absolute; top: 6px; left: 10px; z-index: 1;
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.ad-slot .adsbygoogle { min-height: 90px; }
+
 /* Inline text-link button (e.g. Forgot password / Back to log in) */
 .link-btn {
   display: block; width: 100%; background: none; border: none; cursor: pointer;

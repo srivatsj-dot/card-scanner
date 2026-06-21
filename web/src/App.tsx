@@ -16,6 +16,7 @@ import BinderView from "./components/BinderView";
 import WishlistView from "./components/WishlistView";
 import SetsView from "./components/SetsView";
 import AwardsView from "./components/AwardsView";
+import AdSlot from "./components/AdSlot";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
 import Logo from "./components/Logo";
@@ -570,6 +571,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       {view === "settings" && (
         <SettingsView settings={settings} onChange={setSettings} onDeleteAccount={onDeleteAccount} email={emailOf(user)} displayName={displayNameOf(user)} />
       )}
+      <AdSlot className="ad-bottom" />
       </div>
 
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("Ask a question")}</button>
