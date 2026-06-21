@@ -344,23 +344,30 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           const fresh = await searchCard(describeCard(card.result), aiSettings);
           const prevMid = card.result.estimatedValue.mid;
           const newMid = fresh.estimatedValue.mid;
-          if (prevMid > 0 && Math.abs(newMid - prevMid) / prevMid >= 0.15) {
-            movers.push(`${card.result.player || "A card"} ${newMid >= prevMid ? "▲" : "▼"}`);
-          }
           const at = Date.now();
-          setSaved((prev) =>
-            prev.map((c) =>
-              c.id === card.id
-                ? {
+          const changeFrac = prevMid > 0 ? Math.abs(newMid - prevMid) / prevMid : 1;
+          if (changeFrac < 0.1) {
+            // The model's estimate wobbles run-to-run; a small change is noise,
+            // not a real market move. Keep the value steady, just stamp the time.
+            setSaved((prev) => prev.map((c) => (c.id === card.id ? { ...c, lastRefreshedAt: at } : c)));
+          } else {
+            if (changeFrac >= 0.15) {
+              movers.push(`${card.result.player || "A card"} ${newMid >= prevMid ? "▲" : "▼"}`);
+            }
+            setSaved((prev) =>
+              prev.map((c) =>
+                c.id === card.id
+                  ? {
                     ...c,
                     previousMid: c.result.estimatedValue.mid,
                     result: fresh,
                     lastRefreshedAt: at,
                     history: [...(c.history || [{ t: c.savedAt, mid: c.result.estimatedValue.mid }]), { t: at, mid: newMid }].slice(-60),
                   }
-                : c
-            )
-          );
+                  : c
+              )
+            );
+          }
         } catch (e) {
           if (isRateLimit(e)) return; // back off; catch up next load/manual
         }
@@ -373,13 +380,19 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           if (!first) await sleep(REFRESH_GAP_MS);
           first = false;
           const fresh = await searchCard(w.result ? describeCard(w.result) : w.text, aiSettings);
-          setWishlist((prev) =>
-            prev.map((x) =>
-              x.id === w.id
-                ? { ...x, previousMid: x.result ? x.result.estimatedValue.mid : null, result: fresh, lastRefreshedAt: Date.now() }
-                : x
-            )
-          );
+          const prevMid = w.result?.estimatedValue.mid ?? 0;
+          const changeFrac = prevMid > 0 ? Math.abs(fresh.estimatedValue.mid - prevMid) / prevMid : 1;
+          if (w.result && changeFrac < 0.1) {
+            setWishlist((prev) => prev.map((x) => (x.id === w.id ? { ...x, lastRefreshedAt: Date.now() } : x)));
+          } else {
+            setWishlist((prev) =>
+              prev.map((x) =>
+                x.id === w.id
+                  ? { ...x, previousMid: x.result ? x.result.estimatedValue.mid : null, result: fresh, lastRefreshedAt: Date.now() }
+                  : x
+              )
+            );
+          }
         } catch (e) {
           if (isRateLimit(e)) return;
         }
