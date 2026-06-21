@@ -232,7 +232,7 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
         </div>
       ))}
 
-      {showCamera && <CameraModal onCapture={addImage} onClose={() => setShowCamera(false)} />}
+      {showCamera && <CameraModal onCapture={addImage} onClose={() => setShowCamera(false)} fullFrame />}
     </div>
   );
 }

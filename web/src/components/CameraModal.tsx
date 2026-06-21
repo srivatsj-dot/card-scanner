@@ -4,6 +4,9 @@ import { useT } from "../translator";
 interface Props {
   onCapture: (dataUrl: string) => void;
   onClose: () => void;
+  // Bulk photos hold several cards, so they skip the single-card guide/crop and
+  // capture the whole frame (keeping autofocus, high-res, and the blur review).
+  fullFrame?: boolean;
 }
 
 // Trading-card aspect ratio (2.5" × 3.5" = 5:7) for the alignment guide.
@@ -20,7 +23,7 @@ const BLUR_THRESHOLD = 55;
  * filled with card. The preview uses object-fit: contain (never hidden-crops)
  * so the guide maps exactly to what gets captured.
  */
-export default function CameraModal({ onCapture, onClose }: Props) {
+export default function CameraModal({ onCapture, onClose, fullFrame = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const guideRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -171,7 +174,7 @@ export default function CameraModal({ onCapture, onClose }: Props) {
             onClick={refocus}
           >
             <video ref={videoRef} autoPlay playsInline muted className="cam-video" />
-            <div ref={guideRef} className="cam-guide" aria-hidden />
+            {!fullFrame && <div ref={guideRef} className="cam-guide" aria-hidden />}
             {!ready && <div className="cam-hint muted">{t("Starting camera… (tap if it stays black)")}</div>}
           </div>
         )}
@@ -199,7 +202,9 @@ export default function CameraModal({ onCapture, onClose }: Props) {
         </div>
         {!error && !preview && (
           <p className="muted" style={{ fontSize: 12, margin: "8px 2px 0", textAlign: "center" }}>
-            {t("Line the card up inside the frame — it doesn't have to fill the whole screen. Hold steady; we crop to the box. Tap to refocus.")}
+            {fullFrame
+              ? t("Fit all the cards in the frame, well-lit and in focus. Hold steady; tap to refocus.")
+              : t("Line the card up inside the frame — it doesn't have to fill the whole screen. Hold steady; we crop to the box. Tap to refocus.")}
           </p>
         )}
       </div>
