@@ -26,7 +26,6 @@ export interface AchStats {
   hasCleanCard: boolean;
   bestRiserPct: number;
   worstFallerPct: number;
-  nonEnglish: boolean;
 }
 
 export interface Achievement {
@@ -99,7 +98,6 @@ export const ACHIEVEMENTS: Achievement[] = [
   // Activity / misc
   { id: "trade_1", emoji: "🤝", title: "Wheeler Dealer", desc: "Evaluate a trade.", earned: (s) => s.trades >= 1 },
   { id: "trade_5", emoji: "♟️", title: "Trade Shark", desc: "Evaluate 5 trades.", earned: (s) => s.trades >= 5 },
-  { id: "polyglot", emoji: "🗣️", title: "Polyglot", desc: "Use the app in another language.", earned: (s) => s.nonEnglish },
 ];
 
 const decade = (year: string | null) => {
@@ -177,7 +175,6 @@ export function computeStats(
     hasCleanCard: saved.some((s) => s.result.conditionReport && s.result.conditionReport.flaws.length === 0),
     bestRiserPct: bestRiser,
     worstFallerPct: worstFaller,
-    nonEnglish: language !== "English",
   };
 }
 
