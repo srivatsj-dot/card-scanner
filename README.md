@@ -2,9 +2,7 @@
 
 Point your phone (or webcam) at a trading card and it tells you what it is,
 roughly what it's worth, and whether it's worth holding or flipping. I built it
-because I kept pulling cards I didn't recognize and got tired of typing
-half-remembered set names into eBay to guess a price.
-
+because
 It handles Pokémon, baseball, soccer, cricket, basketball, football, and hockey.
 Under the hood it's Google Gemini with vision (`gemini-2.5-flash`), which has a
 free tier — so you can run the whole thing without paying anyone.
