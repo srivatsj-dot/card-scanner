@@ -252,3 +252,17 @@ export interface DigestResult {
     news: string[];
   }[];
 }
+
+/** Set-completion checklist result from the AI. */
+export interface ChecklistResult {
+  setName: string;
+  baseSetSize: number;
+  sizeConfidence: string; // high | medium | low
+  notableMissing: {
+    cardNumber: string;
+    player: string;
+    note: string;
+    estimatedValue: string;
+  }[];
+  summary: string;
+}

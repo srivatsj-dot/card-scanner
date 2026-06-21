@@ -1,4 +1,4 @@
-import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry, BulkCard, TradeUpResult, DigestResult } from "./types";
+import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry, BulkCard, TradeUpResult, DigestResult, ChecklistResult } from "./types";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -106,6 +106,15 @@ export function getDigest(
   settings: Settings
 ): Promise<DigestResult> {
   return postJson<DigestResult>("/api/digest", { date, sports, players, wishlist, settings });
+}
+
+/** Set-completion checklist: base-set size + the notable cards still missing. */
+export function getChecklist(
+  set: { year?: string; manufacturer?: string; setName?: string; sport?: string },
+  ownedNumbers: string[],
+  settings: Settings
+): Promise<ChecklistResult> {
+  return postJson<ChecklistResult>("/api/checklist", { set, ownedNumbers, settings });
 }
 
 export function suggestAsks(yourSide: CardEntry[], settings: Settings): Promise<AskResult> {

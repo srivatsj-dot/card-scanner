@@ -299,3 +299,30 @@ export const askSchema = {
   },
   required: ["givingValueNote", "targets", "note"],
 } as const;
+
+// Set-completion checklist: given a set and the card numbers the collector owns,
+// report the base-set size and the notable cards they're still missing.
+export const checklistSchema = {
+  type: "OBJECT",
+  properties: {
+    setName: { ...STR, description: "Canonical set name, e.g. '2023 Topps Chrome Baseball'." },
+    baseSetSize: { ...NUM, description: "Number of cards in the BASE set (e.g. 220). 0 if genuinely unknown." },
+    sizeConfidence: { ...STR, description: "high, medium, or low — how sure you are of the base-set size." },
+    notableMissing: {
+      type: "ARRAY",
+      description: "The most sought-after cards in this set the collector does NOT own (rookies, stars, short prints), most valuable first. Up to 12.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          cardNumber: { ...STR, description: "Card number in the set, e.g. '150' or 'US300'." },
+          player: STR,
+          note: { ...STR, description: "Why it matters — rookie, star, short print, etc." },
+          estimatedValue: { ...STR, description: "Rough base-card value range in the collector's currency." },
+        },
+        required: ["cardNumber", "player", "note", "estimatedValue"],
+      },
+    },
+    summary: { ...STR, description: "One-line take on the set and how close they are." },
+  },
+  required: ["setName", "baseSetSize", "sizeConfidence", "notableMissing", "summary"],
+} as const;

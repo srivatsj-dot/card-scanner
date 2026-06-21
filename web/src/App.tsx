@@ -14,6 +14,7 @@ import TradeView from "./components/TradeView";
 import SettingsView from "./components/SettingsView";
 import BinderView from "./components/BinderView";
 import WishlistView from "./components/WishlistView";
+import SetsView from "./components/SetsView";
 import AwardsView from "./components/AwardsView";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
@@ -23,7 +24,7 @@ import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount } from "./auth";
 
-type View = "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "awards" | "settings";
+type View = "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -479,6 +480,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           <div className="side-group">{t("Collection")}</div>
           {navBtn("binder", <>{t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}</>)}
           {navBtn("wishlist", <>{t("Wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}</>)}
+          {navBtn("sets", <>🗂️ {t("Sets")}</>)}
           {navBtn("awards", <>🏆 {t("Awards")}</>)}
           <div className="side-group">{t("More")}</div>
           {navBtn("settings", t("Settings"))}
@@ -563,6 +565,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           adding={adding}
         />
       )}
+      {view === "sets" && <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} />}
       {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
         <SettingsView settings={settings} onChange={setSettings} onDeleteAccount={onDeleteAccount} email={emailOf(user)} displayName={displayNameOf(user)} />

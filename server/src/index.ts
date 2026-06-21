@@ -9,7 +9,7 @@ import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
 import { verifiedSportsFacts, hasLimitless } from "./sports.js";
-import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema } from "./schemas.js";
+import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
   bulkSystemPrompt,
@@ -18,6 +18,7 @@ import {
   offerSystemPrompt,
   tradeUpSystemPrompt,
   digestSystemPrompt,
+  checklistSystemPrompt,
   chatSystemPrompt,
   type Settings,
 } from "./prompts.js";
@@ -675,6 +676,40 @@ app.post("/api/digest", async (req: Request, res: Response) => {
       })),
     };
     res.json(clean);
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
+// --- Set completion: base-set size + notable missing cards -----------------
+app.post("/api/checklist", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  const { set, ownedNumbers, settings } = req.body as {
+    set?: { year?: string; manufacturer?: string; setName?: string; sport?: string };
+    ownedNumbers?: string[];
+    settings?: Settings;
+  };
+  const label = [set?.year, set?.manufacturer, set?.setName].filter(Boolean).join(" ").trim();
+  if (!label) {
+    res.status(400).json({ error: "A set (year/manufacturer/name) is required." });
+    return;
+  }
+  const owned = (ownedNumbers || []).map((n) => String(n).trim()).filter(Boolean).slice(0, 400);
+  const sys = checklistSystemPrompt(settings || {});
+  const parts: Part[] = [
+    {
+      text:
+        `Set to complete: ${label}${set?.sport ? ` (${set.sport})` : ""}.\n` +
+        `Today's date is ${today()} — use it to judge how complete/old the set is.\n` +
+        (owned.length
+          ? `The collector already OWNS these card numbers from this set:\n${owned.join(", ")}\n\n`
+          : `The collector hasn't logged specific card numbers yet.\n\n`) +
+        `Report the base-set size and the notable BASE cards they're still MISSING (exclude the owned numbers above).`,
+    },
+  ];
+  try {
+    res.json(await analyze(sys, parts, checklistSchema, groundedFor(settings)));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });

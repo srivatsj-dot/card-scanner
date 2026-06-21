@@ -227,6 +227,19 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
   );
 }
 
+export function checklistSystemPrompt(settings: Settings): string {
+  return (
+    APPRAISER_ROLE +
+    `\n\nYou are a trading-card SET CHECKLIST expert. The collector wants to complete a specific set. Given the set and the card numbers they already own, report:` +
+    `\n- baseSetSize: how many cards are in the BASE set (exclude inserts, parallels, and short-print subsets unless they're part of the numbered base run). Use live search to verify the real number; if you genuinely can't determine it, return 0 and set sizeConfidence to "low".` +
+    `\n- sizeConfidence: high/medium/low for how sure you are of that size.` +
+    `\n- notableMissing: the most desirable BASE cards in this set that the collector does NOT already own (skip any card number they listed). Prioritize rookies, stars, and short prints, most valuable first, up to 12. Give each a rough base-card value in ${settings.currency || "USD"}.` +
+    `\n- summary: one honest line on the set and how close they are.` +
+    `\nNever invent card numbers or players that aren't really in the set. Base everything on the actual checklist; verify with search.` +
+    buildConstraints(settings)
+  );
+}
+
 export function chatSystemPrompt(settings: Settings, cardContext?: unknown): string {
   let prompt =
     APPRAISER_ROLE +
