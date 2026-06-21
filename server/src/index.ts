@@ -666,8 +666,10 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     // we keep only those inside [windowStart, target] and strip the tag.
     const clean: DigestShape = {
       overview: result.overview,
-      yourCards: keepInWindow(result.yourCards, windowStart, target),
-      yourWishlist: keepInWindow(result.yourWishlist, windowStart, target),
+      // The "in your binder"/"from your wishlist" sections only make sense when
+      // the collector actually has cards there — never invent them otherwise.
+      yourCards: mine.length ? keepInWindow(result.yourCards, windowStart, target) : [],
+      yourWishlist: want.length ? keepInWindow(result.yourWishlist, windowStart, target) : [],
       sections: (result.sections || []).map((s) => ({
         sport: s.sport,
         risingStars: keepInWindow(s.risingStars, windowStart, target),

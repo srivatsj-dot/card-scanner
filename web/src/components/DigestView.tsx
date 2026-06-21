@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Settings, DigestResult } from "../types";
 import { getDigest } from "../api";
 import { useT } from "../translator";
@@ -121,14 +121,28 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
     }
   }
 
-  // On open: load the saved archive and auto-generate today's briefing if it
-  // isn't there yet — you never have to kick it off yourself.
+  // Load the saved archive once on open.
   useEffect(() => {
-    const arc = readArchive();
-    setArchive(arc);
-    if (!arc[today]) load(today);
+    setArchive(readArchive());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-generate the briefing for whatever day you're viewing if it isn't saved
+  // yet — today on open, and any past day the moment you navigate to it. You
+  // never generate one by hand. `tried` stops a failed day from looping.
+  const tried = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (date < LAUNCH || date > today || loading) return;
+    if (archive[date] || tried.current.has(date)) return;
+    tried.current.add(date);
+    load(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, archive, loading]);
+
+  function retry(d: string) {
+    tried.current.delete(d);
+    load(d);
+  }
 
   const totallyQuiet = digest &&
     !digest.yourCards.length && !digest.yourWishlist.length &&
@@ -147,11 +161,6 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
             </div>
             {digest && <h2 style={{ margin: "8px 0 0", fontSize: 22 }}>{digest.overview}</h2>}
           </div>
-          {!digest && !loading && date >= LAUNCH && date <= today && (
-            <button className="btn secondary small" onClick={() => load(date)}>
-              {isToday ? t("Load briefing") : t("Generate this day's briefing")}
-            </button>
-          )}
           {digest && isToday && !loading && (
             <button className="btn ghost small" onClick={() => load(today, true)} title={t("Pull a fresh briefing for today")}>
               ↻ {t("Regenerate")}
@@ -170,11 +179,11 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
         )}
 
         {loading && <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}><span className="spinner" />{t("Reading the wire…")}</p>}
-        {error && <div className="error-box" style={{ marginTop: 12 }}>{error}</div>}
-        {!digest && !loading && !error && (
-          <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>
-            {t("No briefing saved for this day yet — generate one to lock it in. Once made, a day's briefing never changes.")}
-          </p>
+        {error && !loading && (
+          <div style={{ marginTop: 12 }}>
+            <div className="error-box">{error}</div>
+            <button className="btn secondary small" style={{ marginTop: 8 }} onClick={() => retry(date)}>{t("Try again")}</button>
+          </div>
         )}
       </div>
 
