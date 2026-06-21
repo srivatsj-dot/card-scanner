@@ -403,8 +403,13 @@ app.post("/api/trade", async (req: Request, res: Response) => {
         return;
       }
       const sys = offerSystemPrompt(settings || {});
+      const priceLines = await ebayPricesFor(receiving, settings);
       const parts: Part[] = [
-        { text: "I want to ACQUIRE the following card(s). Suggest 2-4 distinct, fair packages of cards I could GIVE to get it." },
+        {
+          text:
+            "I want to ACQUIRE the following card(s). Suggest 2-4 distinct, fair packages of cards I could GIVE to get it." +
+            (priceLines.length ? `\n\nReal eBay value of what I want:\n- ${priceLines.join("\n- ")}` : ""),
+        },
         ...sideToParts("Card(s) I want to receive", receiving),
         ...(myCards.length ? [{ text: `Cards I own (strongly prefer suggesting from these):\n- ${myCards.join("\n- ")}` }] : []),
       ];
@@ -419,8 +424,13 @@ app.post("/api/trade", async (req: Request, res: Response) => {
 
     if (mode === "suggest") {
       const sys = askSystemPrompt(settings || {});
+      const priceLines = await ebayPricesFor(giving, settings);
       const parts: Part[] = [
-        { text: "I want to trade away the following card(s). Tell me what I should ask for in return." },
+        {
+          text:
+            "I want to trade away the following card(s). Tell me what I should ask for in return." +
+            (priceLines.length ? `\n\nReal eBay value of what I'm giving:\n- ${priceLines.join("\n- ")}` : ""),
+        },
         ...sideToParts("Cards I'm giving away", giving),
       ];
       res.json(await analyze(sys, parts, askSchema, groundedFor(settings)));
@@ -433,8 +443,15 @@ app.post("/api/trade", async (req: Request, res: Response) => {
       return;
     }
     const sys = tradeSystemPrompt(settings || {});
+    const priceLines = await ebayPricesFor([...giving, ...receiving], settings);
     const parts: Part[] = [
-      { text: "Evaluate whether this trade is fair." },
+      {
+        text:
+          "Evaluate whether this trade is fair." +
+          (priceLines.length
+            ? `\n\nUSE THESE REAL eBay prices as the basis for each card's value — do NOT guess a price when a real one is given here:\n- ${priceLines.join("\n- ")}`
+            : ""),
+      },
       ...sideToParts("Cards I give up (my side)", giving),
       ...sideToParts("Cards I receive (their side)", receiving),
     ];
@@ -444,6 +461,19 @@ app.post("/api/trade", async (req: Request, res: Response) => {
     res.status(status).json({ error: message });
   }
 });
+
+// Look up real eBay prices for each text-described card entry, for anchoring.
+async function ebayPricesFor(entries: CardEntry[], settings?: Settings): Promise<string[]> {
+  if (!hasEbay) return [];
+  const texts = entries.map((e) => e.text?.trim()).filter((x): x is string => !!x);
+  const results = await Promise.all(
+    texts.map(async (q) => {
+      const ep = await ebayPrice(q, settings?.region);
+      return ep ? `"${q}" ≈ ${ep.currency} ${ep.mid} (range ${ep.low}–${ep.high}, from ${ep.count} eBay listings)` : null;
+    })
+  );
+  return results.filter((x): x is string => !!x);
+}
 
 // --- Trade-up path: chain of fair trades from owned cards to a target -------
 app.post("/api/tradeup", async (req: Request, res: Response) => {
@@ -464,11 +494,13 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
     return;
   }
   const sys = tradeUpSystemPrompt(settings || {});
+  const targetPrice = hasEbay ? await ebayPrice(goal, settings?.region) : null;
   const parts: Part[] = [
     {
       text:
-        `TARGET (grail) the collector wants: ${goal}\n\n` +
-        `Cards they OWN to start from:\n- ${have.slice(0, 60).join("\n- ")}\n\n` +
+        `TARGET (grail) the collector wants: ${goal}\n` +
+        (targetPrice ? `Real eBay value of the target: ${targetPrice.currency} ${targetPrice.mid} (${targetPrice.low}–${targetPrice.high}).\n` : "") +
+        `\nCards they OWN to start from:\n- ${have.slice(0, 60).join("\n- ")}\n\n` +
         `Plan a realistic, fair trade-up path from these cards to the target.`,
     },
   ];
