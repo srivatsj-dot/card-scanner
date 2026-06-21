@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { login, register, hasAnyAccount, loginWithGoogle } from "../auth";
-import { notifySignup } from "../api";
+import { login, register, hasAnyAccount, loginWithGoogle, accountForReset, resetPassword, maskEmail } from "../auth";
+import { notifySignup, sendResetCode } from "../api";
 import { useT } from "../translator";
 import Logo from "./Logo";
 
@@ -8,12 +8,68 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   const t = useT();
-  const [mode, setMode] = useState<"login" | "register">(hasAnyAccount() ? "login" : "register");
+  const [mode, setMode] = useState<"login" | "register" | "reset">(hasAnyAccount() ? "login" : "register");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Password reset (device-local: looks up the account here, server only emails
+  // the code). Two steps: enter username → enter emailed code + new password.
+  const [resetStep, setResetStep] = useState<"id" | "code">("id");
+  const [resetKey, setResetKey] = useState("");
+  const [resetCodeInput, setResetCodeInput] = useState("");
+  const [info, setInfo] = useState<string | null>(null);
+  const codeRef = useRef<{ code: string; exp: number } | null>(null);
+
+  function openReset() {
+    setMode("reset"); setResetStep("id"); setError(null); setInfo(null);
+    setPassword(""); setResetCodeInput(""); codeRef.current = null;
+  }
+
+  async function startReset() {
+    if (busy) return;
+    setError(null); setInfo(null);
+    const acct = accountForReset(username);
+    if (!acct) { setError(t("No account on this device with that username.")); return; }
+    if (acct.isGoogle) { setError(t("This account uses Google sign-in — use Continue with Google to get back in.")); return; }
+    if (!acct.email) { setError(t("That account has no email on file, so a code can't be sent.")); return; }
+    setBusy(true);
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    const code = String(buf[0] % 1000000).padStart(6, "0");
+    codeRef.current = { code, exp: Date.now() + 15 * 60 * 1000 };
+    const r = await sendResetCode(acct.email, username, code);
+    setBusy(false);
+    if (!r.ok) {
+      codeRef.current = null;
+      setError(r.reason === "email-not-configured"
+        ? t("Email isn't set up on the server, so reset codes can't be sent.")
+        : r.error || t("Couldn't send the code."));
+      return;
+    }
+    setResetKey(acct.key);
+    setResetStep("code");
+    setInfo(`${t("We emailed a 6-digit code to")} ${maskEmail(acct.email)}.`);
+  }
+
+  async function finishReset() {
+    if (busy) return;
+    setError(null);
+    const rec = codeRef.current;
+    if (!rec || Date.now() > rec.exp) { setError(t("The code expired — start over.")); return; }
+    if (resetCodeInput.trim() !== rec.code) { setError(t("That code doesn't match. Check the email.")); return; }
+    setBusy(true);
+    try {
+      await resetPassword(resetKey, password);
+      codeRef.current = null;
+      onAuthed();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't reset.");
+    } finally {
+      setBusy(false);
+    }
+  }
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const onAuthedRef = useRef(onAuthed);
   onAuthedRef.current = onAuthed;
@@ -95,12 +151,72 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
       </div>
       <div className="auth-main">
         <div className="auth-card">
-          <h2 className="auth-heading">{mode === "register" ? t("Create your account") : t("Welcome back")}</h2>
+          <h2 className="auth-heading">{mode === "register" ? t("Create your account") : mode === "reset" ? t("Reset password") : t("Welcome back")}</h2>
           <p className="muted" style={{ marginTop: 0 }}>
             {mode === "register"
               ? t("Create an account to keep your binder, wishlist, and settings.")
+              : mode === "reset"
+              ? t("We'll email a one-time code to the address on your account.")
               : t("Log in to your collection.")}
           </p>
+
+        {mode === "reset" && (
+          <>
+            {resetStep === "id" ? (
+              <>
+                <label className="field">
+                  <span>{t("Username")}</span>
+                  <input
+                    type="text" autoCapitalize="none" autoCorrect="off"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") startReset(); }}
+                    placeholder={t("e.g. cardshark22")}
+                  />
+                </label>
+                {error && <div className="error-box" style={{ marginTop: 4 }}>{error}</div>}
+                <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={startReset} disabled={busy || !username.trim()}>
+                  {busy ? <><span className="spinner" />{t("Sending…")}</> : t("Email me a code")}
+                </button>
+              </>
+            ) : (
+              <>
+                {info && <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>{info}</p>}
+                <label className="field">
+                  <span>{t("Reset code")}</span>
+                  <input
+                    type="text" inputMode="numeric" autoComplete="one-time-code"
+                    value={resetCodeInput}
+                    onChange={(e) => setResetCodeInput(e.target.value)}
+                    placeholder={t("6-digit code")}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t("New password")}</span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") finishReset(); }}
+                    placeholder={t("Pick a new password")}
+                  />
+                </label>
+                {error && <div className="error-box" style={{ marginTop: 4 }}>{error}</div>}
+                <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={finishReset} disabled={busy || !resetCodeInput.trim() || !password}>
+                  {busy ? <><span className="spinner" />{t("Please wait…")}</> : t("Set new password")}
+                </button>
+                <button className="link-btn" style={{ marginTop: 10 }} onClick={startReset} disabled={busy}>
+                  {t("Resend code")}
+                </button>
+              </>
+            )}
+            <button className="link-btn" style={{ marginTop: 10 }} onClick={() => { setMode("login"); setError(null); setInfo(null); }}>
+              ← {t("Back to log in")}
+            </button>
+          </>
+        )}
+
+        {mode !== "reset" && (<>
 
         {mode === "login" && (
           <>
@@ -186,9 +302,16 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
           {busy ? <><span className="spinner" />{t("Please wait…")}</> : mode === "register" ? t("Create account") : t("Log in")}
         </button>
 
+        {mode === "login" && (
+          <button className="link-btn" style={{ marginTop: 12 }} onClick={openReset}>
+            {t("Forgot password?")}
+          </button>
+        )}
+
         <p className="muted" style={{ fontSize: 12, marginTop: 14, marginBottom: 0 }}>
-          {t("Accounts are stored only on this device. There's no password recovery, so don't lose it.")}
+          {t("Accounts are stored on this device. A forgotten password can be reset with a code emailed to the address on your account.")}
         </p>
+        </>)}
         </div>
       </div>
     </div>

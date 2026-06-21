@@ -856,19 +856,12 @@ function welcomeHtml(name: string): string {
   );
 }
 
-app.post("/api/notify", async (req: Request, res: Response) => {
-  const { email, username } = req.body as { email?: string; username?: string };
-  const to = (email || "").trim();
-  if (!emailOk(to)) {
-    res.status(400).json({ ok: false, error: "Invalid email." });
-    return;
-  }
-  const name = escapeHtml((username || "there").toString().slice(0, 60));
-  const subject = "Welcome to Card-O-Rama 🎴";
-  const html = welcomeHtml(name);
+interface SendResult { ok: boolean; via?: string; reason?: string; error?: string; status?: number }
 
+// Shared email sender: Gmail SMTP first (free, any recipient), then Resend
+// (needs a verified domain to email anyone). Used by welcome + reset emails.
+async function sendEmail(to: string, subject: string, html: string, tag: string): Promise<SendResult> {
   try {
-    // 1) Gmail SMTP (free, no domain needed).
     if (GMAIL_USER && GMAIL_APP_PASSWORD) {
       const nodemailer = (await import("nodemailer")).default;
       const transporter = nodemailer.createTransport({
@@ -876,10 +869,8 @@ app.post("/api/notify", async (req: Request, res: Response) => {
         auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
       });
       await transporter.sendMail({ from: `Card-O-Rama <${GMAIL_USER}>`, to, subject, html });
-      res.json({ ok: true, via: "gmail" });
-      return;
+      return { ok: true, via: "gmail" };
     }
-    // 2) Resend (needs a verified domain to email anyone).
     if (RESEND_API_KEY) {
       const r = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -888,26 +879,65 @@ app.post("/api/notify", async (req: Request, res: Response) => {
       });
       if (!r.ok) {
         const text = await r.text().catch(() => "");
-        // The most common cause: no verified domain, so Resend's sandbox only
-        // lets you email your OWN address (and only from onboarding@resend.dev).
+        // Most common cause: no verified domain, so Resend's sandbox only lets
+        // you email your OWN address (and only from onboarding@resend.dev).
         const hint =
           r.status === 403 || /domain|verif|testing|own email/i.test(text)
             ? " Resend can only email arbitrary addresses once you've verified a domain (and set EMAIL_FROM to it). Without one it only sends to your own Resend account email. For emailing anyone with no domain, use Gmail (GMAIL_USER + GMAIL_APP_PASSWORD)."
             : "";
-        console.warn(`[notify] Resend send failed (${r.status}): ${text.slice(0, 300)}`);
-        res.status(502).json({ ok: false, error: `Email send failed (${r.status}). ${text.slice(0, 200)}${hint}` });
-        return;
+        console.warn(`[${tag}] Resend send failed (${r.status}): ${text.slice(0, 300)}`);
+        return { ok: false, status: 502, error: `Email send failed (${r.status}). ${text.slice(0, 200)}${hint}` };
       }
-      res.json({ ok: true, via: "resend" });
-      return;
+      return { ok: true, via: "resend" };
     }
-    // Not configured — succeed quietly so sign-up isn't blocked.
-    console.warn("[notify] No email provider configured (set GMAIL_USER+GMAIL_APP_PASSWORD or RESEND_API_KEY).");
-    res.json({ ok: false, reason: "email-not-configured" });
+    console.warn(`[${tag}] No email provider configured (set GMAIL_USER+GMAIL_APP_PASSWORD or RESEND_API_KEY).`);
+    return { ok: false, reason: "email-not-configured" };
   } catch (e) {
-    console.warn(`[notify] send threw: ${e instanceof Error ? e.message : e}`);
-    res.status(502).json({ ok: false, error: e instanceof Error ? e.message : "Email send failed." });
+    console.warn(`[${tag}] send threw: ${e instanceof Error ? e.message : e}`);
+    return { ok: false, status: 502, error: e instanceof Error ? e.message : "Email send failed." };
   }
+}
+
+function resetHtml(name: string, code: string): string {
+  return (
+    `<div style="font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.6;color:#1a2030">` +
+    `<h2 style="margin:0 0 8px">Password reset 🔑</h2>` +
+    `<p>Hi ${name}, here's your Card-O-Rama password reset code:</p>` +
+    `<p style="font-size:30px;font-weight:800;letter-spacing:6px;margin:14px 0">${escapeHtml(code)}</p>` +
+    `<p style="color:#5c6884">Enter it in the app to set a new password. It expires in 15 minutes. If you didn't request this, you can ignore this email.</p>` +
+    `</div>`
+  );
+}
+
+app.post("/api/notify", async (req: Request, res: Response) => {
+  const { email, username } = req.body as { email?: string; username?: string };
+  const to = (email || "").trim();
+  if (!emailOk(to)) {
+    res.status(400).json({ ok: false, error: "Invalid email." });
+    return;
+  }
+  const name = escapeHtml((username || "there").toString().slice(0, 60));
+  const result = await sendEmail(to, "Welcome to Card-O-Rama 🎴", welcomeHtml(name), "notify");
+  res.status(result.ok ? 200 : result.status || 200).json(result);
+});
+
+// Reset code email. The reset itself happens client-side (accounts are
+// device-local); the server only relays a one-time code to the address.
+app.post("/api/reset-code", async (req: Request, res: Response) => {
+  const { email, username, code } = req.body as { email?: string; username?: string; code?: string };
+  const to = (email || "").trim();
+  const safeCode = (code || "").toString().trim();
+  if (!emailOk(to)) {
+    res.status(400).json({ ok: false, error: "Invalid email." });
+    return;
+  }
+  if (!/^\d{4,8}$/.test(safeCode)) {
+    res.status(400).json({ ok: false, error: "Invalid code." });
+    return;
+  }
+  const name = escapeHtml((username || "there").toString().slice(0, 60));
+  const result = await sendEmail(to, "Your Card-O-Rama reset code", resetHtml(name, safeCode), "reset");
+  res.status(result.ok ? 200 : result.status || 200).json(result);
 });
 
 // In production, serve the built web app from the same origin as the API, so

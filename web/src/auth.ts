@@ -76,6 +76,37 @@ export function emailOf(key: string): string | undefined {
   return loadUsers()[key]?.email;
 }
 
+// Look up a local account by username for password reset. Returns its key,
+// email, and whether it's a Google account (which has no password to reset).
+export function accountForReset(username: string): { key: string; email?: string; isGoogle: boolean } | null {
+  const key = keyOf(username);
+  const u = loadUsers()[key];
+  if (!u) return null;
+  return { key, email: u.email, isGoogle: u.provider === "google" };
+}
+
+// Set a new password on an existing local account (used by the reset flow).
+export async function resetPassword(key: string, newPassword: string): Promise<void> {
+  const users = loadUsers();
+  const u = users[key];
+  if (!u) throw new Error("Account not found on this device.");
+  if (u.provider === "google") throw new Error("This account uses Google sign-in — there's no password to reset.");
+  if (newPassword.length < 4) throw new Error("Password needs at least 4 characters.");
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  u.salt = toHex(salt);
+  u.hash = await derive(newPassword, salt);
+  saveUsers(users);
+  localStorage.setItem(SESSION_KEY, key); // log them in with the new password
+}
+
+// Hide most of an email for display: john@example.com -> j•••n@example.com
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!domain) return email;
+  const shown = local.length <= 2 ? local[0] || "" : local[0] + "•••" + local[local.length - 1];
+  return `${shown}@${domain}`;
+}
+
 export function currentUser(): string | null {
   const key = localStorage.getItem(SESSION_KEY);
   if (!key) return null;

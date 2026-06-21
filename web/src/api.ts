@@ -40,18 +40,27 @@ export interface NotifyResult {
   error?: string;
 }
 
-/** Send the welcome email. Resolves with the server's result (never throws). */
-export async function notifySignup(email: string, username: string): Promise<NotifyResult> {
+async function postNotify(path: string, body: unknown): Promise<NotifyResult> {
   try {
-    const res = await fetch("/api/notify", {
+    const res = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, username }),
+      body: JSON.stringify(body),
     });
     return (await res.json().catch(() => ({ ok: false, error: "Bad response." }))) as NotifyResult;
   } catch {
     return { ok: false, error: "Couldn't reach the server." };
   }
+}
+
+/** Send the welcome email. Resolves with the server's result (never throws). */
+export function notifySignup(email: string, username: string): Promise<NotifyResult> {
+  return postNotify("/api/notify", { email, username });
+}
+
+/** Email a one-time password-reset code. Resolves with the server's result. */
+export function sendResetCode(email: string, username: string, code: string): Promise<NotifyResult> {
+  return postNotify("/api/reset-code", { email, username, code });
 }
 
 /** Bulk scan one photo that may contain several cards; returns every card found. */
