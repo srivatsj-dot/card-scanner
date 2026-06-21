@@ -263,7 +263,7 @@ export const tradeSchema = {
       properties: { valueLow: NUM, valueHigh: NUM, notes: STR },
       required: ["valueLow", "valueHigh", "notes"],
     },
-    valueGapNote: { ...STR, description: "Who comes out ahead and by roughly how much." },
+    valueGapNote: { ...STR, description: "Who comes out ahead overall and WHY — weigh value plus trajectory, scarcity, demand, and condition. Plain terms, never a tiny falsely-precise dollar figure." },
     reasoning: { ...STR, description: "Why the trade is or isn't fair, including trajectory and upside." },
     suggestions: {
       type: "ARRAY",
