@@ -50,6 +50,13 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Shift a YYYY-MM-DD date by n days (UTC, no time component).
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 function apiKeyGuard(res: Response): boolean {
   if (!hasApiKey) {
     res.status(503).json({
@@ -530,20 +537,29 @@ app.post("/api/digest", async (req: Request, res: Response) => {
   // Target date, clamped to [launch, today].
   const reqDate = /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? (date as string) : today();
   const target = reqDate > today() ? today() : reqDate < LAUNCH_DATE ? LAUNCH_DATE : reqDate;
+  // A morning briefing reports what happened the day before. "Yesterday" is the
+  // day before the briefing date, floored at launch so we never reach back
+  // before the service started.
+  const yesterday = addDaysISO(target, -1);
+  const windowStart = yesterday < LAUNCH_DATE ? LAUNCH_DATE : yesterday;
   const sys = digestSystemPrompt(settings || {}, cats);
   const mine = (players || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
   const want = (wishlist || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 60);
   const parts: Part[] = [
     {
       text:
-        `Today's actual date: ${today()}. Target briefing date: ${target}.\n` +
-        `STRICT TIME WINDOW: cover ONLY news from roughly the 24 hours ENDING on the morning of ${target} — i.e. the early morning of ${target} plus the day before it. ` +
-        `NEVER include anything dated BEFORE ${LAUNCH_DATE} (the service launch). NEVER include anything AFTER ${target}. ` +
-        `If an event happened earlier than this window, leave it out ENTIRELY — even if it is still trending, relevant, or recently released. Reactions to or commentary about an older event do NOT count as news. If nothing real happened in the window, return empty arrays.\n\n` +
-        `Actively search for the BIGGEST stories from the window: top performances (e.g. who hit multiple home runs, who scored 40+, no-hitters, hat tricks, walk-offs), milestones, and marquee results in the requested categories. Surface those headline stories rather than minor transactions. Ignore independent/minor-league moves and routine IL activations.\n\n` +
+        `The real-world date right now is ${today()}. You are writing the MORNING briefing for ${target}.\n` +
+        `A morning briefing reports what happened THE DAY BEFORE — i.e. yesterday, which is ${windowStart}. So cover events from ${windowStart} (plus anything overnight into the early morning of ${target}). Think of ${windowStart} as "yesterday".\n\n` +
+        `DATE RULES (the last briefing got these badly wrong — fix it):\n` +
+        `• Include an item ONLY if it genuinely happened on ${windowStart} or overnight into ${target}. Anything from an earlier day is OUT, even if it's still being discussed or trending.\n` +
+        `• Do NOT take an older event and stamp it with a date in this window. Every item must have actually occurred in the window, on the date its source reports. Never relabel ${LAUNCH_DATE} (or any other day) onto things that happened later or earlier.\n` +
+        `• Nothing before ${LAUNCH_DATE}; nothing after ${target}.\n\n` +
+        `ANTI-HALLUCINATION (critical — the last briefing invented a fake "Aaron Judge hit his 11th homer vs the Reds"): only state a specific fact — a score, a stat line, a home-run/point total, an "Nth of the season", an injury, a transaction, an opponent, a date — if live Google Search results EXPLICITLY confirm it for this window. If you cannot verify the specifics from search, DROP the item entirely. Do not guess numbers, opponents, or dates. A wrong specific is far worse than an omission. When unsure, leave it out.\n` +
+        `If live search turns up little or nothing verifiable for ${windowStart}, RETURN EMPTY ARRAYS rather than filling space with plausible-sounding but unconfirmed events. An honest quiet day is correct; a fabricated busy day is a failure.\n\n` +
+        `Among VERIFIED events only, lead with the biggest: top performances (multi-homer games, 40-point nights, no-hitters, hat tricks, walk-offs), milestones, and marquee results. Skip minor transactions, independent/minor leagues, and routine IL moves.\n\n` +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
-        `Write the briefing for ${target}, for these categories: ${cats.join(", ")}.`,
+        `Write the briefing for ${target} (covering ${windowStart}), for these categories: ${cats.join(", ")}.`,
     },
   ];
   try {

@@ -221,7 +221,7 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
     `\n- "news": THE MARKET section — prices, big sales, set releases, grading news.` +
     `\n\n=== FRESH NEWS ONLY ===` +
     `\nReport events that actually HAPPENED inside the time window — games played, moves made, results posted, news that BROKE in that window. Do NOT include ongoing discourse, reactions, retrospectives, or "still being talked about" takes on something that happened earlier. Example of what to EXCLUDE: criticism or hand-shake drama about a Finals that ended days before the window — the event is old, so it's out no matter how much it's trending. Verify every item's date with live search. If the underlying event is older than the window, drop it.` +
-    `\n\nCRUCIAL: report ONLY genuinely recent info from the window — verified by live search. Do NOT pad with old or generic facts, and never invent anything. If a bucket or section has nothing real and recent, return an EMPTY array. Only include a section for each requested category.` +
+    `\n\nCRUCIAL: report ONLY genuinely recent info from the window — verified by live search. Never fabricate specifics. Do NOT invent stat lines, scores, home-run/point totals, "Nth of the season" figures, opponents, injuries, or dates; state a specific only if search explicitly confirms it. Guessing a plausible number or game is a failure — when you can't verify the details, drop the item. Do NOT pad with old or generic facts. If a bucket or section has nothing real and verified, return an EMPTY array. Only include a section for each requested category.` +
     buildConstraints(settings)
   );
 }
