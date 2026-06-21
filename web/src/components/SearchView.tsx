@@ -63,7 +63,7 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
           <input
             type="text"
             value={text}
-            placeholder={t("e.g. 2023 Topps Chrome Nolan Ryan refractor, or Charizard ex 199/165")}
+            placeholder={t("Describe a card — player or subject, set, year, and any parallel or serial")}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") run(); }}
           />

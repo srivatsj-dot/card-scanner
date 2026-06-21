@@ -47,7 +47,7 @@ export default function TradeUpView({ settings, saved, onSaveLater }: Props) {
             <input
               type="text"
               value={target}
-              placeholder={t("e.g. 1986 Fleer Michael Jordan PSA 8, or Pikachu Illustrator")}
+              placeholder={t("Describe the card you're aiming for")}
               onChange={(e) => setTarget(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") plan(); }}
               style={{ flex: 1, minWidth: 220 }}

@@ -66,7 +66,7 @@ export default function WishlistView({ wishlist, onAdd, onRemove, onAddToBinder,
           <input
             type="text"
             value={text}
-            placeholder="e.g. 2018 Bowman Chrome Juan Soto auto, or Pikachu VMAX 188/185"
+            placeholder="Describe a card to add"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") add(); }}
             style={{ flex: 1, minWidth: 200 }}

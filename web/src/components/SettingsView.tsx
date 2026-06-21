@@ -104,7 +104,7 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, emai
           <input
             type="number"
             min={0}
-            placeholder={t("e.g. 150 — blank for none")}
+            placeholder={t("Optional")}
             value={settings.minValue ?? ""}
             onChange={(e) => set("minValue", e.target.value === "" ? null : Number(e.target.value))}
           />
@@ -218,18 +218,13 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, emai
         <span>{t("Custom instructions")}</span>
         <textarea
           value={settings.customInstructions}
-          placeholder={
-            t("Anything else for the appraiser. Examples:") + "\n" +
-            t("• Never recommend Panini or Donruss cards") + "\n" +
-            t("• Only players on contending teams") + "\n" +
-            t("• Prefer numbered parallels")
-          }
+          placeholder={t("Anything else for the appraiser — brands or sets to avoid, players or teams to favor, parallels to prefer.")}
           onChange={(e) => set("customInstructions", e.target.value)}
         />
       </label>
 
       <p className="muted" style={{ fontSize: 13 }}>
-        {t("Tip: block specific brands or set names here in plain English — e.g. “never recommend anything from Panini.”")}
+        {t("Tip: write your preferences in plain English, like which brands or sets to avoid.")}
       </p>
 
       {email && (

@@ -173,7 +173,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") startReset(); }}
-                    placeholder={t("you@example.com")}
+                    placeholder={t("Your email address")}
                   />
                 </label>
                 {error && <div className="error-box" style={{ marginTop: 4 }}>{error}</div>}
@@ -265,7 +265,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-            placeholder={t("e.g. cardshark22")}
+            placeholder={t("Your username")}
           />
         </label>
         {mode === "register" && (
@@ -278,7 +278,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-              placeholder={t("you@example.com")}
+              placeholder={t("Your email address")}
             />
           </label>
         )}

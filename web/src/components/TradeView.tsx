@@ -269,7 +269,7 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
           hint={t("The card(s) you'd send.")}
           entries={yourSide}
           setEntries={setYourSide}
-          placeholder="e.g. 2016 Topps Chrome Kyle Schwarber RC auto /150"
+          placeholder="Describe a card you'd give"
           hasBinder={saved.length > 0}
           onFromBinder={(id) => setPicking({ side: "your", id })}
         />
@@ -278,7 +278,7 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
           hint={t("Fill in for a fairness check, to ask what to give for it, or leave blank.")}
           entries={theirSide}
           setEntries={setTheirSide}
-          placeholder="e.g. 2018 Bowman Chrome Julio Rodríguez refractor"
+          placeholder="Describe a card you'd get"
           hasBinder={saved.length > 0}
           onFromBinder={(id) => setPicking({ side: "their", id })}
           hasWishlist={wishlist.length > 0}
