@@ -190,6 +190,7 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
   return (
     APPRAISER_ROLE +
     `\n\nWrite a LIVELY morning update for a card collector — punchy and specific, like a sports/TCG newsletter. Cover ONLY these categories: ${list}. Every item is ONE vivid sentence with real names, teams, and numbers — no vague filler.` +
+    `\n\nMANDATORY ITEM FORMAT: every item in every array MUST start with the event's actual date as "[YYYY-MM-DD]" (the day it really happened, from your search results), then the sentence. Example: "[2026-06-20] Aaron Judge homered twice in a Yankees win." Items are filtered by that date after you respond — undated items and items dated outside the requested window are deleted — so never include an event you can't date, and never guess a date.` +
     `\n\nTHIS UPDATE IS ABOUT TALENT AND PERFORMANCE — how players and teams are actually DOING on the field/court — NOT card prices. The ONLY bucket where value, prices, sales, or set releases belong is "news" (the Market section). Keep money talk OUT of every other bucket.` +
     `\n\n=== RELEVANCE BAR — only what collectors actually follow ===` +
     `\nCover ONLY the top leagues and events a card collector would care about. A name belongs here only if a serious collector would recognize the player or chase the card.` +

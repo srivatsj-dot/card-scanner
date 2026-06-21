@@ -57,6 +57,35 @@ function addDaysISO(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Digest items are required to start with the event's real date as
+// "[YYYY-MM-DD]". Keep only items whose tagged date falls inside the window;
+// drop anything older, newer, or undated — then strip the tag for display.
+// This enforces the time window deterministically instead of trusting prose.
+function keepInWindow(items: unknown, start: string, end: string): string[] {
+  if (!Array.isArray(items)) return [];
+  const out: string[] = [];
+  for (const raw of items) {
+    if (typeof raw !== "string") continue;
+    const m = /^\s*[\[(]?(\d{4}-\d{2}-\d{2})[\])]?[\s:.,-]*/.exec(raw);
+    if (!m) continue; // no verifiable date → drop
+    if (m[1] < start || m[1] > end) continue; // outside the window → drop
+    const text = raw.slice(m[0].length).trim();
+    if (text) out.push(text);
+  }
+  return out;
+}
+
+interface DigestShape {
+  overview: string;
+  yourCards: unknown;
+  yourWishlist: unknown;
+  sections?: Array<{
+    sport: string;
+    risingStars: unknown; declining: unknown; storylines: unknown;
+    trades: unknown; chase: unknown; news: unknown;
+  }>;
+}
+
 function apiKeyGuard(res: Response): boolean {
   if (!hasApiKey) {
     res.status(503).json({
@@ -557,13 +586,31 @@ app.post("/api/digest", async (req: Request, res: Response) => {
         `ANTI-HALLUCINATION (critical — the last briefing invented a fake "Aaron Judge hit his 11th homer vs the Reds"): only state a specific fact — a score, a stat line, a home-run/point total, an "Nth of the season", an injury, a transaction, an opponent, a date — if live Google Search results EXPLICITLY confirm it for this window. If you cannot verify the specifics from search, DROP the item entirely. Do not guess numbers, opponents, or dates. A wrong specific is far worse than an omission. When unsure, leave it out.\n` +
         `If live search turns up little or nothing verifiable for ${windowStart}, RETURN EMPTY ARRAYS rather than filling space with plausible-sounding but unconfirmed events. An honest quiet day is correct; a fabricated busy day is a failure.\n\n` +
         `Among VERIFIED events only, lead with the biggest: top performances (multi-homer games, 40-point nights, no-hitters, hat tricks, walk-offs), milestones, and marquee results. Skip minor transactions, independent/minor leagues, and routine IL moves.\n\n` +
+        `MANDATORY FORMAT — every single item in every array (yourCards, yourWishlist, and every bucket) MUST begin with the event's real date in square brackets, e.g. "[${windowStart}] Aaron Judge homered twice as the Yankees beat the Reds." The date is the day the event actually happened, taken from your search results — not a guess. Items are MACHINE-FILTERED after you respond: anything dated outside ${windowStart} to ${target}, or missing a leading [date], is automatically DELETED. So if you can't pin an event to a date inside that range, do not include it at all. Better to return empty arrays than to include undated or out-of-window items.\n\n` +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
         `Write the briefing for ${target} (covering ${windowStart}), for these categories: ${cats.join(", ")}.`,
     },
   ];
   try {
-    res.json(await analyze(sys, parts, digestSchema, groundedFor(settings)));
+    const result = await analyze<DigestShape>(sys, parts, digestSchema, groundedFor(settings));
+    // Deterministically enforce the time window: every item is date-tagged, so
+    // we keep only those inside [windowStart, target] and strip the tag.
+    const clean: DigestShape = {
+      overview: result.overview,
+      yourCards: keepInWindow(result.yourCards, windowStart, target),
+      yourWishlist: keepInWindow(result.yourWishlist, windowStart, target),
+      sections: (result.sections || []).map((s) => ({
+        sport: s.sport,
+        risingStars: keepInWindow(s.risingStars, windowStart, target),
+        declining: keepInWindow(s.declining, windowStart, target),
+        storylines: keepInWindow(s.storylines, windowStart, target),
+        trades: keepInWindow(s.trades, windowStart, target),
+        chase: keepInWindow(s.chase, windowStart, target),
+        news: keepInWindow(s.news, windowStart, target),
+      })),
+    };
+    res.json(clean);
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
