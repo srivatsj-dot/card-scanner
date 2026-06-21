@@ -873,11 +873,20 @@ interface SendResult { ok: boolean; via?: string; reason?: string; error?: strin
 
 // Shared email sender: Gmail SMTP first (free, any recipient), then Resend
 // (needs a verified domain to email anyone). Used by welcome + reset emails.
+// Load nodemailer lazily with a clear message if it isn't installed.
+async function loadNodemailer() {
+  try {
+    return (await import("nodemailer")).default;
+  } catch {
+    throw new Error("nodemailer isn't installed — run `npm install` in the project root (or `cd server && npm install`) and restart the server.");
+  }
+}
+
 async function sendEmail(to: string, subject: string, html: string, tag: string): Promise<SendResult> {
   try {
     // 0) Generic SMTP — any provider, sends to anyone.
     if (hasSmtp) {
-      const nodemailer = (await import("nodemailer")).default;
+      const nodemailer = await loadNodemailer();
       const transporter = nodemailer.createTransport({
         host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE,
         auth: { user: SMTP_USER, pass: SMTP_PASS },
@@ -887,7 +896,7 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
     }
     // 1) Gmail SMTP (free, no domain, sends to anyone).
     if (GMAIL_USER && GMAIL_APP_PASSWORD) {
-      const nodemailer = (await import("nodemailer")).default;
+      const nodemailer = await loadNodemailer();
       const transporter = nodemailer.createTransport({
         service: "gmail",
         auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
@@ -897,7 +906,7 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
     }
     // 2) Outlook/Hotmail (free, no domain, sends to anyone).
     if (OUTLOOK_USER && OUTLOOK_APP_PASSWORD) {
-      const nodemailer = (await import("nodemailer")).default;
+      const nodemailer = await loadNodemailer();
       const transporter = nodemailer.createTransport({
         host: "smtp-mail.outlook.com", port: 587, secure: false,
         auth: { user: OUTLOOK_USER, pass: OUTLOOK_APP_PASSWORD },
