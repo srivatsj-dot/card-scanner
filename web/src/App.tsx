@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from "./types";
 import { defaultSettings } from "./types";
-import { searchCard, scanCard, getDigest } from "./api";
+import { searchCard, scanCard } from "./api";
 import { searchCardCached } from "./cache";
-import { describeCard, sleep, DAY_MS, makeThumbnail } from "./utils";
+import { ensureDigest } from "./digest";
+import { describeCard, DAY_MS, makeThumbnail } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
@@ -288,23 +289,21 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   }
 
   // Add several text descriptions to the wishlist at once (e.g. all of a card's
-  // recommended trade targets). Items appear instantly; prices fill in gently so
-  // we don't burst the rate limit.
+  // recommended trade targets). Items appear instantly; prices fill in parallel.
   async function addWishMany(texts: string[]) {
     const clean = texts.map((s) => s.trim()).filter(Boolean);
     if (clean.length === 0) return;
     const items = clean.map((text) => ({ id: uid(), addedAt: Date.now(), text }));
     setWishlist((prev) => [...items, ...prev]);
     toast(`${clean.length} ${t("added to wishlist")}`);
-    for (const item of items) {
+    await Promise.all(items.map(async (item) => {
       try {
         const r = await searchCardCached(item.text, aiSettings);
         setWishlist((prev) => prev.map((w) => (w.id === item.id ? { ...w, result: r, lastRefreshedAt: Date.now() } : w)));
-        await sleep(800);
       } catch {
         /* leave text-only; daily refresh will price it */
       }
-    }
+    }));
   }
 
   // Add cards we already have full results for (e.g. bulk-detected cards) — no
@@ -323,83 +322,83 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   }
 
   // Refresh saved + wishlist prices. force=true ignores the 24h freshness check
-  // and refreshes everything. Auto runs are gentle: capped count, spaced out, so
-  // they don't burn the free-tier quota that foreground scans need.
-  const REFRESH_GAP_MS = 6000; // ~10/min — under the flash free-tier limit
+  // and refreshes everything. Runs several at once (no artificial gaps) so a
+  // refresh is quick; auto runs cap the count so they don't burn quota.
   const AUTO_CAP = 5; // at most a few per auto run; the rest catch up later
+  const REFRESH_CONCURRENCY = 4;
 
   async function refreshAll(force: boolean) {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
     const stale = (t?: number) => force || !t || Date.now() - t > DAY_MS;
-    let budget = force ? Infinity : AUTO_CAP;
-    let first = true;
     const movers: string[] = [];
+
+    async function refreshCard(card: SavedCard) {
+      const fresh = await searchCard(describeCard(card.result), aiSettings);
+      const prevMid = card.result.estimatedValue.mid;
+      const newMid = fresh.estimatedValue.mid;
+      const at = Date.now();
+      const changeFrac = prevMid > 0 ? Math.abs(newMid - prevMid) / prevMid : 1;
+      if (changeFrac < 0.1) {
+        // The model's estimate wobbles run-to-run; a small change is noise, not a
+        // real market move. Keep the value steady, just stamp the time.
+        setSaved((prev) => prev.map((c) => (c.id === card.id ? { ...c, lastRefreshedAt: at } : c)));
+      } else {
+        if (changeFrac >= 0.15) movers.push(`${card.result.player || "A card"} ${newMid >= prevMid ? "▲" : "▼"}`);
+        setSaved((prev) =>
+          prev.map((c) =>
+            c.id === card.id
+              ? {
+                ...c,
+                previousMid: c.result.estimatedValue.mid,
+                result: fresh,
+                lastRefreshedAt: at,
+                history: [...(c.history || [{ t: c.savedAt, mid: c.result.estimatedValue.mid }]), { t: at, mid: newMid }].slice(-60),
+              }
+              : c
+          )
+        );
+      }
+    }
+
+    async function refreshWish(w: WishItem) {
+      const fresh = await searchCard(w.result ? describeCard(w.result) : w.text, aiSettings);
+      const prevMid = w.result?.estimatedValue.mid ?? 0;
+      const changeFrac = prevMid > 0 ? Math.abs(fresh.estimatedValue.mid - prevMid) / prevMid : 1;
+      if (w.result && changeFrac < 0.1) {
+        setWishlist((prev) => prev.map((x) => (x.id === w.id ? { ...x, lastRefreshedAt: Date.now() } : x)));
+      } else {
+        setWishlist((prev) =>
+          prev.map((x) =>
+            x.id === w.id
+              ? { ...x, previousMid: x.result ? x.result.estimatedValue.mid : null, result: fresh, lastRefreshedAt: Date.now() }
+              : x
+          )
+        );
+      }
+    }
+
+    const jobs: (() => Promise<void>)[] = [
+      ...saved.filter((c) => stale(c.lastRefreshedAt)).map((c) => () => refreshCard(c)),
+      ...wishlist.filter((w) => stale(w.lastRefreshedAt)).map((w) => () => refreshWish(w)),
+    ];
+    const work = force ? jobs : jobs.slice(0, AUTO_CAP);
+
     try {
-      for (const card of saved) {
-        if (budget <= 0) break;
-        if (!stale(card.lastRefreshedAt)) continue;
-        budget--;
-        try {
-          if (!first) await sleep(REFRESH_GAP_MS);
-          first = false;
-          const fresh = await searchCard(describeCard(card.result), aiSettings);
-          const prevMid = card.result.estimatedValue.mid;
-          const newMid = fresh.estimatedValue.mid;
-          const at = Date.now();
-          const changeFrac = prevMid > 0 ? Math.abs(newMid - prevMid) / prevMid : 1;
-          if (changeFrac < 0.1) {
-            // The model's estimate wobbles run-to-run; a small change is noise,
-            // not a real market move. Keep the value steady, just stamp the time.
-            setSaved((prev) => prev.map((c) => (c.id === card.id ? { ...c, lastRefreshedAt: at } : c)));
-          } else {
-            if (changeFrac >= 0.15) {
-              movers.push(`${card.result.player || "A card"} ${newMid >= prevMid ? "▲" : "▼"}`);
-            }
-            setSaved((prev) =>
-              prev.map((c) =>
-                c.id === card.id
-                  ? {
-                    ...c,
-                    previousMid: c.result.estimatedValue.mid,
-                    result: fresh,
-                    lastRefreshedAt: at,
-                    history: [...(c.history || [{ t: c.savedAt, mid: c.result.estimatedValue.mid }]), { t: at, mid: newMid }].slice(-60),
-                  }
-                  : c
-              )
-            );
+      let idx = 0;
+      let stop = false;
+      const worker = async () => {
+        while (idx < work.length && !stop) {
+          const job = work[idx++];
+          try {
+            await job();
+          } catch (e) {
+            if (isRateLimit(e)) stop = true; // back off; catch up next load/manual
           }
-        } catch (e) {
-          if (isRateLimit(e)) return; // back off; catch up next load/manual
         }
-      }
-      for (const w of wishlist) {
-        if (budget <= 0) break;
-        if (!stale(w.lastRefreshedAt)) continue;
-        budget--;
-        try {
-          if (!first) await sleep(REFRESH_GAP_MS);
-          first = false;
-          const fresh = await searchCard(w.result ? describeCard(w.result) : w.text, aiSettings);
-          const prevMid = w.result?.estimatedValue.mid ?? 0;
-          const changeFrac = prevMid > 0 ? Math.abs(fresh.estimatedValue.mid - prevMid) / prevMid : 1;
-          if (w.result && changeFrac < 0.1) {
-            setWishlist((prev) => prev.map((x) => (x.id === w.id ? { ...x, lastRefreshedAt: Date.now() } : x)));
-          } else {
-            setWishlist((prev) =>
-              prev.map((x) =>
-                x.id === w.id
-                  ? { ...x, previousMid: x.result ? x.result.estimatedValue.mid : null, result: fresh, lastRefreshedAt: Date.now() }
-                  : x
-              )
-            );
-          }
-        } catch (e) {
-          if (isRateLimit(e)) return;
-        }
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(REFRESH_CONCURRENCY, work.length) }, worker));
       if (movers.length > 0) {
         toast(`📈 ${movers.length} card${movers.length > 1 ? "s" : ""} moved 15%+: ${movers.slice(0, 3).join(", ")}`);
       }
@@ -420,42 +419,42 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Pre-generate today's morning briefing in the background on app load, so it's
-  // ready the moment you open Today instead of making you wait on the slowest
-  // call in the app. Writes into the same per-date archive DigestView reads, so
-  // it just shows up. Runs once, only if the morning update is enabled and today
-  // isn't already generated.
+  // Pre-generate today's (and yesterday's) morning briefing in the background on
+  // app load, so it's ready the instant you open Today — you never wait on it or
+  // see a loading state. Generation is de-duplicated with the Today view via the
+  // shared digest module. Runs once per load, unless the morning update is off.
   const digestPrefetched = useRef(false);
   useEffect(() => {
     if (digestPrefetched.current) return;
     if (settings.morningUpdate === false) return;
     digestPrefetched.current = true;
     const pad = (n: number) => String(n).padStart(2, "0");
-    const d = new Date();
-    const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    let archive: Record<string, unknown> = {};
-    try {
-      const raw = JSON.parse(localStorage.getItem(DIGEST_KEY) || "{}");
-      // Skip the old single-digest cache shape; DigestView will discard it too.
-      if (raw && typeof raw === "object" && !raw.sections) archive = raw;
-    } catch { /* ignore */ }
-    if (archive[today]) return; // already have it
-    (async () => {
-      try {
-        const res = await getDigest(today, settings.digestSports, digestPlayers, digestWishlist, aiSettings);
-        // Re-read in case DigestView generated it meanwhile; don't clobber.
-        let cur: Record<string, unknown> = {};
-        try {
-          const raw = JSON.parse(localStorage.getItem(DIGEST_KEY) || "{}");
-          if (raw && typeof raw === "object" && !raw.sections) cur = raw;
-        } catch { /* ignore */ }
-        if (cur[today]) return;
-        const next = { ...cur, [today]: { ...res, generatedAt: Date.now() } };
-        try { localStorage.setItem(DIGEST_KEY, JSON.stringify(next)); } catch { /* quota */ }
-      } catch { /* offline / rate-limited — DigestView will retry on open */ }
-    })();
+    const fmt = (dt: Date) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+    const now = new Date();
+    const today = fmt(now);
+    const yest = fmt(new Date(now.getTime() - 86400000));
+    // Today first (what you'll see), then yesterday so flipping back is instant too.
+    ensureDigest(DIGEST_KEY, today, settings.digestSports, digestPlayers, digestWishlist, aiSettings)
+      .finally(() => ensureDigest(DIGEST_KEY, yest, settings.digestSports, digestPlayers, digestWishlist, aiSettings));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // If the app stays open across midnight, generate the new day's briefing in the
+  // background right at 12:00 AM so it's waiting when you next look.
+  useEffect(() => {
+    if (settings.morningUpdate === false) return;
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 30);
+    const ms = nextMidnight.getTime() - now.getTime();
+    const id = setTimeout(() => {
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      ensureDigest(DIGEST_KEY, today, settings.digestSports, digestPlayers, digestWishlist, aiSettings);
+    }, ms);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.morningUpdate, settings.digestSports, digestPlayers, digestWishlist]);
 
   const navBtn = (v: View, label: ReactNode) => (
     <button className={view === v ? "active" : ""} onClick={() => { setView(v); setSidebarOpen(false); }}>{label}</button>

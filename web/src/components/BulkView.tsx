@@ -74,7 +74,6 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
           break;
         }
       }
-      if (i < pending.length - 1) await sleep(2000);
     }
     setRunning(false);
   }

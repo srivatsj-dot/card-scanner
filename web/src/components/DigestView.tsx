@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Settings, DigestResult } from "../types";
-import { getDigest } from "../api";
+import { ensureDigest, regenerateDigest, readDigestArchive } from "../digest";
 import { useT } from "../translator";
 
 interface Props {
@@ -81,67 +81,83 @@ function MonthCalendar({ value, min, max, has, onPick }: {
   );
 }
 
+// Newest cached briefing on or before today, so we open onto a ready one.
+function newestCached(arc: Archive, today: string): string {
+  const keys = Object.keys(arc).filter((k) => k >= LAUNCH && k <= today).sort();
+  return keys.length ? keys[keys.length - 1] : today;
+}
+
 export default function DigestView({ settings, players, wishlist, cacheKey }: Props) {
   const t = useT();
-  const [archive, setArchive] = useState<Archive>({});
-  const [date, setDate] = useState(todayStr());
-  const [loading, setLoading] = useState(false);
+  const today = todayStr();
+  // Start from what's already cached so there's no loading state to see.
+  const [archive, setArchive] = useState<Archive>(() => readDigestArchive(cacheKey));
+  const [date, setDate] = useState(() => newestCached(readDigestArchive(cacheKey), today));
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCal, setShowCal] = useState(false);
+  const navigated = useRef(false); // did the user pick a day manually?
+  const tried = useRef<Set<string>>(new Set());
 
-  const today = todayStr();
   const isToday = date === today;
   const digest = archive[date] || null;
 
-  function readArchive(): Archive {
-    try {
-      const raw = JSON.parse(localStorage.getItem(cacheKey) || "{}");
-      if (raw && raw.sections) return {}; // old single-digest format — discard
-      return raw && typeof raw === "object" ? raw : {};
-    } catch { return {}; }
-  }
+  const refresh = () => setArchive(readDigestArchive(cacheKey));
 
-  // Generate the briefing for a specific date. Immutable: never regenerate a
-  // day that already has one saved.
-  async function load(target: string, force = false) {
-    if (loading || (archive[target] && !force) || target < LAUNCH || target > today) return;
-    setLoading(true);
+  // Foreground generate for a day the user is looking at (or regenerating).
+  async function generate(target: string, force = false) {
+    if (target < LAUNCH || target > today) return;
+    setBusy(true);
     setError(null);
-    try {
-      const d = await getDigest(target, settings.digestSports, players, wishlist, settings);
-      const withTime = { ...d, generatedAt: Date.now() };
-      const next = { ...readArchive(), [target]: withTime };
-      setArchive(next);
+    const got = force
+      ? await regenerateDigest(cacheKey, target, settings.digestSports, players, wishlist, settings)
+      : await ensureDigest(cacheKey, target, settings.digestSports, players, wishlist, settings);
+    setBusy(false);
+    if (got) {
+      refresh();
       setDate(target);
-      try { localStorage.setItem(cacheKey, JSON.stringify(next)); } catch { /* quota */ }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load the briefing.");
-    } finally {
-      setLoading(false);
+    } else {
+      setError(t("Couldn't load the briefing."));
     }
   }
 
-  // Load the saved archive once on open.
+  // On open: make sure today's briefing exists (generated here or by the app's
+  // background prefetch — de-duplicated), then quietly slide to it when ready, so
+  // you never sit on a loading screen. Until then you see the newest cached day.
   useEffect(() => {
-    setArchive(readArchive());
+    let alive = true;
+    const nothingToShow = !readDigestArchive(cacheKey)[date]; // first-ever open
+    if (nothingToShow) setBusy(true);
+    ensureDigest(cacheKey, today, settings.digestSports, players, wishlist, settings).then((got) => {
+      if (!alive) return;
+      if (nothingToShow) setBusy(false);
+      if (got) {
+        refresh();
+        if (!navigated.current) setDate(today);
+      } else if (nothingToShow) {
+        setError(t("Couldn't load the briefing."));
+      }
+    });
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-generate the briefing for whatever day you're viewing if it isn't saved
-  // yet — today on open, and any past day the moment you navigate to it. You
-  // never generate one by hand. `tried` stops a failed day from looping.
-  const tried = useRef<Set<string>>(new Set());
+  // Navigating to a past day with no saved briefing auto-generates it.
   useEffect(() => {
-    if (date < LAUNCH || date > today || loading) return;
-    if (archive[date] || tried.current.has(date)) return;
+    if (date === today || archive[date] || busy || tried.current.has(date)) return;
+    if (date < LAUNCH || date > today) return;
     tried.current.add(date);
-    load(date);
+    generate(date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, archive, loading]);
+  }, [date, archive]);
 
+  function goTo(target: string) {
+    navigated.current = true;
+    setDate(target);
+  }
   function retry(d: string) {
     tried.current.delete(d);
-    load(d);
+    generate(d);
   }
 
   const totallyQuiet = digest &&
@@ -155,14 +171,15 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
           <div style={{ minWidth: 0 }}>
             <div className="digest-eyebrow">☀️ {t("Morning update")}</div>
             <div className="digest-datebar">
-              <button className="iconbtn" disabled={date <= LAUNCH} onClick={() => setDate(addDays(date, -1))} aria-label="Previous day">‹</button>
+              <button className="iconbtn" disabled={date <= LAUNCH} onClick={() => goTo(addDays(date, -1))} aria-label="Previous day">‹</button>
               <button className="digest-datebtn" onClick={() => setShowCal((s) => !s)}>📅 {isToday ? t("Today") : human(date)}</button>
-              <button className="iconbtn" disabled={isToday} onClick={() => setDate(addDays(date, 1))} aria-label="Next day">›</button>
+              <button className="iconbtn" disabled={isToday} onClick={() => goTo(addDays(date, 1))} aria-label="Next day">›</button>
+              {busy && <span className="spinner" style={{ marginLeft: 6 }} />}
             </div>
             {digest && <h2 style={{ margin: "8px 0 0", fontSize: 22 }}>{digest.overview}</h2>}
           </div>
-          {digest && isToday && !loading && (
-            <button className="btn ghost small" onClick={() => load(today, true)} title={t("Pull a fresh briefing for today")}>
+          {digest && isToday && !busy && (
+            <button className="btn ghost small" onClick={() => generate(today, true)} title={t("Pull a fresh briefing for today")}>
               ↻ {t("Regenerate")}
             </button>
           )}
@@ -174,12 +191,14 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
             min={LAUNCH}
             max={today}
             has={(d) => !!archive[d]}
-            onPick={(d) => { setDate(d); setShowCal(false); }}
+            onPick={(d) => { goTo(d); setShowCal(false); }}
           />
         )}
 
-        {loading && <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}><span className="spinner" />{t("Reading the wire…")}</p>}
-        {error && !loading && (
+        {busy && !digest && (
+          <p className="muted" style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>{t("Putting your briefing together…")}</p>
+        )}
+        {error && !busy && (
           <div style={{ marginTop: 12 }}>
             <div className="error-box">{error}</div>
             <button className="btn secondary small" style={{ marginTop: 8 }} onClick={() => retry(date)}>{t("Try again")}</button>
