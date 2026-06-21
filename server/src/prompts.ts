@@ -191,14 +191,26 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
     APPRAISER_ROLE +
     `\n\nWrite a LIVELY morning update for a card collector — punchy and specific, like a sports/TCG newsletter. Cover ONLY these categories: ${list}. Every item is ONE vivid sentence with real names, teams, and numbers — no vague filler.` +
     `\n\nTHIS UPDATE IS ABOUT TALENT AND PERFORMANCE — how players and teams are actually DOING on the field/court — NOT card prices. The ONLY bucket where value, prices, sales, or set releases belong is "news" (the Market section). Keep money talk OUT of every other bucket.` +
+    `\n\n=== RELEVANCE BAR — only what collectors actually follow ===` +
+    `\nCover ONLY the top leagues and events a card collector would care about. A name belongs here only if a serious collector would recognize the player or chase the card.` +
+    `\n- Baseball: MLB only. NOT independent ball (Atlantic, Frontier, Pioneer, American Association), NOT routine minor-league moves. A top-100 prospect's MLB debut counts; a reliever activated off the 7-day IL in indy ball does NOT.` +
+    `\n- Basketball: NBA (and truly national NCAA/marquee internationals).` +
+    `\n- Football: NFL (and marquee NCAA).` +
+    `\n- Soccer: Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Champions League, MLS, and major internationals (World Cup, Euros, Copa).` +
+    `\n- Cricket: international fixtures and the IPL (and other top franchise leagues).` +
+    `\n- Hockey: NHL.` +
+    `\n- Pokémon/TCG: only premier-level events (Regionals, Special Events, Internationals, Worlds) and major online ladders.` +
+    `\nHARD EXCLUDE: independent leagues, low-minors roster churn, and routine transactions of non-stars — IL placements/activations, minor signings, waiver moves. These are NOISE. Nobody cares that the Cleburne Railroaders signed a reliever. Leave them out entirely.` +
+    `\n\n=== LEAD WITH THE BIG STUFF ===` +
+    `\nPrioritize the BIGGEST, most interesting stories first: star performances (multi-homer games, 40-point nights, hat tricks, no-hitters), milestones, records, walk-offs, marquee results, and genuinely surprising news. If a star did something notable in the window, it MUST be included — do not bury real headlines under minor transactions. "Kyle Schwarber hit 3 home runs" belongs in; "a team activated a middle reliever" does not.` +
     `\n\nStart with a one-line, energetic "overview" of the day.` +
     `\n\n"yourCards" (binder) and "yourWishlist": how the collector's OWN players/Pokémon are performing right now — big games, hot/cold streaks, injuries, tournament results. About the player/Pokémon, not the price. Empty arrays if none listed or nothing's happening; keep the two separate.` +
     `\n\nFor SPORTS categories (baseball, basketball, football, soccer, cricket, hockey), fill each section's buckets as:` +
-    `\n- "risingStars": players raising their game — breakouts, hot streaks, standout performances.` +
-    `\n- "declining": players slumping, struggling, or injured. Always include one or two when there's news.` +
-    `\n- "storylines": team momentum and races — win/loss streaks, playoff and award races.` +
-    `\n- "trades": real roster moves — trades, signings, call-ups, debuts.` +
-    `\n- "chase": up-and-coming talent worth keeping an eye on (prospects, rising young players) — about their TALENT, not buying.` +
+    `\n- "risingStars": players raising their game — breakouts, hot streaks, standout performances (e.g. a multi-HR night, a 40-burger).` +
+    `\n- "declining": notable players slumping, struggling, or injured. Stars only — not minor-leaguers.` +
+    `\n- "storylines": team momentum and races — win/loss streaks, playoff and award races, marquee results.` +
+    `\n- "trades": only NOTABLE roster moves — real trades, major signings, and top-prospect call-ups/debuts. Skip routine IL moves and minor-league churn entirely.` +
+    `\n- "chase": up-and-coming talent worth keeping an eye on (real prospects, rising young players) — about their TALENT, not buying.` +
     `\n- "news": THE MARKET section — card prices, notable sales, grading, and set/product releases.` +
     `\n\nFor POKÉMON there are no athletes, so frame "talent" as COMPETITIVE PERFORMANCE and POPULARITY — how much each card/Pokémon is "improving":` +
     `\n- "risingStars": cards or decks climbing the competitive metagame or surging in popularity (tournament results, deck usage).` +
@@ -207,7 +219,9 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
     `\n- "trades": leave empty unless there's a relevant reprint, ban, or errata.` +
     `\n- "chase": emerging cards/Pokémon gaining steam worth watching.` +
     `\n- "news": THE MARKET section — prices, big sales, set releases, grading news.` +
-    `\n\nCRUCIAL: report ONLY genuinely recent info — today or the last day or two — verified by live search. Do NOT pad with old or generic facts, and never invent anything. If a bucket or section has nothing real and recent, return an EMPTY array. Only include a section for each requested category.` +
+    `\n\n=== FRESH NEWS ONLY ===` +
+    `\nReport events that actually HAPPENED inside the time window — games played, moves made, results posted, news that BROKE in that window. Do NOT include ongoing discourse, reactions, retrospectives, or "still being talked about" takes on something that happened earlier. Example of what to EXCLUDE: criticism or hand-shake drama about a Finals that ended days before the window — the event is old, so it's out no matter how much it's trending. Verify every item's date with live search. If the underlying event is older than the window, drop it.` +
+    `\n\nCRUCIAL: report ONLY genuinely recent info from the window — verified by live search. Do NOT pad with old or generic facts, and never invent anything. If a bucket or section has nothing real and recent, return an EMPTY array. Only include a section for each requested category.` +
     buildConstraints(settings)
   );
 }

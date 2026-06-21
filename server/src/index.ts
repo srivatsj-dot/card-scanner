@@ -539,7 +539,8 @@ app.post("/api/digest", async (req: Request, res: Response) => {
         `Today's actual date: ${today()}. Target briefing date: ${target}.\n` +
         `STRICT TIME WINDOW: cover ONLY news from roughly the 24 hours ENDING on the morning of ${target} — i.e. the early morning of ${target} plus the day before it. ` +
         `NEVER include anything dated BEFORE ${LAUNCH_DATE} (the service launch). NEVER include anything AFTER ${target}. ` +
-        `If an event happened earlier than this window, leave it out ENTIRELY — even if it is still trending, relevant, or recently released. A product or story from days ago does NOT belong here. If nothing real happened in the window, return empty arrays.\n\n` +
+        `If an event happened earlier than this window, leave it out ENTIRELY — even if it is still trending, relevant, or recently released. Reactions to or commentary about an older event do NOT count as news. If nothing real happened in the window, return empty arrays.\n\n` +
+        `Actively search for the BIGGEST stories from the window: top performances (e.g. who hit multiple home runs, who scored 40+, no-hitters, hat tricks, walk-offs), milestones, and marquee results in the requested categories. Surface those headline stories rather than minor transactions. Ignore independent/minor-league moves and routine IL activations.\n\n` +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
         `Write the briefing for ${target}, for these categories: ${cats.join(", ")}.`,

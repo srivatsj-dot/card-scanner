@@ -103,8 +103,8 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
 
   // Generate the briefing for a specific date. Immutable: never regenerate a
   // day that already has one saved.
-  async function load(target: string) {
-    if (loading || archive[target] || target < LAUNCH || target > today) return;
+  async function load(target: string, force = false) {
+    if (loading || (archive[target] && !force) || target < LAUNCH || target > today) return;
     setLoading(true);
     setError(null);
     try {
@@ -150,6 +150,11 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
           {!digest && !loading && date >= LAUNCH && date <= today && (
             <button className="btn secondary small" onClick={() => load(date)}>
               {isToday ? t("Load briefing") : t("Generate this day's briefing")}
+            </button>
+          )}
+          {digest && isToday && !loading && (
+            <button className="btn ghost small" onClick={() => load(today, true)} title={t("Pull a fresh briefing for today")}>
+              ↻ {t("Regenerate")}
             </button>
           )}
         </div>
