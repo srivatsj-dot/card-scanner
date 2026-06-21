@@ -652,6 +652,9 @@ app.post("/api/digest", async (req: Request, res: Response) => {
           ? `=== VERIFIED RESULTS (authoritative — pulled directly from official league data for ${windowStart}) ===\n${verified}\n\n` +
             `For the sports covered by this VERIFIED block, build "risingStars" and "storylines" ONLY from these real results — these scores and stat lines are correct and correctly dated. Do NOT add, invent, search for, or "remember" any other games or performances for those sports. Pick the most notable lines (multi-HR/multi-goal games, gems, marquee or close finals), write each as one vivid sentence, and tag it [${windowStart}]. You may still use search for those sports' "trades" and "news" (transactions, set/market news) and for any sport NOT in the verified block.\n\n`
           : "") +
+        (cats.some((c) => c.toLowerCase().includes("pok")) && !/Pok[eé]mon TCG/i.test(verified)
+          ? `=== POKÉMON TCG — ALWAYS COVER ===\nThere's no pre-verified feed for Pokémon, so YOU must research it with Google Search. Find Pokémon TCG tournaments that CONCLUDED on ${windowStart} — Regionals, Special Events, International Championships, Worlds, and major online events — by checking Limitless TCG (limitlesstcg.com and play.limitlesstcg.com) and RK9 (rk9.gg). For each, report the winner and their winning deck/archetype, plus any clear metagame shifts (decks rising/falling). Put these in the Pokémon section's "risingStars"/"storylines". Only report what search actually confirms for ${windowStart}, date-tagged [${windowStart}]; never invent a tournament, winner, or deck. If genuinely nothing concluded that day, a lighter Pokémon section is fine — but do look first. Do NOT leave Pokémon empty just because it's harder than sports.\n\n`
+          : "") +
         (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
         (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
         `Write the briefing for ${target} (covering ${windowStart}), for these categories: ${cats.join(", ")}.`,
@@ -1004,7 +1007,7 @@ app.listen(PORT, () => {
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
-  console.log(`  Pokémon TCG results: ${hasLimitless ? "on (Limitless)" : "off (set LIMITLESS_API_KEY for real tournament results)"}`);
+  console.log(`  Pokémon TCG results: on — ${hasLimitless ? "Limitless API (exact)" : "search-grounded (Limitless/RK9); add LIMITLESS_API_KEY for exact data"}`);
   const emailMode = hasSmtp ? `SMTP (${SMTP_HOST}, sends to anyone)`
     : GMAIL_USER && GMAIL_APP_PASSWORD ? `Gmail (${GMAIL_USER}, sends to anyone)`
     : OUTLOOK_USER && OUTLOOK_APP_PASSWORD ? `Outlook (${OUTLOOK_USER}, sends to anyone)`

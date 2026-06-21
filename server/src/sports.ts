@@ -254,8 +254,9 @@ export async function cricketFacts(date: string): Promise<SportFacts | null> {
 
 // --- Pokémon TCG: tournament results + winning decks (Limitless, keyed) -----
 export async function pokemonFacts(date: string): Promise<SportFacts | null> {
-  if (!LIMITLESS_KEY) return null;
-  const auth = { "X-Access-Key": LIMITLESS_KEY };
+  // The key is optional — if set we get authoritative data; without it we still
+  // attempt the public endpoint (and the digest searches Limitless/RK9 anyway).
+  const auth: Record<string, string> = LIMITLESS_KEY ? { "X-Access-Key": LIMITLESS_KEY } : {};
   const list = await getJson(
     "https://play.limitlesstcg.com/api/tournaments?game=PTCG&limit=50",
     8000,
@@ -313,7 +314,7 @@ export async function verifiedSportsFacts(cats: string[], date: string): Promise
   if (has("soccer")) ESPN_BY_CAT.soccer.forEach((l) => jobs.push(espnFacts(l, date)));
   if (has("hockey", "nhl")) jobs.push(nhlFacts(date));
   if (has("cricket")) jobs.push(cricketFacts(date));
-  if (has("pok")) jobs.push(pokemonFacts(date)); // no-op unless LIMITLESS_API_KEY is set
+  if (has("pok")) jobs.push(pokemonFacts(date)); // best with LIMITLESS_API_KEY; search-grounded otherwise
 
   if (jobs.length === 0) return "";
   const facts = (await Promise.all(jobs.map((j) => j.catch(() => null)))).filter(
