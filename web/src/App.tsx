@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from "./types";
 import { defaultSettings } from "./types";
-import { searchCard, scanCard } from "./api";
+import { searchCard, scanCard, getDigest } from "./api";
 import { describeCard, sleep, DAY_MS, makeThumbnail } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
@@ -414,6 +414,43 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     if (Date.now() - last < 60 * 60 * 1000) return;
     localStorage.setItem(AUTO_REFRESH_KEY, String(Date.now()));
     refreshAll(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pre-generate today's morning briefing in the background on app load, so it's
+  // ready the moment you open Today instead of making you wait on the slowest
+  // call in the app. Writes into the same per-date archive DigestView reads, so
+  // it just shows up. Runs once, only if the morning update is enabled and today
+  // isn't already generated.
+  const digestPrefetched = useRef(false);
+  useEffect(() => {
+    if (digestPrefetched.current) return;
+    if (settings.morningUpdate === false) return;
+    digestPrefetched.current = true;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const d = new Date();
+    const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    let archive: Record<string, unknown> = {};
+    try {
+      const raw = JSON.parse(localStorage.getItem(DIGEST_KEY) || "{}");
+      // Skip the old single-digest cache shape; DigestView will discard it too.
+      if (raw && typeof raw === "object" && !raw.sections) archive = raw;
+    } catch { /* ignore */ }
+    if (archive[today]) return; // already have it
+    (async () => {
+      try {
+        const res = await getDigest(today, settings.digestSports, digestPlayers, digestWishlist, aiSettings);
+        // Re-read in case DigestView generated it meanwhile; don't clobber.
+        let cur: Record<string, unknown> = {};
+        try {
+          const raw = JSON.parse(localStorage.getItem(DIGEST_KEY) || "{}");
+          if (raw && typeof raw === "object" && !raw.sections) cur = raw;
+        } catch { /* ignore */ }
+        if (cur[today]) return;
+        const next = { ...cur, [today]: { ...res, generatedAt: Date.now() } };
+        try { localStorage.setItem(DIGEST_KEY, JSON.stringify(next)); } catch { /* quota */ }
+      } catch { /* offline / rate-limited — DigestView will retry on open */ }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
