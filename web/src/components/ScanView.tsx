@@ -4,6 +4,7 @@ import { scanCard } from "../api";
 import { makeThumbnail } from "../utils";
 import { useT } from "../translator";
 import ResultCard from "./ResultCard";
+import ResultSkeleton from "./ResultSkeleton";
 import CameraModal from "./CameraModal";
 
 interface Props {
@@ -141,6 +142,12 @@ export default function ScanView({ settings, result, onResult, onSave, onWishAll
 
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
       </div>
+
+      {loading && !result && (
+        <div style={{ marginTop: 16 }}>
+          <ResultSkeleton />
+        </div>
+      )}
 
       {result && (
         <div style={{ marginTop: 16 }}>

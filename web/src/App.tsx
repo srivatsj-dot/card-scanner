@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from "./types";
 import { defaultSettings } from "./types";
 import { searchCard, scanCard, getDigest } from "./api";
+import { searchCardCached } from "./cache";
 import { describeCard, sleep, DAY_MS, makeThumbnail } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
@@ -217,7 +218,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     if (!text) return;
     setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, text, result: undefined, previousMid: null } : w)));
     try {
-      const r = await searchCard(text, aiSettings);
+      const r = await searchCardCached(text, aiSettings);
       setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, result: r, lastRefreshedAt: Date.now() } : w)));
     } catch {
       /* leave text-only; user can retry via refresh */
@@ -238,7 +239,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     if (!confirm(`${t("Add to your binder?")} "${item.target}" ${t("will be added, and the cards you traded away removed.")}`)) return;
     let r: ScanResult;
     try {
-      r = await searchCard(item.target, aiSettings);
+      r = await searchCardCached(item.target, aiSettings);
     } catch (e) {
       toast(isRateLimit(e) ? t("Rate limited — try again in a minute") : t("Couldn't look that up — try again"));
       return;
@@ -275,7 +276,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     setWishlist((prev) => [{ id, addedAt: Date.now(), text }, ...prev]);
     setAdding(true);
     try {
-      const r = await searchCard(text, aiSettings);
+      const r = await searchCardCached(text, aiSettings);
       setWishlist((prev) => prev.map((w) => (w.id === id ? { ...w, result: r, lastRefreshedAt: Date.now() } : w)));
     } catch {
       /* leave as text-only; user can retry via refresh */
@@ -295,7 +296,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     toast(`${clean.length} ${t("added to wishlist")}`);
     for (const item of items) {
       try {
-        const r = await searchCard(item.text, aiSettings);
+        const r = await searchCardCached(item.text, aiSettings);
         setWishlist((prev) => prev.map((w) => (w.id === item.id ? { ...w, result: r, lastRefreshedAt: Date.now() } : w)));
         await sleep(800);
       } catch {

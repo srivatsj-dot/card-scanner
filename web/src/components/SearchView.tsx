@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { ScanResult, Settings } from "../types";
-import { searchCard } from "../api";
+import { searchCardCached, getCachedSearch } from "../cache";
 import { useT } from "../translator";
 import ResultCard from "./ResultCard";
+import ResultSkeleton from "./ResultSkeleton";
 
 interface Props {
   settings: Settings;
@@ -21,18 +22,32 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
   const [wished, setWished] = useState(false);
   const t = useT();
 
+  const [pending, setPending] = useState<string | null>(null);
+
   async function run() {
-    if (!text.trim()) return;
-    setLoading(true);
+    const q = text.trim();
+    if (!q) return;
     setError(null);
     setSaved(false);
     setWished(false);
+    // Instant if we've looked this card up recently.
+    const cached = getCachedSearch(q, settings);
+    if (cached) {
+      onResult(cached);
+      return;
+    }
+    // Otherwise show a result-shaped skeleton with the query as the title right
+    // away, and fill it in when the lookup lands.
+    onResult(null);
+    setPending(q);
+    setLoading(true);
     try {
-      onResult(await searchCard(text.trim(), settings));
+      onResult(await searchCardCached(q, settings));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Search failed.");
     } finally {
       setLoading(false);
+      setPending(null);
     }
   }
 
@@ -58,6 +73,12 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
         </button>
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
       </div>
+
+      {loading && !result && (
+        <div style={{ marginTop: 16 }}>
+          <ResultSkeleton title={pending || undefined} />
+        </div>
+      )}
 
       {result && (
         <div style={{ marginTop: 16 }}>
