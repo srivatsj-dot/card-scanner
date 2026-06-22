@@ -426,23 +426,31 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Pre-generate today's (and yesterday's) morning briefing in the background on
-  // app load, so it's ready the instant you open Today — you never wait on it or
-  // see a loading state. Generation is de-duplicated with the Today view via the
-  // shared digest module. Runs once per load, unless the morning update is off.
+  // Pre-generate the morning briefing for EVERY day from launch through today,
+  // in the background on app load, so they're all there and ready (today first,
+  // then back-fill the rest). Generation is de-duplicated with the Today view
+  // and cached immutably, so missing days are made once. Runs once per load.
   const digestPrefetched = useRef(false);
   useEffect(() => {
     if (digestPrefetched.current) return;
     if (settings.morningUpdate === false) return;
     digestPrefetched.current = true;
+    const LAUNCH = "2026-06-19";
     const pad = (n: number) => String(n).padStart(2, "0");
     const fmt = (dt: Date) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
-    const now = new Date();
-    const today = fmt(now);
-    const yest = fmt(new Date(now.getTime() - 86400000));
-    // Today first (what you'll see), then yesterday so flipping back is instant too.
-    ensureDigest(DIGEST_KEY, today, settings.digestSports, digestPlayers, digestWishlist, aiSettings)
-      .finally(() => ensureDigest(DIGEST_KEY, yest, settings.digestSports, digestPlayers, digestWishlist, aiSettings));
+    const today = fmt(new Date());
+    // Build the list today → launch (newest first), then generate sequentially
+    // so a back-fill doesn't fire a burst of calls at once.
+    const days: string[] = [];
+    for (let d = new Date(); fmt(d) >= LAUNCH; d.setDate(d.getDate() - 1)) days.push(fmt(d));
+    (async () => {
+      for (const day of days) {
+        if (day < LAUNCH || day > today) continue;
+        try {
+          await ensureDigest(DIGEST_KEY, day, settings.digestSports, digestPlayers, digestWishlist, aiSettings);
+        } catch { /* keep going; missing days retry next load */ }
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
