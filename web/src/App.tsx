@@ -427,6 +427,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   useEffect(() => {
     if (digestPrefetched.current) return;
     if (settings.morningUpdate === false) return;
+    if (!digestPlayers.length && !digestWishlist.length) return; // nothing personal to brief on
     digestPrefetched.current = true;
     const pad = (n: number) => String(n).padStart(2, "0");
     const fmt = (dt: Date) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
@@ -443,6 +444,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   // background right at 12:00 AM so it's waiting when you next look.
   useEffect(() => {
     if (settings.morningUpdate === false) return;
+    if (!digestPlayers.length && !digestWishlist.length) return;
     const now = new Date();
     const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 30);
     const ms = nextMidnight.getTime() - now.getTime();
