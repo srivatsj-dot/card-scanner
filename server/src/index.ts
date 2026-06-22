@@ -188,6 +188,9 @@ const ANALYZE_TEMPERATURE = 0.2;
 // Disable thinking for these structured calls and give a generous output cap.
 const NO_THINKING = { thinkingBudget: 0 } as const;
 const MAX_OUTPUT = 8192;
+// Let the model "think" on card identification — more accurate reads of sets,
+// parallels, and serials — at the cost of a little latency. Other calls stay at 0.
+const SCAN_THINKING = Number(process.env.SCAN_THINKING_BUDGET ?? 1536);
 
 // Try the configured model first (best accuracy), then fall back to flash-lite
 // which has a separate, more generous free-tier quota. Lets a rate-limited
@@ -204,14 +207,14 @@ const groundedFor = (settings?: Settings) => USE_GROUNDING && settings?.liveData
  * Single grounded call that returns JSON. Google Search grounding can't be
  * combined with responseSchema, so we ask for JSON in the prompt and parse it.
  */
-async function groundedJson<T>(model: string, systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+async function groundedJson<T>(model: string, systemInstruction: string, parts: Part[], schema: unknown, thinkingBudget = 0): Promise<T> {
   const response = await ai.models.generateContent({
     model,
     contents: [{ role: "user", parts }],
     config: {
       temperature: ANALYZE_TEMPERATURE,
       maxOutputTokens: MAX_OUTPUT,
-      thinkingConfig: NO_THINKING,
+      thinkingConfig: { thinkingBudget },
       systemInstruction:
         systemInstruction +
         `\n\nToday's date is ${today()}. Use Google Search to verify the subject's CURRENT form/standing and the card's CURRENT market value — do not rely on memory for anything time-sensitive.` +
@@ -225,12 +228,12 @@ async function groundedJson<T>(model: string, systemInstruction: string, parts: 
   try {
     return parseJson<T>(text);
   } catch {
-    return structure<T>(model, systemInstruction, text, schema);
+    return structure<T>(model, systemInstruction, text, schema, thinkingBudget);
   }
 }
 
 /** Reshape free text into the structured schema (fallback / non-grounded helper). */
-async function structure<T>(model: string, systemInstruction: string, analysis: string, schema: unknown): Promise<T> {
+async function structure<T>(model: string, systemInstruction: string, analysis: string, schema: unknown, thinkingBudget = 0): Promise<T> {
   const response = await ai.models.generateContent({
     model,
     contents:
@@ -239,7 +242,7 @@ async function structure<T>(model: string, systemInstruction: string, analysis: 
     config: {
       temperature: ANALYZE_TEMPERATURE,
       maxOutputTokens: MAX_OUTPUT,
-      thinkingConfig: NO_THINKING,
+      thinkingConfig: { thinkingBudget },
       systemInstruction,
       responseMimeType: "application/json",
       responseSchema: schema as any,
@@ -249,14 +252,14 @@ async function structure<T>(model: string, systemInstruction: string, analysis: 
 }
 
 /** Single-pass structured generation, no grounding. */
-async function structuredDirect<T>(model: string, systemInstruction: string, parts: Part[], schema: unknown): Promise<T> {
+async function structuredDirect<T>(model: string, systemInstruction: string, parts: Part[], schema: unknown, thinkingBudget = 0): Promise<T> {
   const response = await ai.models.generateContent({
     model,
     contents: [{ role: "user", parts }],
     config: {
       temperature: ANALYZE_TEMPERATURE,
       maxOutputTokens: MAX_OUTPUT,
-      thinkingConfig: NO_THINKING,
+      thinkingConfig: { thinkingBudget },
       systemInstruction,
       responseMimeType: "application/json",
       responseSchema: schema as any,
@@ -270,16 +273,16 @@ async function structuredDirect<T>(model: string, systemInstruction: string, par
  * but degrading gracefully: a non-429 grounding failure drops grounding on the
  * same model; a rate limit moves on to the next (higher-quota) model.
  */
-async function analyze<T>(systemInstruction: string, parts: Part[], schema: unknown, grounded: boolean): Promise<T> {
+async function analyze<T>(systemInstruction: string, parts: Part[], schema: unknown, grounded: boolean, thinkingBudget = 0): Promise<T> {
   let lastErr: unknown;
   for (const model of MODELS) {
     try {
-      if (!grounded) return await structuredDirect<T>(model, systemInstruction, parts, schema);
+      if (!grounded) return await structuredDirect<T>(model, systemInstruction, parts, schema, thinkingBudget);
       try {
-        return await groundedJson<T>(model, systemInstruction, parts, schema);
+        return await groundedJson<T>(model, systemInstruction, parts, schema, thinkingBudget);
       } catch (err) {
         if (isRateLimit(err)) throw err; // let the model-fallback loop handle it
-        return await structuredDirect<T>(model, systemInstruction, parts, schema); // empty/grounding issue
+        return await structuredDirect<T>(model, systemInstruction, parts, schema, thinkingBudget); // empty/grounding issue
       }
     } catch (err) {
       lastErr = err;
@@ -355,7 +358,7 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   ];
 
   try {
-    const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, groundedFor(settings));
+    const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, groundedFor(settings), SCAN_THINKING);
     await applyEbayPrice(result, settings);
     res.json(result);
   } catch (err) {

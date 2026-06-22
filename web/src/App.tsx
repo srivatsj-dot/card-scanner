@@ -24,9 +24,10 @@ import Logo from "./components/Logo";
 import TradeUpView from "./components/TradeUpView";
 import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
+import HomeView from "./components/HomeView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount } from "./auth";
 
-type View = "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
+type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -56,7 +57,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const DIGEST_KEY = `card-scanner-digest:${user}`;
   const WANTED_KEY = `card-scanner-wanted:${user}`;
 
-  const [view, setView] = useState<View>("scan");
+  const [view, setView] = useState<View>("home");
   const [settings, setSettings] = useState<Settings>(() => {
     const stored = loadJSON<Partial<Settings> | null>(SETTINGS_KEY, null);
     // First run: default the language to the browser's language.
@@ -468,6 +469,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           <h1>Card-O-Rama</h1>
         </div>
         <nav className="side-nav">
+          {navBtn("home", <>🏠 {t("Home")}</>)}
           {navBtn("today", <>☀️ {t("Today")}</>)}
           <div className="side-group">{t("Identify")}</div>
           {navBtn("scan", t("Scan"))}
@@ -512,6 +514,9 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           <div className="brand"><Logo size={26} /><h1>Card-O-Rama</h1></div>
         </div>
 
+      {view === "home" && (
+        <HomeView saved={saved} wishlist={wishlist} scans={scans} currency={settings.currency} onGo={(v) => setView(v)} />
+      )}
       {view === "today" && (
         <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
       )}
