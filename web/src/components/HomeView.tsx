@@ -73,6 +73,11 @@ export default function HomeView({ saved, wishlist, scans, currency, onGo }: Pro
         <p className="muted" style={{ margin: 0 }}>
           {t("Values and outlooks are AI estimates from your photo plus live data — a smart starting point, not a market feed. Always sanity-check before a big trade.")}
         </p>
+        <p className="muted" style={{ margin: "10px 0 0", fontSize: 13 }}>
+          <a href="/faq.html" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{t("FAQ")}</a>
+          {" · "}
+          <a href="/privacy.html" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{t("Privacy Policy")}</a>
+        </p>
       </div>
     </div>
   );

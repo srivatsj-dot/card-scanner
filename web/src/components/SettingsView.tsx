@@ -258,6 +258,8 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, emai
       </button>
 
       <p className="muted" style={{ fontSize: 12, marginTop: 22, marginBottom: 0 }}>
+        <a href="/faq.html" target="_blank" rel="noopener" style={{ color: "var(--muted)" }}>{t("FAQ")}</a>
+        {" · "}
         <a href="/privacy.html" target="_blank" rel="noopener" style={{ color: "var(--muted)" }}>{t("Privacy Policy")}</a>
       </p>
     </div>
