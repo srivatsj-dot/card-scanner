@@ -192,8 +192,8 @@ const ANALYZE_TEMPERATURE = 0.2;
 const NO_THINKING = { thinkingBudget: 0 } as const;
 const MAX_OUTPUT = 8192;
 // Let the model "think" on card identification — more accurate reads of sets,
-// parallels, and serials. Other calls stay at 0.
-const SCAN_THINKING = 2048;
+// parallels, and serials, while staying quick. Other calls stay at 0.
+const SCAN_THINKING = 1024;
 
 // Try the configured model first (best accuracy), then fall back to flash-lite
 // which has a separate, more generous free-tier quota. Lets a rate-limited
@@ -361,22 +361,36 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   ];
 
   try {
-    const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, groundedFor(settings), SCAN_THINKING);
+    // A photo scan identifies from the image alone (no web grounding) so it
+    // returns fast; a text-only lookup keeps grounding since it has no image to
+    // read. Real pricing follows: the Pokémon catalog here, and the grounded
+    // sold-comp double-check off the critical path via /api/price-check.
+    const grounded = images.length > 0 ? false : groundedFor(settings);
+    const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, grounded, SCAN_THINKING);
     const ebayApplied = await applyEbayPrice(result, settings);
-    let realPriced = ebayApplied;
-    if (!ebayApplied && isPokemon(result)) {
-      const before = result.estimatedValue?.mid;
-      await applyPokemonPrice(result); // free real Pokémon market prices
-      realPriced = result.estimatedValue?.mid !== before;
-    }
-    // Double-check anything still on the model's own estimate against sold comps.
-    if (!realPriced) await verifyPrice(result, settings);
-
+    if (!ebayApplied && isPokemon(result)) await applyPokemonPrice(result); // free real Pokémon prices
     res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
   }
+});
+
+// Off-critical-path price double-check: the client calls this after showing a
+// scan/search result to refine the value against recent sold comps. Pokémon and
+// eBay-priced cards already have real prices, so they're returned unchanged.
+app.post("/api/price-check", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  const { card, settings } = req.body as { card?: ScanResultShape; settings?: Settings };
+  const result = card || {};
+  try {
+    if (result.identified && result.estimatedValue && !isPokemon(result)) {
+      await verifyPrice(result, settings);
+    }
+  } catch {
+    /* keep the original estimate */
+  }
+  res.json({ estimatedValue: result.estimatedValue });
 });
 
 // Minimal shape we need to read/override on a scan result.

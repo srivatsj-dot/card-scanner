@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { ScanResult, Settings } from "../types";
-import { scanCard } from "../api";
+import { scanCard, verifyPrice } from "../api";
 import { makeThumbnail } from "../utils";
 import { useT } from "../translator";
 import ResultCard from "./ResultCard";
@@ -51,7 +51,14 @@ export default function ScanView({ settings, result, onResult, onSave, onWishAll
     setLoading(true);
     setError(null);
     try {
-      onResult(await scanCard(images, settings));
+      const r = await scanCard(images, settings);
+      onResult(r);
+      // Refine the price against sold comps in the background, then update.
+      if (r.identified) {
+        verifyPrice(r, settings)
+          .then((v) => { if (v?.estimatedValue) onResult({ ...r, estimatedValue: v.estimatedValue }); })
+          .catch(() => {});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed.");
     } finally {

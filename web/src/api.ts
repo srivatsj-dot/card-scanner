@@ -33,6 +33,11 @@ export function searchCard(text: string, settings: Settings): Promise<ScanResult
   return postJson<ScanResult>("/api/scan", { text, settings });
 }
 
+/** Refine a result's price against recent sold comps (runs after the scan shows). */
+export function verifyPrice(card: ScanResult, settings: Settings): Promise<{ estimatedValue: ScanResult["estimatedValue"] }> {
+  return postJson<{ estimatedValue: ScanResult["estimatedValue"] }>("/api/price-check", { card, settings });
+}
+
 export interface NotifyResult {
   ok: boolean;
   via?: string;

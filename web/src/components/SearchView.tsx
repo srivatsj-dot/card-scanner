@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ScanResult, Settings } from "../types";
 import { searchCardCached, getCachedSearch } from "../cache";
+import { verifyPrice } from "../api";
 import { useT } from "../translator";
 import ResultCard from "./ResultCard";
 import ResultSkeleton from "./ResultSkeleton";
@@ -42,7 +43,13 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
     setPending(q);
     setLoading(true);
     try {
-      onResult(await searchCardCached(q, settings));
+      const r = await searchCardCached(q, settings);
+      onResult(r);
+      if (r.identified) {
+        verifyPrice(r, settings)
+          .then((v) => { if (v?.estimatedValue) onResult({ ...r, estimatedValue: v.estimatedValue }); })
+          .catch(() => {});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Search failed.");
     } finally {
