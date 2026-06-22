@@ -191,8 +191,8 @@ const ANALYZE_TEMPERATURE = 0.2;
 const NO_THINKING = { thinkingBudget: 0 } as const;
 const MAX_OUTPUT = 8192;
 // Let the model "think" on card identification — more accurate reads of sets,
-// parallels, and serials — at the cost of a little latency. Other calls stay at 0.
-const SCAN_THINKING = Number(process.env.SCAN_THINKING_BUDGET ?? 2048);
+// parallels, and serials. Other calls stay at 0.
+const SCAN_THINKING = 2048;
 
 // Try the configured model first (best accuracy), then fall back to flash-lite
 // which has a separate, more generous free-tier quota. Lets a rate-limited
@@ -397,19 +397,17 @@ interface ScanResultShape {
 
 const isPokemon = (r: ScanResultShape) => /pok[eé]mon/i.test(r.sport || "");
 
-// Off only if explicitly disabled. The second-pass comp check that re-prices.
-const PRICE_DOUBLE_CHECK = process.env.PRICE_DOUBLE_CHECK !== "false";
-
 interface PriceVerifyShape {
   low: number; mid: number; high: number; currency: string;
   confidence: string; comps: string[]; note: string;
 }
 
 // Second pass: re-price the card against real recent SOLD comps and overwrite
-// the estimate. Skipped when a real-data price (eBay/Pokémon catalog) already
-// set it, or when grounding is off. Best-effort — leaves the draft on any error.
+// the estimate. Always runs (and always searches live comps) so prices stay
+// accurate. Skipped only when a real-data price (eBay/Pokémon catalog) already
+// set it. Best-effort — leaves the first estimate intact on any error.
 async function verifyPrice(result: ScanResultShape, settings?: Settings) {
-  if (!PRICE_DOUBLE_CHECK || !groundedFor(settings) || !result?.identified || !result.estimatedValue) return;
+  if (!result?.identified || !result.estimatedValue) return;
   const desc = cardQuery(result);
   if (!desc) return;
   const v = result.estimatedValue;
@@ -424,7 +422,7 @@ async function verifyPrice(result: ScanResultShape, settings?: Settings) {
           `Draft estimate to check: ${v.currency} — low ${v.low}, mid ${v.mid}, high ${v.high}.`,
       }],
       priceVerifySchema,
-      groundedFor(settings),
+      true, // always ground — the whole point is real sold comps
       1024
     );
     if (checked && [checked.low, checked.mid, checked.high].every((n) => Number.isFinite(n) && n >= 0)) {
@@ -1097,7 +1095,7 @@ app.listen(PORT, () => {
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
   console.log(`  Pokémon prices: on (pokemontcg.io — free TCGplayer/Cardmarket market data, no key)`);
-  console.log(`  price double-check: ${PRICE_DOUBLE_CHECK ? "on (second sold-comp pass; set PRICE_DOUBLE_CHECK=false to disable)" : "off"}`);
+  console.log(`  price double-check: on (second sold-comp pass on every appraisal)`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
   console.log(`  Pokémon TCG results: on — ${hasLimitless ? "Limitless API (exact)" : "search-grounded (Limitless/RK9); add LIMITLESS_API_KEY for exact data"}`);
   const emailMode = hasSmtp ? `SMTP (${SMTP_HOST}, sends to anyone)`
