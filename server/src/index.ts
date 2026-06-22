@@ -9,6 +9,7 @@ import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
 import { pokemonLookup } from "./prices.js";
+import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
 import { verifiedSportsFacts, hasLimitless } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema } from "./schemas.js";
@@ -361,6 +362,20 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   ];
 
   try {
+    // Reverse-image search (Google Vision) on the photo: feed the web's best
+    // guess of the card to the model as a strong identification hint. Optional.
+    if (images.length > 0 && hasVision) {
+      const guess = await webDetect(images[0].imageBase64);
+      if (guess && (guess.bestGuess || guess.entities.length)) {
+        scanParts.unshift({
+          text:
+            `REVERSE-IMAGE SEARCH of this exact photo (Google) suggests: ` +
+            (guess.bestGuess ? `"${guess.bestGuess}"` : "") +
+            (guess.entities.length ? `${guess.bestGuess ? "; related: " : ""}${guess.entities.join(", ")}` : "") +
+            `. Use this as a strong hint for the player, set, year, and product — but still trust exactly what's printed on the card if they conflict.`,
+        });
+      }
+    }
     // A photo scan identifies from the image alone (no web grounding) so it
     // returns fast; a text-only lookup keeps grounding since it has no image to
     // read. Real pricing follows: the Pokémon catalog here, and the grounded
@@ -1225,6 +1240,7 @@ app.listen(PORT, () => {
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
   console.log(`  Pokémon prices: on (pokemontcg.io — free TCGplayer/Cardmarket market data, no key)`);
+  console.log(`  reverse-image ID: ${hasVision ? "on (Google Vision web detection)" : "off (set GOOGLE_VISION_API_KEY to boost photo ID)"}`);
   console.log(`  price double-check: on (second sold-comp pass on every appraisal)`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
   console.log(`  Pokémon TCG results: on — ${hasLimitless ? "Limitless API (exact)" : "search-grounded (Limitless/RK9); add LIMITLESS_API_KEY for exact data"}`);
