@@ -99,9 +99,6 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
   const navigated = useRef(false); // did the user pick a day manually?
   const tried = useRef<Set<string>>(new Set());
 
-  // The briefing is personal — it only makes sense once you're collecting.
-  const hasCollection = players.length > 0 || wishlist.length > 0;
-
   const isToday = date === today;
   const digest = archive[date] || null;
 
@@ -128,7 +125,6 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
   // background prefetch — de-duplicated), then quietly slide to it when ready, so
   // you never sit on a loading screen. Until then you see the newest cached day.
   useEffect(() => {
-    if (!hasCollection) return;
     let alive = true;
     const nothingToShow = !readDigestArchive(cacheKey)[date]; // first-ever open
     if (nothingToShow) setBusy(true);
@@ -148,7 +144,6 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
 
   // Navigating to a past day with no saved briefing auto-generates it.
   useEffect(() => {
-    if (!hasCollection) return;
     if (date === today || archive[date] || busy || tried.current.has(date)) return;
     if (date < LAUNCH || date > today) return;
     tried.current.add(date);
@@ -168,20 +163,6 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
   const totallyQuiet = digest &&
     !digest.yourCards.length && !digest.yourWishlist.length &&
     digest.sections.every((s) => !(s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length));
-
-  // No collection yet → a personal briefing has nothing to be about. Show an
-  // invitation instead of a feed of players you don't follow.
-  if (!hasCollection) {
-    return (
-      <div className="card digest-hero">
-        <div className="digest-eyebrow">☀️ {t("Morning update")}</div>
-        <h2 style={{ margin: "10px 0 6px", fontSize: 22 }}>{t("Your briefing is personal")}</h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          {t("Scan a card into your binder or add one to your wishlist, and each morning you'll get news on your players and cards here — performances, trends, and market moves that actually matter to you.")}
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div>
