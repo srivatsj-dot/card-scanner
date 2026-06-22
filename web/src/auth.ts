@@ -5,6 +5,8 @@
 // never leave the device — it just lets multiple people share a browser and
 // keep separate collections, with a real log-in/log-out gate.
 
+import { cloudEnabled, cloudRegister, cloudLogin, cloudLogout, cloudActive, cloudDeleteAccount } from "./cloud";
+
 const USERS_KEY = "card-scanner-users";
 const SESSION_KEY = "card-scanner-session";
 
@@ -17,6 +19,7 @@ const DATA_BASES = [
   "card-scanner-scans",
   "card-scanner-trades",
   "card-scanner-earned",
+  "card-scanner-wanted",
 ];
 
 interface StoredUser {
@@ -24,8 +27,24 @@ interface StoredUser {
   salt: string; // hex ("" for Google accounts)
   hash: string; // hex ("" for Google accounts)
   createdAt: number;
-  provider?: "local" | "google";
+  provider?: "local" | "google" | "cloud";
   email?: string;
+}
+
+// Mirror a server (cloud) account into the local users map so currentUser(),
+// displayNameOf(), and emailOf() keep working unchanged. No password is stored
+// locally for cloud accounts — the server holds it.
+function upsertCloudUser(key: string, display: string, email: string | null) {
+  const users = loadUsers();
+  users[key] = {
+    display,
+    salt: "",
+    hash: "",
+    createdAt: users[key]?.createdAt || Date.now(),
+    provider: "cloud",
+    email: email || undefined,
+  };
+  saveUsers(users);
 }
 type Users = Record<string, StoredUser>;
 
@@ -152,6 +171,13 @@ function migrateLegacy(userKey: string) {
 }
 
 export async function register(name: string, password: string, email: string): Promise<void> {
+  // Cloud mode: the server owns the account so it works on any device.
+  if (await cloudEnabled()) {
+    const r = await cloudRegister(name.trim(), email.trim(), password);
+    upsertCloudUser(r.key, r.display, r.email);
+    localStorage.setItem(SESSION_KEY, r.key);
+    return;
+  }
   const display = name.trim();
   const key = keyOf(name);
   if (display.length < 2) throw new Error("Username needs at least 2 characters.");
@@ -173,6 +199,12 @@ export async function register(name: string, password: string, email: string): P
 }
 
 export async function login(name: string, password: string): Promise<void> {
+  if (await cloudEnabled()) {
+    const r = await cloudLogin(name.trim(), password);
+    upsertCloudUser(r.key, r.display, r.email);
+    localStorage.setItem(SESSION_KEY, r.key);
+    return;
+  }
   const key = keyOf(name);
   const user = loadUsers()[key];
   if (!user) throw new Error("No account with that username.");
@@ -183,11 +215,13 @@ export async function login(name: string, password: string): Promise<void> {
 }
 
 export function logout(): void {
+  if (cloudActive()) void cloudLogout(); // end the server session too
   localStorage.removeItem(SESSION_KEY);
 }
 
-// Permanently remove an account and all of its data from this device.
+// Permanently remove an account and all of its data.
 export function deleteAccount(key: string): void {
+  if (cloudActive()) void cloudDeleteAccount(); // delete it on the server too
   const users = loadUsers();
   delete users[key];
   saveUsers(users);

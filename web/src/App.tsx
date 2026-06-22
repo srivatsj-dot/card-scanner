@@ -26,6 +26,7 @@ import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import HomeView from "./components/HomeView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount } from "./auth";
+import { cloudActive, schedulePush } from "./cloud";
 
 type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
@@ -142,6 +143,11 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   useEffect(() => { localStorage.setItem(WANTED_KEY, JSON.stringify(later)); }, [later]);
   useEffect(() => { localStorage.setItem(SCANS_KEY, JSON.stringify(scans)); }, [scans]);
   useEffect(() => { localStorage.setItem(TRADES_KEY, JSON.stringify(trades)); }, [trades]);
+  // Cross-device sync: when signed into a cloud account, push the collection to
+  // the server (debounced) whenever any synced state changes.
+  useEffect(() => {
+    if (cloudActive()) schedulePush(user);
+  }, [settings, saved, wishlist, later, scans, trades, theme, user]);
   // Unlock-achievement toasts.
   useEffect(() => {
     const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language));

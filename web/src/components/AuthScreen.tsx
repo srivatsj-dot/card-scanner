@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { login, register, hasAnyAccount, loginWithGoogle, accountByEmail, resetPassword, maskEmail } from "../auth";
 import { notifySignup, sendResetCode } from "../api";
+import { cloudEnabled, cloudForgot, cloudReset } from "../cloud";
 import { trackSignup } from "../analytics";
 import { useT } from "../translator";
 import Logo from "./Logo";
@@ -32,6 +33,20 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   async function startReset() {
     if (busy) return;
     setError(null); setInfo(null);
+    // Cloud accounts: the server handles lookup + emailing the code.
+    if (await cloudEnabled()) {
+      setBusy(true);
+      try {
+        await cloudForgot(resetEmail.trim());
+        setResetStep("code");
+        setInfo(`${t("If that email has an account, we sent it a 6-digit code.")}`);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't send the code.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const acct = accountByEmail(resetEmail);
     if (!acct) { setError(t("No account on this device uses that email.")); return; }
     if (acct.isGoogle) { setError(t("This account uses Google sign-in — use Continue with Google to get back in.")); return; }
@@ -57,6 +72,21 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   async function finishReset() {
     if (busy) return;
     setError(null);
+    // Cloud accounts: the server verifies the code and resets the password.
+    if (await cloudEnabled()) {
+      setBusy(true);
+      try {
+        await cloudReset(resetEmail.trim(), resetCodeInput.trim(), password);
+        setMode("login");
+        setResetStep("id");
+        setInfo(t("Password reset — sign in with your new password."));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't reset.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const rec = codeRef.current;
     if (!rec || Date.now() > rec.exp) { setError(t("The code expired — start over.")); return; }
     if (resetCodeInput.trim() !== rec.code) { setError(t("That code doesn't match. Check the email.")); return; }
