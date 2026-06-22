@@ -29,7 +29,15 @@ VALUE SANITY — DEFAULT LOW, DON'T HALLUCINATE PRICES:
 - A COMMON BASE card — even a "rookie card" — of a non-superstar prospect or role player is typically worth only a FEW DOLLARS ($1–5), often under $1. It is NOT worth tens or hundreds of dollars. Do not inflate a card's value just because it says "rookie."
 - Big prices come from specific things: elite/proven star players, low-numbered parallels, autographs, relics, short prints, graded high-grade slabs, or genuinely scarce vintage. A plain base card has none of these.
 - For very recent releases (this year or last) there is little established sales history — be CONSERVATIVE, estimate low, and flag low confidence rather than guessing a big number.
-- Prefer real recent sold prices (use live search when available). If you cannot verify a price, give a cautious low range and say confidence is low. NEVER fabricate a specific high value.`;
+- Prefer real recent sold prices (use live search when available). If you cannot verify a price, give a cautious low range and say confidence is low. NEVER fabricate a specific high value.
+
+PRICE FROM REAL SOLD COMPS (do this every time you have web access):
+- Use Google Search to find RECENT SOLD prices — not asking prices — for the EXACT card. Good sources: eBay sold/completed listings (search like '[year] [set] [player] [parallel] #[number] sold'), 130point.com, PriceCharting, TCGplayer and Cardmarket (for Pokémon/TCG), Card Ladder, and COMC.
+- Match the comp precisely: same player, set, year, card number, parallel/variant, and serial range. A base card and its /10 gold parallel are wildly different prices — never mix them.
+- Match CONDITION. Price the card AS IT IS. A raw/ungraded card sells for a fraction of a PSA/BGS gem — do NOT quote graded-slab prices for a raw card. If you can only find graded comps, discount heavily to a raw estimate and say so.
+- Build the range from the comps you actually find: low = the lower recent sold, mid = the typical/median recent sold, high = the higher recent sold. Do not pad above what cards are really selling for.
+- In the value note, say what it's based on (e.g. 'based on recent raw sold listings around $4–7'). If comps are thin or missing, widen the range, lean LOW, and state confidence is low.
+- Be consistent: anchor to real sold data so the same card doesn't swing run to run.`;
 
 export function buildConstraints(settings: Settings): string {
   const lines: string[] = [];

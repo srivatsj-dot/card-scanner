@@ -8,6 +8,7 @@ import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
+import { pokemonPrice } from "./prices.js";
 import { verifiedSportsFacts, hasLimitless } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema } from "./schemas.js";
 import {
@@ -359,7 +360,9 @@ app.post("/api/scan", async (req: Request, res: Response) => {
 
   try {
     const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, groundedFor(settings), SCAN_THINKING);
-    await applyEbayPrice(result, settings);
+    const ebayApplied = await applyEbayPrice(result, settings);
+    if (!ebayApplied) await applyPokemonPrice(result); // free real prices for Pokémon
+
     res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);
@@ -371,6 +374,7 @@ app.post("/api/scan", async (req: Request, res: Response) => {
 interface ScanResultShape {
   identified?: boolean;
   player?: string | null;
+  sport?: string | null;
   year?: string | null;
   manufacturer?: string | null;
   setName?: string | null;
@@ -378,8 +382,11 @@ interface ScanResultShape {
   parallel?: string | null;
   specialEdition?: string | null;
   serialNumber?: string | null;
+  pokemon?: { setNumber?: string | null } | null;
   estimatedValue?: { low: number; mid: number; high: number; currency: string; note: string };
 }
+
+const isPokemon = (r: ScanResultShape) => /pok[eé]mon/i.test(r.sport || "");
 
 function cardQuery(r: ScanResultShape): string {
   return [r.year, r.manufacturer, r.setName, r.player, r.parallel, r.cardNumber ? `#${r.cardNumber}` : "", r.serialNumber]
@@ -389,16 +396,33 @@ function cardQuery(r: ScanResultShape): string {
 }
 
 // Replace the model's value with a real eBay-listings range when available.
-async function applyEbayPrice(result: ScanResultShape, settings?: Settings) {
-  if (!hasEbay || !result?.identified || !result.estimatedValue) return;
+async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Promise<boolean> {
+  if (!hasEbay || !result?.identified || !result.estimatedValue) return false;
   const ep = await ebayPrice(cardQuery(result), settings?.region);
-  if (!ep) return;
+  if (!ep) return false;
   result.estimatedValue = {
     low: Math.round(ep.low),
     mid: Math.round(ep.mid),
     high: Math.round(ep.high),
     currency: ep.currency,
     note: `Based on ${ep.count} current eBay listings (${ep.currency}). Asking prices — actual sold prices run a bit lower.`,
+  };
+  return true;
+}
+
+// Real Pokémon market price from pokemontcg.io (free, no key). Money formatting
+// keeps 2 decimals for small values so $3.42 doesn't round to $3.
+async function applyPokemonPrice(result: ScanResultShape) {
+  if (!result?.identified || !result.estimatedValue || !isPokemon(result)) return;
+  const cp = await pokemonPrice(result.player || "", result.pokemon?.setNumber || result.cardNumber);
+  if (!cp) return;
+  const r2 = (n: number) => (n >= 20 ? Math.round(n) : Math.round(n * 100) / 100);
+  result.estimatedValue = {
+    low: r2(cp.low),
+    mid: r2(cp.mid),
+    high: r2(cp.high),
+    currency: cp.currency,
+    note: `Based on current ${cp.source} market prices for this card (raw/ungraded).`,
   };
 }
 
@@ -1013,6 +1037,7 @@ app.listen(PORT, () => {
   console.log(`  provider: google-gemini  models: ${MODELS.join(" → ")}  grounding: ${USE_GROUNDING ? "on" : "off"}`);
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
+  console.log(`  Pokémon prices: on (pokemontcg.io — free TCGplayer/Cardmarket market data, no key)`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
   console.log(`  Pokémon TCG results: on — ${hasLimitless ? "Limitless API (exact)" : "search-grounded (Limitless/RK9); add LIMITLESS_API_KEY for exact data"}`);
   const emailMode = hasSmtp ? `SMTP (${SMTP_HOST}, sends to anyone)`
