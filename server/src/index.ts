@@ -9,6 +9,7 @@ import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
 import { pokemonPrice } from "./prices.js";
+import * as cloud from "./cloud.js";
 import { verifiedSportsFacts, hasLimitless } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema } from "./schemas.js";
 import {
@@ -296,7 +297,7 @@ async function analyze<T>(systemInstruction: string, parts: Part[], schema: unkn
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey });
+  res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey, cloud: cloud.hasCloud });
 });
 
 // --- Scan a card (one or more photos: front, back, angled) -----------------
@@ -1072,6 +1073,109 @@ app.post("/api/reset-code", async (req: Request, res: Response) => {
   res.status(result.ok ? 200 : result.status || 200).json(result);
 });
 
+// --- Cloud accounts + cross-device sync (only when DATABASE_URL is set) -----
+function cloudGuard(res: Response): boolean {
+  if (!cloud.hasCloud) {
+    res.status(503).json({ error: "Cloud sync isn't configured on the server." });
+    return false;
+  }
+  return true;
+}
+const bearer = (req: Request) => (req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
+function cloudFail(res: Response, err: unknown) {
+  if (err instanceof cloud.CloudError) res.status(err.status).json({ error: err.message });
+  else {
+    console.warn(`[cloud] ${err instanceof Error ? err.message : err}`);
+    res.status(500).json({ error: "Cloud sync error. Try again." });
+  }
+}
+
+app.post("/api/cloud/register", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  const { username, email, password } = req.body as { username?: string; email?: string; password?: string };
+  try {
+    const auth = await cloud.register(username || "", email || "", password || "");
+    res.json(auth);
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
+app.post("/api/cloud/login", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  const { username, password } = req.body as { username?: string; password?: string };
+  try {
+    res.json(await cloud.login(username || "", password || ""));
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
+app.get("/api/cloud/sync", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await cloud.userForToken(bearer(req));
+    if (!userId) { res.status(401).json({ error: "Not signed in." }); return; }
+    res.json(await cloud.getData(userId));
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
+app.put("/api/cloud/sync", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await cloud.userForToken(bearer(req));
+    if (!userId) { res.status(401).json({ error: "Not signed in." }); return; }
+    const version = await cloud.putData(userId, (req.body as { data?: unknown }).data);
+    res.json({ version });
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
+app.post("/api/cloud/logout", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try { await cloud.logout(bearer(req)); res.json({ ok: true }); } catch (err) { cloudFail(res, err); }
+});
+
+app.delete("/api/cloud/account", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await cloud.userForToken(bearer(req));
+    if (!userId) { res.status(401).json({ error: "Not signed in." }); return; }
+    await cloud.deleteAccount(userId);
+    res.json({ ok: true });
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
+app.post("/api/cloud/forgot", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  const email = ((req.body as { email?: string }).email || "").trim();
+  if (!emailOk(email)) { res.status(400).json({ error: "Invalid email." }); return; }
+  try {
+    const rc = await cloud.createResetCode(email);
+    // Always say ok (don't reveal whether an account exists), but only email if real.
+    if (rc) await sendEmail(email, "Your Card-O-Rama reset code", resetHtml(escapeHtml(rc.display), rc.code), "cloud-reset");
+    res.json({ ok: true });
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
+app.post("/api/cloud/reset", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  const { email, code, password } = req.body as { email?: string; code?: string; password?: string };
+  try {
+    await cloud.applyReset(email || "", code || "", password || "");
+    res.json({ ok: true });
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
 // In production, serve the built web app from the same origin as the API, so
 // the whole thing deploys as ONE unit on ONE domain: no CORS, and the UI's
 // relative /api calls just work. In dev the Vite server serves the UI instead,
@@ -1104,6 +1208,13 @@ app.listen(PORT, () => {
     : RESEND_API_KEY ? "Resend (needs a verified domain to email anyone)"
     : "off";
   console.log(`  email: ${emailMode}${emailMode === "off" ? " (set GMAIL_USER+GMAIL_APP_PASSWORD, OUTLOOK_USER+OUTLOOK_APP_PASSWORD, SMTP_*, or RESEND_API_KEY)" : ""}`);
+  if (cloud.hasCloud) {
+    cloud.initCloud()
+      .then(() => console.log("  cloud accounts + sync: on (Postgres) — accounts sync across devices"))
+      .catch((e) => console.error(`  ⚠  cloud DB init failed: ${e instanceof Error ? e.message : e}`));
+  } else {
+    console.log("  cloud accounts + sync: off (set DATABASE_URL to enable cross-device accounts)");
+  }
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
