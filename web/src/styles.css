@@ -937,13 +937,14 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   border-radius: 10px;
   background: #000;
   display: block;
-  object-fit: contain; /* never crop — vertical cards fit fully */
+  object-fit: cover; /* fill the frame so the guide never sits over dead space */
 }
 .cam-stage {
   position: relative;
   width: 100%;
   background: #000;
   border-radius: 10px;
+  overflow: hidden;
   display: grid;
   place-items: center;
   margin: 0 auto;

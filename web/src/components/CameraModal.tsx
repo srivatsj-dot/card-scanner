@@ -133,7 +133,8 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
     if (guide) {
       const vr = video.getBoundingClientRect();
       const gr = guide.getBoundingClientRect();
-      const scale = Math.min(vr.width / nW, vr.height / nH);
+      // object-fit: cover — the video fills the box and overflows; use max scale.
+      const scale = Math.max(vr.width / nW, vr.height / nH);
       const contentLeft = vr.left + (vr.width - nW * scale) / 2;
       const contentTop = vr.top + (vr.height - nH * scale) / 2;
       sx = Math.max(0, (gr.left - contentLeft) / scale);
