@@ -254,15 +254,17 @@ export async function makeOffer(userId: number, listingId: number, offered: Card
 // Offers waiting on you, and offers you've sent (with the other person's name).
 export async function getOffers(userId: number) {
   const incoming = (await db().query(
-    `SELECT o.id, o.requested, o.offered, o.note, o.status, o.created_at, u.display AS other
+    `SELECT o.id, o.requested, o.offered, o.note, o.status, o.created_at, u.display AS other, u.email AS other_email
      FROM trade_offers o JOIN users u ON u.id = o.from_user
      WHERE o.to_user=$1 ORDER BY o.created_at DESC LIMIT 100`, [userId])).rows;
   const outgoing = (await db().query(
-    `SELECT o.id, o.requested, o.offered, o.note, o.status, o.created_at, u.display AS other
+    `SELECT o.id, o.requested, o.offered, o.note, o.status, o.created_at, u.display AS other, u.email AS other_email
      FROM trade_offers o JOIN users u ON u.id = o.to_user
      WHERE o.from_user=$1 ORDER BY o.created_at DESC LIMIT 100`, [userId])).rows;
-  const shape = (x: { id: number; requested: Card; offered: Card; note: string; status: string; created_at: string; other: string }) =>
-    ({ id: x.id, requested: x.requested, offered: x.offered, note: x.note, status: x.status, createdAt: Number(x.created_at), other: x.other });
+  // The other person's email is only shared once a trade is accepted, so the two
+  // can connect to arrange it.
+  const shape = (x: { id: number; requested: Card; offered: Card; note: string; status: string; created_at: string; other: string; other_email: string | null }) =>
+    ({ id: x.id, requested: x.requested, offered: x.offered, note: x.note, status: x.status, createdAt: Number(x.created_at), other: x.other, contactEmail: x.status === "accepted" ? x.other_email : null });
   return { incoming: incoming.map(shape), outgoing: outgoing.map(shape) };
 }
 

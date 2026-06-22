@@ -1051,6 +1051,24 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   .home-stats { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* Trade board */
+.segbar { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.seg {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: 14px; font-weight: 600;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.seg.active { background: var(--accent-grad); color: #fff; border-color: transparent; }
+.tb-card { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tb-name { font-weight: 700; }
+.tb-pick {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 12px; padding: 8px 12px; margin-bottom: 8px; cursor: pointer;
+}
+.tb-pick.on { border-color: var(--accent); background: var(--accent-soft); }
+.tb-check { color: var(--accent); font-weight: 800; font-size: 18px; }
+
 /* Inline text-link button (e.g. Forgot password / Back to log in) */
 .link-btn {
   display: block; width: 100%; background: none; border: none; cursor: pointer;
