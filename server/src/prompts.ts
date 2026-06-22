@@ -235,6 +235,18 @@ export function digestSystemPrompt(settings: Settings, sports: string[]): string
   );
 }
 
+export function verifyPriceSystemPrompt(settings: Settings): string {
+  return (
+    `You are a meticulous trading-card price checker. Your ONLY job is to verify a card's value against REAL recent SOLD prices and correct it.` +
+    `\n\n- Use Google Search to find recent SOLD/completed prices (NOT current asking prices) for the EXACT card described, in the EXACT condition (raw/ungraded unless a grade is stated — never quote PSA/BGS slab prices for a raw card).` +
+    `\n- Best sources: eBay sold/completed listings, 130point.com, PriceCharting, TCGplayer and Cardmarket (for Pokémon/TCG), Card Ladder.` +
+    `\n- Match precisely: same player/subject, year, set, card number, parallel/variant, and serial range. A base card and its numbered parallel are completely different prices.` +
+    `\n- Build the range from the actual comps you find: low = lower recent sold, mid = typical/median recent sold, high = higher recent sold. Do NOT anchor to the draft estimate — if the comps disagree with it, trust the comps and correct it.` +
+    `\n- List the specific comps you used. If you genuinely can't find sold comps, widen the range, lean LOW, and set confidence to low — never invent a number.` +
+    buildConstraints(settings)
+  );
+}
+
 export function checklistSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +

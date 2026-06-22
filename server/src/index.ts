@@ -10,7 +10,7 @@ import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
 import { pokemonPrice } from "./prices.js";
 import { verifiedSportsFacts, hasLimitless } from "./sports.js";
-import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema } from "./schemas.js";
+import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema } from "./schemas.js";
 import {
   scanSystemPrompt,
   bulkSystemPrompt,
@@ -20,6 +20,7 @@ import {
   tradeUpSystemPrompt,
   digestSystemPrompt,
   checklistSystemPrompt,
+  verifyPriceSystemPrompt,
   chatSystemPrompt,
   type Settings,
 } from "./prompts.js";
@@ -361,7 +362,14 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   try {
     const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, groundedFor(settings), SCAN_THINKING);
     const ebayApplied = await applyEbayPrice(result, settings);
-    if (!ebayApplied) await applyPokemonPrice(result); // free real prices for Pokémon
+    let realPriced = ebayApplied;
+    if (!ebayApplied && isPokemon(result)) {
+      const before = result.estimatedValue?.mid;
+      await applyPokemonPrice(result); // free real Pokémon market prices
+      realPriced = result.estimatedValue?.mid !== before;
+    }
+    // Double-check anything still on the model's own estimate against sold comps.
+    if (!realPriced) await verifyPrice(result, settings);
 
     res.json(result);
   } catch (err) {
@@ -382,11 +390,57 @@ interface ScanResultShape {
   parallel?: string | null;
   specialEdition?: string | null;
   serialNumber?: string | null;
+  estimatedCondition?: string | null;
   pokemon?: { setNumber?: string | null } | null;
   estimatedValue?: { low: number; mid: number; high: number; currency: string; note: string };
 }
 
 const isPokemon = (r: ScanResultShape) => /pok[eé]mon/i.test(r.sport || "");
+
+// Off only if explicitly disabled. The second-pass comp check that re-prices.
+const PRICE_DOUBLE_CHECK = process.env.PRICE_DOUBLE_CHECK !== "false";
+
+interface PriceVerifyShape {
+  low: number; mid: number; high: number; currency: string;
+  confidence: string; comps: string[]; note: string;
+}
+
+// Second pass: re-price the card against real recent SOLD comps and overwrite
+// the estimate. Skipped when a real-data price (eBay/Pokémon catalog) already
+// set it, or when grounding is off. Best-effort — leaves the draft on any error.
+async function verifyPrice(result: ScanResultShape, settings?: Settings) {
+  if (!PRICE_DOUBLE_CHECK || !groundedFor(settings) || !result?.identified || !result.estimatedValue) return;
+  const desc = cardQuery(result);
+  if (!desc) return;
+  const v = result.estimatedValue;
+  try {
+    const checked = await analyze<PriceVerifyShape>(
+      verifyPriceSystemPrompt(settings || {}),
+      [{
+        text:
+          `Verify the market value of this exact card against recent SOLD comps and correct it if needed.\n` +
+          `Card: ${desc}\n` +
+          `Condition: ${result.estimatedCondition || "raw / ungraded (unless a grade is noted)"}\n` +
+          `Draft estimate to check: ${v.currency} — low ${v.low}, mid ${v.mid}, high ${v.high}.`,
+      }],
+      priceVerifySchema,
+      groundedFor(settings),
+      1024
+    );
+    if (checked && [checked.low, checked.mid, checked.high].every((n) => Number.isFinite(n) && n >= 0)) {
+      const conf = checked.confidence ? `, ${checked.confidence} confidence` : "";
+      result.estimatedValue = {
+        low: checked.low,
+        mid: checked.mid,
+        high: checked.high,
+        currency: checked.currency || v.currency,
+        note: (checked.note || v.note) + (checked.comps?.length ? ` (verified vs sold comps${conf})` : ""),
+      };
+    }
+  } catch {
+    /* keep the draft estimate */
+  }
+}
 
 function cardQuery(r: ScanResultShape): string {
   return [r.year, r.manufacturer, r.setName, r.player, r.parallel, r.cardNumber ? `#${r.cardNumber}` : "", r.serialNumber]
@@ -1043,6 +1097,7 @@ app.listen(PORT, () => {
   if (servingWeb) console.log(`  serving web app from ${webDist}`);
   console.log(`  eBay pricing: ${hasEbay ? "on" : "off (set EBAY_CLIENT_ID/SECRET for real prices)"}`);
   console.log(`  Pokémon prices: on (pokemontcg.io — free TCGplayer/Cardmarket market data, no key)`);
+  console.log(`  price double-check: ${PRICE_DOUBLE_CHECK ? "on (second sold-comp pass; set PRICE_DOUBLE_CHECK=false to disable)" : "off"}`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
   console.log(`  Pokémon TCG results: on — ${hasLimitless ? "Limitless API (exact)" : "search-grounded (Limitless/RK9); add LIMITLESS_API_KEY for exact data"}`);
   const emailMode = hasSmtp ? `SMTP (${SMTP_HOST}, sends to anyone)`

@@ -300,7 +300,21 @@ export const askSchema = {
   required: ["givingValueNote", "targets", "note"],
 } as const;
 
-// Set-completion checklist: given a set and the card numbers the collector owns,
+// Second-pass price verification: re-check a draft value against recent SOLD
+// comps and correct it.
+export const priceVerifySchema = {
+  type: "OBJECT",
+  properties: {
+    low: { ...NUM, description: "Verified low of the recent sold range." },
+    mid: { ...NUM, description: "Verified typical/median recent sold price." },
+    high: { ...NUM, description: "Verified high of the recent sold range." },
+    currency: STR,
+    confidence: { ...STR, description: "high, medium, or low — how solid the comps are." },
+    comps: { type: "ARRAY", items: STR, description: "The specific recent sold comps you found (e.g. 'eBay sold $4.50, Jun 2026')." },
+    note: { ...STR, description: "One line on what the value is based on, in plain terms." },
+  },
+  required: ["low", "mid", "high", "currency", "confidence", "comps", "note"],
+} as const;
 // report the base-set size and the notable cards they're still missing.
 export const checklistSchema = {
   type: "OBJECT",
