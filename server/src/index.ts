@@ -191,7 +191,7 @@ const NO_THINKING = { thinkingBudget: 0 } as const;
 const MAX_OUTPUT = 8192;
 // Let the model "think" on card identification — more accurate reads of sets,
 // parallels, and serials — at the cost of a little latency. Other calls stay at 0.
-const SCAN_THINKING = Number(process.env.SCAN_THINKING_BUDGET ?? 1536);
+const SCAN_THINKING = Number(process.env.SCAN_THINKING_BUDGET ?? 2048);
 
 // Try the configured model first (best accuracy), then fall back to flash-lite
 // which has a separate, more generous free-tier quota. Lets a rate-limited
@@ -465,7 +465,12 @@ app.post("/api/bulk", async (req: Request, res: Response) => {
   ];
 
   try {
-    res.json(await analyze(sys, parts, bulkSchema, groundedFor(settings)));
+    const out = await analyze<{ cards: ScanResultShape[] }>(sys, parts, bulkSchema, groundedFor(settings));
+    // Real Pokémon market prices for any Pokémon cards in the batch (free API).
+    if (Array.isArray(out.cards)) {
+      await Promise.all(out.cards.map((c) => applyPokemonPrice(c).catch(() => {})));
+    }
+    res.json(out);
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
