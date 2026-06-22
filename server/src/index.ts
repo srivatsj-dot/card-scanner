@@ -8,7 +8,7 @@ import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
 import { ebayPrice, hasEbay } from "./ebay.js";
-import { pokemonPrice } from "./prices.js";
+import { pokemonLookup } from "./prices.js";
 import * as cloud from "./cloud.js";
 import { verifiedSportsFacts, hasLimitless } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema } from "./schemas.js";
@@ -406,7 +406,7 @@ interface ScanResultShape {
   specialEdition?: string | null;
   serialNumber?: string | null;
   estimatedCondition?: string | null;
-  pokemon?: { setNumber?: string | null } | null;
+  pokemon?: { setNumber?: string | null; rarity?: string | null } | null;
   estimatedValue?: { low: number; mid: number; high: number; currency: string; note: string };
 }
 
@@ -477,20 +477,32 @@ async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Pro
   return true;
 }
 
-// Real Pokémon market price from pokemontcg.io (free, no key). Money formatting
-// keeps 2 decimals for small values so $3.42 doesn't round to $3.
+// Match a Pokémon scan against the official catalog (pokemontcg.io): correct its
+// identity (set, number, rarity) to the real card AND apply real market price.
 async function applyPokemonPrice(result: ScanResultShape) {
-  if (!result?.identified || !result.estimatedValue || !isPokemon(result)) return;
-  const cp = await pokemonPrice(result.player || "", result.pokemon?.setNumber || result.cardNumber);
-  if (!cp) return;
-  const r2 = (n: number) => (n >= 20 ? Math.round(n) : Math.round(n * 100) / 100);
-  result.estimatedValue = {
-    low: r2(cp.low),
-    mid: r2(cp.mid),
-    high: r2(cp.high),
-    currency: cp.currency,
-    note: `Based on current ${cp.source} market prices for this card (raw/ungraded).`,
-  };
+  if (!result?.identified || !isPokemon(result)) return;
+  const m = await pokemonLookup(result.player || "", result.pokemon?.setNumber || result.cardNumber);
+  if (!m) return;
+  // Correct identity to the catalog's canonical card (more accurate than a read).
+  if (m.name) result.player = m.name;
+  if (m.setName) result.setName = m.setName;
+  if (m.number) {
+    result.cardNumber = m.number;
+    result.pokemon = { ...(result.pokemon || {}), setNumber: m.number };
+  }
+  if (m.rarity) result.pokemon = { ...(result.pokemon || {}), rarity: m.rarity };
+  // Apply the real market price when available.
+  if (m.price && result.estimatedValue) {
+    const cp = m.price;
+    const r2 = (n: number) => (n >= 20 ? Math.round(n) : Math.round(n * 100) / 100);
+    result.estimatedValue = {
+      low: r2(cp.low),
+      mid: r2(cp.mid),
+      high: r2(cp.high),
+      currency: cp.currency,
+      note: `Based on current ${cp.source} market prices for this card (raw/ungraded).`,
+    };
+  }
 }
 
 // --- Bulk scan: identify EVERY card in a photo (a stack/spread/binder page) --

@@ -36,53 +36,71 @@ const median = (xs: number[]) => {
   return s[Math.floor(s.length / 2)];
 };
 
-// Real market price for a Pokémon card by name (+ collector number if known).
-export async function pokemonPrice(name: string, number?: string | null): Promise<CardPrice | null> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function priceFromCard(c: any): CardPrice | null {
+  const tp = c?.tcgplayer?.prices;
+  if (tp && typeof tp === "object") {
+    const variants = Object.values(tp).filter(Boolean) as Record<string, number>[];
+    const markets = variants.map((v) => Number(v.market ?? v.mid)).filter((n) => Number.isFinite(n) && n > 0);
+    if (markets.length) {
+      const lows = variants.map((v) => Number(v.low)).filter((n) => Number.isFinite(n) && n > 0);
+      const highs = variants.map((v) => Number(v.high)).filter((n) => Number.isFinite(n) && n > 0);
+      const mid = median(markets);
+      return { low: lows.length ? Math.min(...lows) : mid, mid, high: highs.length ? Math.max(...highs) : mid, currency: "USD", source: "TCGplayer" };
+    }
+  }
+  const cm = c?.cardmarket?.prices;
+  const avg = Number(cm?.averageSellPrice);
+  if (Number.isFinite(avg) && avg > 0) {
+    return { low: Number(cm.lowPrice) || avg, mid: avg, high: Number(cm.trendPrice) || avg, currency: "EUR", source: "Cardmarket" };
+  }
+  return null;
+}
+
+export interface PokemonMatch {
+  price: CardPrice | null;
+  name?: string;     // canonical card name from the catalog
+  setName?: string;  // canonical set name
+  number?: string;   // e.g. "4/102"
+  rarity?: string;
+}
+
+// Look a Pokémon card up in the official catalog (pokemontcg.io): both its real
+// market price AND its canonical identity (set, number, rarity), so a scan can
+// be corrected against the real card database — the Ludex-style "match a known
+// card" idea, for Pokémon. Returns null if no card matches the name.
+export async function pokemonLookup(name: string, number?: string | null): Promise<PokemonMatch | null> {
   const nm = (name || "").trim();
   if (!nm) return null;
-  // Card numbers print as "4/102" or "TG12/TG30" — match on the numerator.
   const num = (number || "").split("/")[0].replace(/\s+/g, "").trim();
   const q = num ? `name:"${nm}" number:"${num}"` : `name:"${nm}"`;
   const data = await getJson(`${PTCG_URL}?q=${encodeURIComponent(q)}&pageSize=12`);
   let cards = data?.data;
   if ((!Array.isArray(cards) || cards.length === 0) && num) {
-    // Retry without the number in case the print is non-standard.
     const d2 = await getJson(`${PTCG_URL}?q=${encodeURIComponent(`name:"${nm}"`)}&pageSize=12`);
     cards = d2?.data;
   }
   if (!Array.isArray(cards) || cards.length === 0) return null;
 
+  // Prefer the matching card that has a price; otherwise the first match.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let chosen: any = null;
+  let price: CardPrice | null = null;
   for (const c of cards) {
-    // Prefer TCGplayer (USD market price across printings: normal/holo/reverse).
-    const tp = c?.tcgplayer?.prices;
-    if (tp && typeof tp === "object") {
-      const variants = Object.values(tp).filter(Boolean) as Record<string, number>[];
-      const markets = variants.map((v) => Number(v.market ?? v.mid)).filter((n) => Number.isFinite(n) && n > 0);
-      if (markets.length) {
-        const lows = variants.map((v) => Number(v.low)).filter((n) => Number.isFinite(n) && n > 0);
-        const highs = variants.map((v) => Number(v.high)).filter((n) => Number.isFinite(n) && n > 0);
-        const mid = median(markets);
-        return {
-          low: lows.length ? Math.min(...lows) : mid,
-          mid,
-          high: highs.length ? Math.max(...highs) : mid,
-          currency: "USD",
-          source: "TCGplayer",
-        };
-      }
-    }
-    // Fall back to Cardmarket (EUR).
-    const cm = c?.cardmarket?.prices;
-    const avg = Number(cm?.averageSellPrice);
-    if (Number.isFinite(avg) && avg > 0) {
-      return {
-        low: Number(cm.lowPrice) || avg,
-        mid: avg,
-        high: Number(cm.trendPrice) || avg,
-        currency: "EUR",
-        source: "Cardmarket",
-      };
-    }
+    const p = priceFromCard(c);
+    if (p) { chosen = c; price = p; break; }
   }
-  return null;
+  if (!chosen) chosen = cards[0];
+
+  const printed = Number(chosen?.set?.printedTotal);
+  const number2 = chosen?.number
+    ? Number.isFinite(printed) && printed > 0 ? `${chosen.number}/${printed}` : String(chosen.number)
+    : undefined;
+  return {
+    price,
+    name: chosen?.name || undefined,
+    setName: chosen?.set?.name || undefined,
+    number: number2,
+    rarity: chosen?.rarity || undefined,
+  };
 }
