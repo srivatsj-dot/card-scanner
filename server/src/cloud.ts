@@ -145,14 +145,29 @@ export async function getData(userId: number): Promise<{ data: unknown; version:
   return { data: r.rows[0]?.blob ?? {}, version: r.rows[0]?.version ?? 0 };
 }
 
-// Save the user's data blob. Last-write-wins; returns the new version.
-export async function putData(userId: number, data: unknown): Promise<number> {
+// Save the user's data blob with optimistic concurrency. The client sends the
+// version it last saw; if the server has moved on (another device wrote), we
+// REFUSE the write and hand back the current data so the client can merge and
+// retry. This is what stops a stale or empty device from blindly clobbering a
+// good collection (the "my account got deleted" bug). When baseVersion is
+// omitted, it falls back to last-write-wins.
+export async function putData(
+  userId: number,
+  data: unknown,
+  baseVersion?: number
+): Promise<{ version: number; conflict: boolean; data?: unknown }> {
   const now = Date.now();
+  if (baseVersion != null) {
+    const cur = await getData(userId);
+    if (Number(cur.version) !== Number(baseVersion)) {
+      return { version: Number(cur.version), conflict: true, data: cur.data };
+    }
+  }
   const r = await db().query(
     `UPDATE user_data SET blob=$2, version=version+1, updated_at=$3 WHERE user_id=$1 RETURNING version`,
     [userId, JSON.stringify(data ?? {}), now]
   );
-  return r.rows[0]?.version ?? 0;
+  return { version: r.rows[0]?.version ?? 0, conflict: false };
 }
 
 export async function logout(token: string): Promise<void> {

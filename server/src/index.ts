@@ -1168,8 +1168,16 @@ app.put("/api/cloud/sync", async (req: Request, res: Response) => {
   try {
     const userId = await cloud.userForToken(bearer(req));
     if (!userId) { res.status(401).json({ error: "Not signed in." }); return; }
-    const version = await cloud.putData(userId, (req.body as { data?: unknown }).data);
-    res.json({ version });
+    const body = req.body as { data?: unknown; baseVersion?: number };
+    const r = await cloud.putData(userId, body.data, body.baseVersion);
+    if (r.conflict) {
+      // Someone else wrote since the client last synced. Hand back the current
+      // server copy + version so the client can merge and retry — never silently
+      // overwrite a newer collection.
+      res.status(409).json({ version: r.version, data: r.data });
+      return;
+    }
+    res.json({ version: r.version });
   } catch (err) {
     cloudFail(res, err);
   }

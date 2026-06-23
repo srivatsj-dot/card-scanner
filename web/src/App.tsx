@@ -26,7 +26,7 @@ import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import HomeView from "./components/HomeView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount } from "./auth";
-import { cloudActive, schedulePush } from "./cloud";
+import { cloudActive, schedulePush, cloudPull, cloudUserKey } from "./cloud";
 
 type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
@@ -620,6 +620,9 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
 
 export default function App() {
   const [user, setUser] = useState<string | null>(null);
+  // Bumped whenever a cloud pull/merge changes localStorage, to remount MainApp
+  // so it re-reads the freshly-synced collection from storage.
+  const [syncTick, setSyncTick] = useState(0);
 
   // Always open to the login screen — don't auto-resume a saved session.
   useEffect(() => {
@@ -629,15 +632,40 @@ export default function App() {
     }
   }, []);
 
+  // Cross-device sync: pull the latest server copy on sign-in, whenever the tab
+  // regains focus, and when a background merge announces fresh data. Remounts
+  // MainApp (via syncTick) only when something actually changed. No-op for
+  // device-local accounts.
+  useEffect(() => {
+    if (!user || !cloudActive()) return;
+    let cancelled = false;
+    const sync = async () => {
+      const changed = await cloudPull(cloudUserKey());
+      if (changed && !cancelled) setSyncTick((n) => n + 1);
+    };
+    const onVisible = () => { if (!document.hidden) void sync(); };
+    const onMerged = () => { if (!cancelled) setSyncTick((n) => n + 1); };
+    void sync();
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("cloud-synced", onMerged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("cloud-synced", onMerged);
+    };
+  }, [user]);
+
   if (!user) {
     return <AuthScreen onAuthed={() => setUser(currentUser())} />;
   }
 
-  // key={user} fully remounts MainApp on account switch so all per-user state
-  // re-initializes from that account's namespaced storage.
+  // key fully remounts MainApp on account switch OR after a sync changed
+  // storage, so all per-user state re-initializes from namespaced storage.
   return (
     <MainApp
-      key={user}
+      key={`${user}#${syncTick}`}
       user={user}
       onLogout={() => {
         logout();
