@@ -1036,65 +1036,65 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
   // frequent offender) would otherwise block the request for the OS socket
   // timeout — that's the "email takes forever" symptom.
   const timeouts = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 15_000 };
-  try {
-    // 0) Generic SMTP — any provider, sends to anyone.
-    if (hasSmtp) {
-      const nodemailer = await loadNodemailer();
-      const transporter = nodemailer.createTransport({
-        host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE,
-        auth: { user: SMTP_USER, pass: SMTP_PASS },
-        ...timeouts,
-      });
-      await transporter.sendMail({ from: SMTP_FROM, to, subject, html });
-      return { ok: true, via: "smtp" };
-    }
-    // 1) Gmail SMTP (free, no domain, sends to anyone).
-    if (GMAIL_USER && GMAIL_APP_PASSWORD) {
-      const nodemailer = await loadNodemailer();
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
-        ...timeouts,
-      });
-      await transporter.sendMail({ from: `Card-O-Rama <${GMAIL_USER}>`, to, subject, html });
-      return { ok: true, via: "gmail" };
-    }
-    // 2) Outlook/Hotmail (free, no domain, sends to anyone).
-    if (OUTLOOK_USER && OUTLOOK_APP_PASSWORD) {
-      const nodemailer = await loadNodemailer();
-      const transporter = nodemailer.createTransport({
-        host: "smtp-mail.outlook.com", port: 587, secure: false,
-        auth: { user: OUTLOOK_USER, pass: OUTLOOK_APP_PASSWORD },
-        ...timeouts,
-      });
-      await transporter.sendMail({ from: `Card-O-Rama <${OUTLOOK_USER}>`, to, subject, html });
-      return { ok: true, via: "outlook" };
-    }
-    if (RESEND_API_KEY) {
-      const r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: EMAIL_FROM, to, subject, html }),
-      });
-      if (!r.ok) {
-        const text = await r.text().catch(() => "");
-        // Most common cause: no verified domain, so Resend's sandbox only lets
-        // you email your OWN address (and only from onboarding@resend.dev).
-        const hint =
-          r.status === 403 || /domain|verif|testing|own email/i.test(text)
-            ? " Resend can only email arbitrary addresses once you've verified a domain (and set EMAIL_FROM to it). Without one it only sends to your own Resend account email. For emailing anyone with no domain, use Gmail (GMAIL_USER + GMAIL_APP_PASSWORD)."
-            : "";
-        console.warn(`[${tag}] Resend send failed (${r.status}): ${text.slice(0, 300)}`);
-        return { ok: false, status: 502, error: `Email send failed (${r.status}). ${text.slice(0, 200)}${hint}` };
-      }
-      return { ok: true, via: "resend" };
-    }
-    console.warn(`[${tag}] No email provider configured (set GMAIL_USER+GMAIL_APP_PASSWORD or RESEND_API_KEY).`);
-    return { ok: false, reason: "email-not-configured" };
-  } catch (e) {
-    console.warn(`[${tag}] send threw: ${e instanceof Error ? e.message : e}`);
-    return { ok: false, status: 502, error: e instanceof Error ? e.message : "Email send failed." };
+  // Gmail/Outlook app passwords are shown WITH spaces ("abcd efgh ijkl mnop").
+  // Pasted verbatim they fail auth with a 535 — strip whitespace so they work.
+  const gmailPass = GMAIL_APP_PASSWORD.replace(/\s+/g, "");
+  const outlookPass = OUTLOOK_APP_PASSWORD.replace(/\s+/g, "");
+
+  // Try every configured provider in priority order. Crucially, if one is
+  // configured but FAILS (bad password, host down), fall through to the next
+  // instead of giving up — a broken leftover SMTP/Resend shouldn't block Gmail.
+  const attempts: { name: string; run: () => Promise<SendResult> }[] = [];
+  if (hasSmtp) attempts.push({ name: "smtp", run: async () => {
+    const nodemailer = await loadNodemailer();
+    const t = nodemailer.createTransport({ host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, auth: { user: SMTP_USER, pass: SMTP_PASS }, ...timeouts });
+    await t.sendMail({ from: SMTP_FROM, to, subject, html });
+    return { ok: true, via: "smtp" };
+  }});
+  if (GMAIL_USER && gmailPass) attempts.push({ name: "gmail", run: async () => {
+    const nodemailer = await loadNodemailer();
+    const t = nodemailer.createTransport({ service: "gmail", auth: { user: GMAIL_USER, pass: gmailPass }, ...timeouts });
+    await t.sendMail({ from: `Card-O-Rama <${GMAIL_USER}>`, to, subject, html });
+    return { ok: true, via: "gmail" };
+  }});
+  if (OUTLOOK_USER && outlookPass) attempts.push({ name: "outlook", run: async () => {
+    const nodemailer = await loadNodemailer();
+    const t = nodemailer.createTransport({ host: "smtp-mail.outlook.com", port: 587, secure: false, auth: { user: OUTLOOK_USER, pass: outlookPass }, ...timeouts });
+    await t.sendMail({ from: `Card-O-Rama <${OUTLOOK_USER}>`, to, subject, html });
+    return { ok: true, via: "outlook" };
+  }});
+  if (RESEND_API_KEY) attempts.push({ name: "resend", run: async () => {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: EMAIL_FROM, to, subject, html }),
+    });
+    if (r.ok) return { ok: true, via: "resend" };
+    const text = await r.text().catch(() => "");
+    const hint = r.status === 403 || /domain|verif|testing|own email/i.test(text)
+      ? " Resend only emails arbitrary addresses once you've verified a domain; otherwise it sends only to your own Resend account email. Use Gmail/Outlook/SMTP to email anyone."
+      : "";
+    throw new Error(`Resend ${r.status}: ${text.slice(0, 160)}${hint}`);
+  }});
+
+  if (!attempts.length) {
+    console.warn(`[${tag}] No email provider configured (set GMAIL_USER+GMAIL_APP_PASSWORD, OUTLOOK_*, SMTP_*, or RESEND_API_KEY).`);
+    return { ok: false, reason: "email-not-configured", error: "No email provider is configured on the server." };
   }
+
+  const errors: string[] = [];
+  for (const a of attempts) {
+    try {
+      const r = await a.run();
+      if (errors.length) console.warn(`[${tag}] sent via ${a.name} after earlier failures: ${errors.join(" | ")}`);
+      return r;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[${tag}] ${a.name} failed: ${msg}`);
+      errors.push(`${a.name}: ${msg}`);
+    }
+  }
+  return { ok: false, status: 502, error: `Email send failed. ${errors.join(" | ")}` };
 }
 
 function resetHtml(name: string, code: string): string {
