@@ -298,7 +298,7 @@ async function analyze<T>(systemInstruction: string, parts: Part[], schema: unkn
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey, cloud: cloud.hasCloud });
+  res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey, cloud: cloud.hasCloud, email: emailStatus() });
 });
 
 // --- Scan a card (one or more photos: front, back, angled) -----------------
@@ -986,6 +986,24 @@ const SMTP_PASS = process.env.SMTP_PASS || "";
 const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `Card-O-Rama <${SMTP_USER}>` : "");
 const hasSmtp = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
 const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+// Which email provider is live, and whether it can reach ANY recipient (vs.
+// Resend's sandbox, which only emails your own address). Shared by /api/health
+// and the startup log so delivery problems are self-diagnosable.
+function emailStatus(): { provider: string; anyRecipient: boolean; note: string } {
+  if (hasSmtp) return { provider: "smtp", anyRecipient: true, note: `SMTP (${SMTP_HOST})` };
+  if (GMAIL_USER && GMAIL_APP_PASSWORD) return { provider: "gmail", anyRecipient: true, note: `Gmail (${GMAIL_USER})` };
+  if (OUTLOOK_USER && OUTLOOK_APP_PASSWORD) return { provider: "outlook", anyRecipient: true, note: `Outlook (${OUTLOOK_USER})` };
+  if (RESEND_API_KEY) {
+    const verified = !/resend\.dev/i.test(EMAIL_FROM); // own domain in EMAIL_FROM ⇒ verified
+    return {
+      provider: "resend",
+      anyRecipient: verified,
+      note: verified ? "Resend (verified domain)" : "Resend SANDBOX — only emails your own address; new users get nothing. Use Gmail/Outlook/SMTP or verify a domain.",
+    };
+  }
+  return { provider: "none", anyRecipient: false, note: "No email provider configured." };
+}
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 
@@ -1014,6 +1032,10 @@ async function loadNodemailer() {
 }
 
 async function sendEmail(to: string, subject: string, html: string, tag: string): Promise<SendResult> {
+  // Fail fast instead of hanging: an unreachable/slow SMTP host (Outlook is a
+  // frequent offender) would otherwise block the request for the OS socket
+  // timeout — that's the "email takes forever" symptom.
+  const timeouts = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 15_000 };
   try {
     // 0) Generic SMTP — any provider, sends to anyone.
     if (hasSmtp) {
@@ -1021,6 +1043,7 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
       const transporter = nodemailer.createTransport({
         host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE,
         auth: { user: SMTP_USER, pass: SMTP_PASS },
+        ...timeouts,
       });
       await transporter.sendMail({ from: SMTP_FROM, to, subject, html });
       return { ok: true, via: "smtp" };
@@ -1031,6 +1054,7 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
       const transporter = nodemailer.createTransport({
         service: "gmail",
         auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+        ...timeouts,
       });
       await transporter.sendMail({ from: `Card-O-Rama <${GMAIL_USER}>`, to, subject, html });
       return { ok: true, via: "gmail" };
@@ -1041,6 +1065,7 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
       const transporter = nodemailer.createTransport({
         host: "smtp-mail.outlook.com", port: 587, secure: false,
         auth: { user: OUTLOOK_USER, pass: OUTLOOK_APP_PASSWORD },
+        ...timeouts,
       });
       await transporter.sendMail({ from: `Card-O-Rama <${OUTLOOK_USER}>`, to, subject, html });
       return { ok: true, via: "outlook" };
