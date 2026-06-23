@@ -16,7 +16,6 @@ import SettingsView from "./components/SettingsView";
 import BinderView from "./components/BinderView";
 import WishlistView from "./components/WishlistView";
 import SetsView from "./components/SetsView";
-import TradeBoardView from "./components/TradeBoardView";
 import AwardsView from "./components/AwardsView";
 import AdSlot from "./components/AdSlot";
 import ChatDrawer from "./components/ChatDrawer";
@@ -29,7 +28,7 @@ import HomeView from "./components/HomeView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount } from "./auth";
 import { cloudActive, schedulePush } from "./cloud";
 
-type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "tradeboard" | "binder" | "wishlist" | "sets" | "awards" | "settings";
+type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -494,7 +493,6 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           {navBtn("trade", t("Trade"))}
           {navBtn("tradeup", <>📈 {t("Trade-Up")}</>)}
           {navBtn("later", <>🔖 {t("For later")}</>)}
-          {cloudActive() && navBtn("tradeboard", <>🔁 {t("Trade Board")}</>)}
           <div className="side-group">{t("Collection")}</div>
           {navBtn("binder", <>{t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}</>)}
           {navBtn("wishlist", <>{t("Wishlist")}{wishlist.length > 0 ? ` (${wishlist.length})` : ""}</>)}
@@ -586,7 +584,6 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           adding={adding}
         />
       )}
-      {view === "tradeboard" && <TradeBoardView saved={saved} />}
       {view === "sets" && <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} />}
       {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
