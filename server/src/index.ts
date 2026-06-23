@@ -975,6 +975,11 @@ const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g
 // Outlook/Hotmail shortcut — same convenience as Gmail (no host to remember).
 const OUTLOOK_USER = process.env.OUTLOOK_USER || "";
 const OUTLOOK_APP_PASSWORD = (process.env.OUTLOOK_APP_PASSWORD || "").replace(/\s+/g, "");
+// Brevo (Sendinblue) over its HTTPS API — the reliable choice on hosts that
+// BLOCK outbound SMTP ports (Render, Vercel, etc.), since it goes over 443.
+// Free 300/day, emails ANYONE, no domain: just verify a single sender address.
+const BREVO_API_KEY = process.env.BREVO_API_KEY || "";
+const BREVO_FROM = process.env.BREVO_FROM || (GMAIL_USER ? `Card-O-Rama <${GMAIL_USER}>` : "");
 // Generic SMTP — use ANY provider that sends to any recipient (Gmail, Brevo,
 // SendGrid, Outlook, your own server). No domain needed if the provider allows
 // a verified single sender. Takes priority when SMTP_HOST is set.
@@ -991,9 +996,10 @@ const emailOk = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 // Resend's sandbox, which only emails your own address). Shared by /api/health
 // and the startup log so delivery problems are self-diagnosable.
 function emailStatus(): { provider: string; anyRecipient: boolean; note: string } {
-  if (hasSmtp) return { provider: "smtp", anyRecipient: true, note: `SMTP (${SMTP_HOST})` };
-  if (GMAIL_USER && GMAIL_APP_PASSWORD) return { provider: "gmail", anyRecipient: true, note: `Gmail (${GMAIL_USER})` };
-  if (OUTLOOK_USER && OUTLOOK_APP_PASSWORD) return { provider: "outlook", anyRecipient: true, note: `Outlook (${OUTLOOK_USER})` };
+  if (BREVO_API_KEY && BREVO_FROM) return { provider: "brevo", anyRecipient: true, note: "Brevo HTTPS API (works where SMTP is blocked)" };
+  if (hasSmtp) return { provider: "smtp", anyRecipient: true, note: `SMTP (${SMTP_HOST}) — needs outbound SMTP unblocked` };
+  if (GMAIL_USER && GMAIL_APP_PASSWORD) return { provider: "gmail", anyRecipient: true, note: `Gmail (${GMAIL_USER}) — fails if the host blocks outbound SMTP; use Brevo instead` };
+  if (OUTLOOK_USER && OUTLOOK_APP_PASSWORD) return { provider: "outlook", anyRecipient: true, note: `Outlook (${OUTLOOK_USER}) — fails if the host blocks outbound SMTP; use Brevo instead` };
   if (RESEND_API_KEY) {
     const verified = !/resend\.dev/i.test(EMAIL_FROM); // own domain in EMAIL_FROM ⇒ verified
     return {
@@ -1044,7 +1050,30 @@ async function sendEmail(to: string, subject: string, html: string, tag: string)
   // Try every configured provider in priority order. Crucially, if one is
   // configured but FAILS (bad password, host down), fall through to the next
   // instead of giving up — a broken leftover SMTP/Resend shouldn't block Gmail.
+  // Parse a "Name <email>" (or bare "email") sender string.
+  const parseFrom = (s: string): { name: string; email: string } => {
+    const m = s.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+    if (m) return { name: m[1] || "Card-O-Rama", email: m[2].trim() };
+    return { name: "Card-O-Rama", email: s.trim() };
+  };
+
   const attempts: { name: string; run: () => Promise<SendResult> }[] = [];
+  // Brevo first: HTTPS (port 443), so it works even where outbound SMTP is
+  // blocked — the "test email loaded forever then nothing" symptom.
+  if (BREVO_API_KEY && BREVO_FROM) attempts.push({ name: "brevo", run: async () => {
+    const sender = parseFrom(BREVO_FROM);
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ sender, to: [{ email: to }], subject, htmlContent: html }),
+    });
+    if (r.ok) return { ok: true, via: "brevo" };
+    const text = await r.text().catch(() => "");
+    const hint = /sender|not.*valid|unrecognized/i.test(text)
+      ? ` Verify the sender address "${sender.email}" in Brevo (Senders & IP) and set BREVO_FROM to it.`
+      : "";
+    throw new Error(`Brevo ${r.status}: ${text.slice(0, 160)}${hint}`);
+  }});
   if (hasSmtp) attempts.push({ name: "smtp", run: async () => {
     const nodemailer = await loadNodemailer();
     const t = nodemailer.createTransport({ host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, auth: { user: SMTP_USER, pass: SMTP_PASS }, ...timeouts });
@@ -1277,12 +1306,8 @@ app.listen(PORT, () => {
   console.log(`  price double-check: on (second sold-comp pass on every appraisal)`);
   console.log(`  digest sports data: MLB + NHL official, ESPN (NBA, NFL, soccer leagues, World Cup, March Madness…) & ESPNcricinfo (IPL + all cricket) — free, no key`);
   console.log(`  Pokémon TCG results: on — ${hasLimitless ? "Limitless API (exact)" : "search-grounded (Limitless/RK9); add LIMITLESS_API_KEY for exact data"}`);
-  const emailMode = hasSmtp ? `SMTP (${SMTP_HOST}, sends to anyone)`
-    : GMAIL_USER && GMAIL_APP_PASSWORD ? `Gmail (${GMAIL_USER}, sends to anyone)`
-    : OUTLOOK_USER && OUTLOOK_APP_PASSWORD ? `Outlook (${OUTLOOK_USER}, sends to anyone)`
-    : RESEND_API_KEY ? "Resend (needs a verified domain to email anyone)"
-    : "off";
-  console.log(`  email: ${emailMode}${emailMode === "off" ? " (set GMAIL_USER+GMAIL_APP_PASSWORD, OUTLOOK_USER+OUTLOOK_APP_PASSWORD, SMTP_*, or RESEND_API_KEY)" : ""}`);
+  const es = emailStatus();
+  console.log(`  email: ${es.provider === "none" ? "off (set BREVO_API_KEY+BREVO_FROM — works behind SMTP blocks)" : es.note}`);
   if (cloud.hasCloud) {
     cloud.initCloud()
       .then(() => console.log("  cloud accounts + sync: on (Postgres) — accounts sync across devices"))
