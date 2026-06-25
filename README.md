@@ -85,7 +85,7 @@ the app on a Node platform and point the domain at it.
 3. Deploy. You'll get a `*.onrender.com` URL.
 
 **Point your GoDaddy domain at it:** in Render → Settings → Custom Domain, add
-`card-o-rama.com`. Render shows the DNS records to create. In GoDaddy → your
+`cardorama.app`. Render shows the DNS records to create. In GoDaddy → your
 domain → DNS, add them (typically a `CNAME` for `www` to the Render host, and
 Render's instructions for the root). HTTPS is issued automatically.
 
