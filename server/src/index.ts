@@ -1185,6 +1185,31 @@ function cloudFail(res: Response, err: unknown) {
   }
 }
 
+// One-shot admin wipe of ALL accounts + synced data, for a clean restart.
+// Disabled unless ADMIN_RESET_TOKEN is set; requires that token plus an
+// explicit confirm=yes so a stray request can't trigger it. Visit:
+//   /api/admin/reset?token=YOUR_TOKEN&confirm=yes
+app.get("/api/admin/reset", async (req: Request, res: Response) => {
+  const token = process.env.ADMIN_RESET_TOKEN || "";
+  if (!token) { res.status(404).json({ error: "Reset is disabled (set ADMIN_RESET_TOKEN to enable)." }); return; }
+  if (req.query.token !== token) { res.status(403).json({ error: "Wrong or missing token." }); return; }
+  if (req.query.confirm !== "yes") {
+    res.status(400).json({ error: "Add &confirm=yes to actually wipe every account. This cannot be undone." });
+    return;
+  }
+  if (!cloud.hasCloud) {
+    res.json({ ok: true, wiped: 0, note: "Cloud sync isn't configured, so there are no server accounts to delete. Device-local accounts only exist in each browser." });
+    return;
+  }
+  try {
+    const wiped = await cloud.wipeAllAccounts();
+    console.warn(`[admin] wiped ${wiped} account(s) via /api/admin/reset`);
+    res.json({ ok: true, wiped });
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
 app.post("/api/cloud/register", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   const { username, email, password } = req.body as { username?: string; email?: string; password?: string };

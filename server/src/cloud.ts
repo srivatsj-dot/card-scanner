@@ -178,6 +178,19 @@ export async function deleteAccount(userId: number): Promise<void> {
   await db().query(`DELETE FROM users WHERE id=$1`, [userId]); // cascades to data/sessions
 }
 
+// Wipe EVERY account and all synced data — a clean slate for a fresh start.
+// Guarded behind an admin token at the route layer. Returns how many users
+// were removed. No-op (returns 0) when cloud isn't configured.
+export async function wipeAllAccounts(): Promise<number> {
+  if (!hasCloud) return 0;
+  const p = db();
+  const n = Number((await p.query(`SELECT COUNT(*) AS c FROM users`)).rows[0]?.c ?? 0);
+  // TRUNCATE … CASCADE clears users + user_data + sessions in one shot and
+  // resets the id sequence so the restart really starts from scratch.
+  await p.query(`TRUNCATE users, user_data, sessions, reset_codes RESTART IDENTITY CASCADE`);
+  return n;
+}
+
 // --- password reset (works cross-device since accounts live on the server) --
 export async function createResetCode(email: string): Promise<{ code: string; display: string } | null> {
   const p = db();
