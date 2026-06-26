@@ -30,6 +30,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [portrait, setPortrait] = useState(true);
+  const [facing, setFacing] = useState<"environment" | "user">("environment");
   const [preview, setPreview] = useState<string | null>(null);
   const [blurry, setBlurry] = useState(false);
   const t = useT();
@@ -47,7 +48,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: { ideal: "environment" }, // rear camera on phones
+            facingMode: { ideal: facing }, // rear ("environment") or front ("user")
             width: { ideal: 1920 },
             height: { ideal: 1080 },
             aspectRatio: portrait ? 3 / 4 : 4 / 3, // a hint; desktops may ignore
@@ -103,7 +104,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
       streamRef.current?.getTracks().forEach((tr) => tr.stop());
       streamRef.current = null;
     };
-  }, [portrait]);
+  }, [portrait, facing]);
 
   // Tap the preview to nudge a single autofocus pass (best-effort).
   async function refocus() {
@@ -184,6 +185,13 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
           {!error && !preview && (
             <>
               <button className="btn" onClick={capture} disabled={!ready}>📷 {t("Capture")}</button>
+              <button
+                className="btn secondary"
+                onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))}
+                title={t("Switch between front and back camera")}
+              >
+                🔄 {facing === "environment" ? t("Front camera") : t("Back camera")}
+              </button>
               <button
                 className="btn secondary"
                 onClick={() => setPortrait((p) => !p)}
