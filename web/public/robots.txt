@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://card-scanner-1-ga1e.onrender.com/sitemap.xml
+Sitemap: https://cardorama.app/sitemap.xml
