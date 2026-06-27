@@ -34,6 +34,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
   const [preview, setPreview] = useState<string | null>(null);
   const [blurry, setBlurry] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [multiCam, setMultiCam] = useState(false); // phone with front+back cameras?
   const t = useT();
 
   useEffect(() => {
@@ -75,6 +76,12 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
           return;
         }
         streamRef.current = stream;
+        // Only phones have a front AND back camera worth flipping between; on a
+        // single-camera laptop the toggle does nothing, so hide it. Labels are
+        // available now that permission is granted.
+        navigator.mediaDevices.enumerateDevices?.()
+          .then((devs) => { if (!cancelled) setMultiCam(devs.filter((d) => d.kind === "videoinput").length > 1); })
+          .catch(() => {});
         // Ask for continuous autofocus where the device supports it — the single
         // biggest win against blurry close-ups of cards.
         try {
@@ -217,13 +224,15 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
               <button className="btn" onClick={capture} disabled={!ready || capturing}>
                 {capturing ? <>⏳ {t("Focusing…")}</> : <>📷 {t("Capture")}</>}
               </button>
-              <button
-                className="btn secondary"
-                onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))}
-                title={t("Switch between front and back camera")}
-              >
-                🔄 {facing === "environment" ? t("Front camera") : t("Back camera")}
-              </button>
+              {multiCam && (
+                <button
+                  className="btn secondary"
+                  onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))}
+                  title={t("Switch between front and back camera")}
+                >
+                  🔄 {facing === "environment" ? t("Front camera") : t("Back camera")}
+                </button>
+              )}
               <button
                 className="btn secondary"
                 onClick={() => setPortrait((p) => !p)}
