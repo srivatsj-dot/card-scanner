@@ -2,6 +2,7 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
@@ -304,6 +305,33 @@ async function analyze<T>(systemInstruction: string, parts: Part[], schema: unkn
 
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey, cloud: cloud.hasCloud, email: emailStatus() });
+});
+
+// --- eBay Marketplace Account Deletion / Closure notifications --------------
+// eBay disables every production keyset until you register an endpoint that
+// (a) answers their verification challenge and (b) accepts deletion notices.
+// We store NO eBay user data, so notifications are simply acknowledged. Set
+// EBAY_VERIFICATION_TOKEN (a 32–80 char secret you also paste into eBay) and
+// EBAY_DELETION_ENDPOINT (the exact public URL of this route) to enable it.
+const EBAY_VERIFICATION_TOKEN = process.env.EBAY_VERIFICATION_TOKEN || "";
+const EBAY_DELETION_ENDPOINT = process.env.EBAY_DELETION_ENDPOINT || "";
+app.get("/api/ebay/deletion", (req: Request, res: Response) => {
+  const challengeCode = String(req.query.challenge_code || "");
+  if (!challengeCode) { res.status(400).json({ error: "missing challenge_code" }); return; }
+  if (!EBAY_VERIFICATION_TOKEN || !EBAY_DELETION_ENDPOINT) {
+    res.status(503).json({ error: "eBay deletion endpoint not configured (set EBAY_VERIFICATION_TOKEN and EBAY_DELETION_ENDPOINT)." });
+    return;
+  }
+  // eBay's required hash: sha256(challengeCode + verificationToken + endpoint).
+  const hash = createHash("sha256");
+  hash.update(challengeCode);
+  hash.update(EBAY_VERIFICATION_TOKEN);
+  hash.update(EBAY_DELETION_ENDPOINT);
+  res.status(200).json({ challengeResponse: hash.digest("hex") });
+});
+app.post("/api/ebay/deletion", (_req: Request, res: Response) => {
+  // No eBay user data is stored, so there's nothing to erase — just acknowledge.
+  res.status(200).json({ ok: true });
 });
 
 // --- Scan a card (one or more photos: front, back, angled) -----------------
