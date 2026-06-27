@@ -174,15 +174,9 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
               <button className="iconbtn" disabled={date <= LAUNCH} onClick={() => goTo(addDays(date, -1))} aria-label="Previous day">‹</button>
               <button className="digest-datebtn" onClick={() => setShowCal((s) => !s)}>📅 {isToday ? t("Today") : human(date)}</button>
               <button className="iconbtn" disabled={isToday} onClick={() => goTo(addDays(date, 1))} aria-label="Next day">›</button>
-              {busy && <span className="spinner" style={{ marginLeft: 6 }} />}
             </div>
             {digest && <h2 style={{ margin: "8px 0 0", fontSize: 22 }}>{digest.overview}</h2>}
           </div>
-          {digest && isToday && !busy && (
-            <button className="btn ghost small" onClick={() => generate(today, true)} title={t("Pull a fresh briefing for today")}>
-              ↻ {t("Regenerate")}
-            </button>
-          )}
         </div>
 
         {showCal && (
@@ -195,9 +189,6 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
           />
         )}
 
-        {busy && !digest && (
-          <p className="muted" style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>{t("Putting your briefing together…")}</p>
-        )}
         {error && !busy && (
           <div style={{ marginTop: 12 }}>
             <div className="error-box">{error}</div>

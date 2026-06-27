@@ -774,6 +774,7 @@ app.post("/api/digest", async (req: Request, res: Response) => {
         `Among VERIFIED events only, lead with the biggest: top performances (multi-homer games, 40-point nights, no-hitters, hat tricks, walk-offs), milestones, and marquee results. Skip minor transactions, independent/minor leagues, and routine IL moves.\n\n` +
         `MANDATORY FORMAT — every single item in every array (yourCards, yourWishlist, and every bucket) MUST begin with the event's real date in square brackets, e.g. "[${windowStart}] Aaron Judge homered twice as the Yankees beat the Reds." The date is the day the event actually happened, taken from your search results — not a guess. Items are MACHINE-FILTERED after you respond: anything dated outside ${windowStart} to ${target}, or missing a leading [date], is automatically DELETED. So if you can't pin an event to a date inside that range, do not include it at all. Better to return empty arrays than to include undated or out-of-window items.\n` +
         `Do NOT write any calendar date inside the sentence itself (no "on June 19", no "6/19") — the leading [date] tag is the ONLY place a date goes, and the sentence is stripped of nothing else. An item whose sentence mentions a day outside ${windowStart}–${target} is also deleted, so never reference an out-of-window day. Do not tag an item with an in-window date while describing something that actually happened earlier — that is dishonest and will be discarded.\n\n` +
+        `HEADLINE MUST MATCH THE BODY (the last briefing failed this — the headline trumpeted a 22-1 blowout that appeared in NO section): the "overview" is a one-line summary of the items below it, nothing more. Every result, score, game, or story you name in the overview MUST ALSO appear as a date-tagged item in the matching bucket (storylines / risingStars / news / etc.). Never put an event in the overview that isn't also in a bucket — if it's big enough to headline, it's big enough to be a storyline. If there are no verified items for any bucket, the overview MUST plainly say it was a quiet day (e.g. "A quiet day across the hobby."), NOT a dramatic headline about a game. The overview and the sections can never contradict each other.\n\n` +
         (verified
           ? `=== VERIFIED RESULTS (authoritative — pulled directly from official league data for ${windowStart}) ===\n${verified}\n\n` +
             `For the sports covered by this VERIFIED block, build "risingStars" and "storylines" ONLY from these real results — these scores and stat lines are correct and correctly dated. Do NOT add, invent, search for, or "remember" any other games or performances for those sports. Pick the most notable lines (multi-HR/multi-goal games, gems, marquee or close finals), write each as one vivid sentence, and tag it [${windowStart}]. You may still use search for those sports' "trades" and "news" (transactions, set/market news) and for any sport NOT in the verified block.\n\n`
@@ -790,21 +791,31 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     const result = await analyze<DigestShape>(sys, parts, digestSchema, groundedFor(settings));
     // Deterministically enforce the time window: every item is date-tagged, so
     // we keep only those inside [windowStart, target] and strip the tag.
+    // The "in your binder"/"from your wishlist" sections only make sense when
+    // the collector actually has cards there — never invent them otherwise.
+    const yourCards = mine.length ? keepInWindow(result.yourCards, windowStart, target) : [];
+    const yourWishlist = want.length ? keepInWindow(result.yourWishlist, windowStart, target) : [];
+    const sections = (result.sections || []).map((s) => ({
+      sport: s.sport,
+      risingStars: keepInWindow(s.risingStars, windowStart, target),
+      declining: keepInWindow(s.declining, windowStart, target),
+      storylines: keepInWindow(s.storylines, windowStart, target),
+      trades: keepInWindow(s.trades, windowStart, target),
+      chase: keepInWindow(s.chase, windowStart, target),
+      news: keepInWindow(s.news, windowStart, target),
+    }));
+    // Safety net for the "big headline, empty body" contradiction: the overview
+    // isn't date-filtered, so if every bucket got filtered to empty, force a
+    // neutral quiet-day headline instead of leaving a dramatic one that nothing
+    // backs up.
+    const anyItems =
+      yourCards.length > 0 || yourWishlist.length > 0 ||
+      sections.some((s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length);
     const clean: DigestShape = {
-      overview: result.overview,
-      // The "in your binder"/"from your wishlist" sections only make sense when
-      // the collector actually has cards there — never invent them otherwise.
-      yourCards: mine.length ? keepInWindow(result.yourCards, windowStart, target) : [],
-      yourWishlist: want.length ? keepInWindow(result.yourWishlist, windowStart, target) : [],
-      sections: (result.sections || []).map((s) => ({
-        sport: s.sport,
-        risingStars: keepInWindow(s.risingStars, windowStart, target),
-        declining: keepInWindow(s.declining, windowStart, target),
-        storylines: keepInWindow(s.storylines, windowStart, target),
-        trades: keepInWindow(s.trades, windowStart, target),
-        chase: keepInWindow(s.chase, windowStart, target),
-        news: keepInWindow(s.news, windowStart, target),
-      })),
+      overview: anyItems ? result.overview : "A quiet day across the hobby — nothing major to report.",
+      yourCards,
+      yourWishlist,
+      sections,
     };
     res.json(clean);
   } catch (err) {
