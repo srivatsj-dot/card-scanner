@@ -71,7 +71,8 @@ const sameHash = (a: string, b: string) => {
 
 export interface AuthResult {
   token: string;
-  display: string;
+  username: string; // stable account key (never changes; used for namespacing)
+  display: string; // shown name, editable
   email: string | null;
   data: unknown;
   version: number;
@@ -89,9 +90,50 @@ export { CloudError };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function loadAuth(userId: number, token: string): Promise<AuthResult> {
   const p = db();
-  const u = (await p.query(`SELECT display, email FROM users WHERE id=$1`, [userId])).rows[0];
+  const u = (await p.query(`SELECT username, display, email FROM users WHERE id=$1`, [userId])).rows[0];
   const d = (await p.query(`SELECT blob, version FROM user_data WHERE user_id=$1`, [userId])).rows[0];
-  return { token, display: u.display, email: u.email, data: d?.blob ?? {}, version: d?.version ?? 0 };
+  return { token, username: u.username, display: u.display, email: u.email, data: d?.blob ?? {}, version: d?.version ?? 0 };
+}
+
+// Find-or-create a user from a Google-verified email (the server has already
+// validated the Google token). Existing email → just start a session (Google
+// lets you in without a password). New email → create an account whose username
+// defaults to the part before the @, made unique. provider='google', no password.
+export async function googleAuth(email: string, name: string): Promise<AuthResult> {
+  const p = db();
+  const lowerEmail = email.trim().toLowerCase();
+  const existing = (await p.query(`SELECT id FROM users WHERE LOWER(email)=$1`, [lowerEmail])).rows[0];
+  let id: number;
+  if (existing) {
+    id = existing.id as number;
+  } else {
+    const display = (name || lowerEmail.split("@")[0] || "player").trim();
+    const base = (key(display).replace(/[^a-z0-9_]+/g, "") || "player").slice(0, 24);
+    let uname = base, n = 1;
+    while ((await p.query(`SELECT 1 FROM users WHERE username=$1`, [uname])).rowCount) {
+      n += 1; uname = `${base}${n}`;
+    }
+    const now = Date.now();
+    id = (await p.query(
+      `INSERT INTO users (username, display, email, provider, created_at)
+       VALUES ($1,$2,$3,'google',$4) RETURNING id`,
+      [uname, display, email.trim(), now]
+    )).rows[0].id as number;
+    await p.query(`INSERT INTO user_data (user_id, blob, version, updated_at) VALUES ($1,'{}'::jsonb,0,$2)`, [id, now]);
+  }
+  const token = newToken();
+  await p.query(`INSERT INTO sessions (token, user_id, created_at) VALUES ($1,$2,$3)`, [token, id, Date.now()]);
+  return loadAuth(id, token);
+}
+
+// Change the shown display name (the username people see). The stable account
+// key (users.username) never changes, so renaming never moves anyone's data.
+export async function renameUser(userId: number, display: string): Promise<string> {
+  const d = (display || "").trim();
+  if (d.length < 1) throw new CloudError(400, "Username can't be empty.");
+  if (d.length > 40) throw new CloudError(400, "Username is too long.");
+  await db().query(`UPDATE users SET display=$2 WHERE id=$1`, [userId, d]);
+  return d;
 }
 
 export async function register(username: string, email: string, password: string): Promise<AuthResult> {

@@ -9,12 +9,30 @@ interface Props {
   settings: Settings;
   onChange: (s: Settings) => void;
   onDeleteAccount: () => void;
+  onRename?: (name: string) => Promise<void>;
   email?: string;
   displayName?: string;
 }
 
-export default function SettingsView({ settings, onChange, onDeleteAccount, email, displayName }: Props) {
+export default function SettingsView({ settings, onChange, onDeleteAccount, onRename, email, displayName }: Props) {
   const t = useT();
+  const [nameInput, setNameInput] = useState(displayName || "");
+  const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [savingName, setSavingName] = useState(false);
+
+  async function saveName() {
+    if (!onRename || !nameInput.trim() || nameInput.trim() === displayName) return;
+    setSavingName(true);
+    setNameMsg(null);
+    try {
+      await onRename(nameInput.trim());
+      setNameMsg({ ok: true, text: t("Username updated.") });
+    } catch (e) {
+      setNameMsg({ ok: false, text: e instanceof Error ? e.message : t("Couldn't update username.") });
+    } finally {
+      setSavingName(false);
+    }
+  }
   const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -55,6 +73,34 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, emai
       <p className="muted" style={{ marginTop: 0 }}>
         {t("These apply to every scan and trade. They're saved in your browser.")}
       </p>
+
+      {onRename && (
+        <label className="field">
+          <span>{t("Username")}{email ? ` (${email})` : ""}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="text" value={nameInput} maxLength={40}
+              autoCapitalize="none" autoCorrect="off"
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") saveName(); }}
+              placeholder={t("Your username")}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn secondary"
+              onClick={saveName}
+              disabled={savingName || !nameInput.trim() || nameInput.trim() === displayName}
+            >
+              {savingName ? t("Saving…") : t("Save")}
+            </button>
+          </div>
+          {nameMsg && (
+            <span className="muted" style={{ fontSize: 12, color: nameMsg.ok ? "var(--good, #3ad29f)" : "var(--bad, #ff6b6b)" }}>
+              {nameMsg.text}
+            </span>
+          )}
+        </label>
+      )}
 
       <div className="grid2">
         <label className="field">

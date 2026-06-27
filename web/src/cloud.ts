@@ -34,7 +34,7 @@ const setVersion = (v: number) => localStorage.setItem(VERSION_KEY, String(v));
 // the running app can re-read the freshly-synced collection.
 const announceSync = () => window.dispatchEvent(new CustomEvent("cloud-synced"));
 
-interface AuthResult { token: string; display: string; email: string | null; data: Record<string, unknown>; version: number; }
+interface AuthResult { token: string; username: string; display: string; email: string | null; data: Record<string, unknown>; version: number; }
 
 async function call<T>(path: string, body: unknown, auth = false): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -102,7 +102,9 @@ function mergeBlob(
 }
 
 function store(auth: AuthResult): { key: string; display: string; email: string | null } {
-  const key = auth.display.trim().toLowerCase();
+  // Key by the STABLE username, not the display name — so renaming the shown
+  // name never moves the account's data.
+  const key = (auth.username || auth.display).trim().toLowerCase();
   localStorage.setItem(TOKEN_KEY, auth.token);
   localStorage.setItem(TUSER_KEY, key);
   setVersion(auth.version || 0);
@@ -115,6 +117,14 @@ export async function cloudRegister(username: string, email: string, password: s
 }
 export async function cloudLogin(username: string, password: string) {
   return store(await call<AuthResult>("/api/cloud/login", { username, password }));
+}
+/** Sign in (or auto-create an account) with a Google ID token. */
+export async function cloudGoogle(credential: string) {
+  return store(await call<AuthResult>("/api/cloud/google", { credential }));
+}
+/** Change the shown display name on the server (account key stays the same). */
+export async function cloudRename(display: string) {
+  await call("/api/cloud/rename", { display }, true);
 }
 export async function cloudLogout() {
   try { await call("/api/cloud/logout", {}, true); } catch { /* ignore */ }

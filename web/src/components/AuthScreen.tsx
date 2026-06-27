@@ -105,19 +105,23 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
   const onAuthedRef = useRef(onAuthed);
   onAuthedRef.current = onAuthed;
 
-  // Render Google's "Continue with Google" button — only on the Log in tab,
-  // since Google signs into existing accounts and never creates one.
+  // Render Google's "Continue with Google" button on both the Log in and Sign
+  // up tabs — Google now creates an account automatically if none exists.
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || mode !== "login") return;
+    if (!GOOGLE_CLIENT_ID || mode === "reset") return;
     function init() {
       const gsi = (window as unknown as { google?: any }).google;
       if (!gsi?.accounts?.id || !googleBtnRef.current) return;
       gsi.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        callback: (resp: { credential?: string }) => {
+        callback: async (resp: { credential?: string }) => {
           try {
             if (!resp.credential) throw new Error("Google sign-in was cancelled.");
-            loginWithGoogle(resp.credential);
+            const r = await loginWithGoogle(resp.credential);
+            if (r.created) {
+              trackSignup(); // ad conversion: a real account was created
+              notifySignup(r.email, r.display);
+            }
             onAuthedRef.current();
           } catch (e) {
             setError(e instanceof Error ? e.message : "Google sign-in failed.");
@@ -250,7 +254,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
 
         {mode !== "reset" && (<>
 
-        {mode === "login" && (
+        {(
           <>
             {GOOGLE_CLIENT_ID ? (
               <div ref={googleBtnRef} className="google-btn-host" />

@@ -1231,6 +1231,45 @@ app.post("/api/cloud/login", async (req: Request, res: Response) => {
   }
 });
 
+// Verify a Google ID token (JWT) with Google and return the verified profile.
+// Uses Google's tokeninfo endpoint so we don't need a crypto library. If
+// GOOGLE_CLIENT_ID is set, we also check the token was issued for THIS app.
+async function verifyGoogleToken(credential: string): Promise<{ email: string; name: string }> {
+  const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+  if (!r.ok) throw new cloud.CloudError(401, "Google sign-in couldn't be verified.");
+  const info = (await r.json()) as { aud?: string; email?: string; email_verified?: string | boolean; name?: string };
+  const expectAud = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "";
+  if (expectAud && info.aud !== expectAud) throw new cloud.CloudError(401, "This Google sign-in is for a different app.");
+  if (!info.email || (info.email_verified !== true && info.email_verified !== "true")) {
+    throw new cloud.CloudError(401, "Google didn't confirm a verified email.");
+  }
+  return { email: info.email, name: info.name || "" };
+}
+
+app.post("/api/cloud/google", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const credential = (req.body as { credential?: string }).credential || "";
+    if (!credential) { res.status(400).json({ error: "Missing Google credential." }); return; }
+    const { email, name } = await verifyGoogleToken(credential);
+    res.json(await cloud.googleAuth(email, name));
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
+app.post("/api/cloud/rename", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await cloud.userForToken(bearer(req));
+    if (!userId) { res.status(401).json({ error: "Not signed in." }); return; }
+    const display = await cloud.renameUser(userId, (req.body as { display?: string }).display || "");
+    res.json({ ok: true, display });
+  } catch (err) {
+    cloudFail(res, err);
+  }
+});
+
 app.get("/api/cloud/sync", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   try {

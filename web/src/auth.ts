@@ -5,7 +5,7 @@
 // never leave the device — it just lets multiple people share a browser and
 // keep separate collections, with a real log-in/log-out gate.
 
-import { cloudEnabled, cloudRegister, cloudLogin, cloudLogout, cloudActive, cloudDeleteAccount } from "./cloud";
+import { cloudEnabled, cloudRegister, cloudLogin, cloudLogout, cloudActive, cloudDeleteAccount, cloudGoogle, cloudRename } from "./cloud";
 
 const USERS_KEY = "card-scanner-users";
 const SESSION_KEY = "card-scanner-session";
@@ -248,19 +248,62 @@ function decodeJwt(token: string): Record<string, unknown> {
   return JSON.parse(json) as Record<string, unknown>;
 }
 
-// Google is a sign-in shortcut for EXISTING accounts only — it never creates a
-// new one. It matches the Google email to an account you already registered.
-export function loginWithGoogle(credential: string): { key: string; email: string } {
+// A unique account key derived from a desired name (for new local accounts).
+function uniqueKey(name: string, users: Users): string {
+  const base = (keyOf(name).replace(/[^a-z0-9_]+/g, "") || "player").slice(0, 24);
+  let key = base, n = 1;
+  while (users[key]) { n += 1; key = `${base}${n}`; }
+  return key;
+}
+
+// "Continue with Google" — signs in and AUTO-CREATES an account if none exists
+// (no password). The username defaults to the part of the email before the @,
+// and is editable later in Settings. Returns whether a new account was created
+// so the caller can fire the welcome email / signup conversion.
+export async function loginWithGoogle(credential: string): Promise<{ key: string; email: string; display: string; created: boolean }> {
   const claims = decodeJwt(credential);
   const email = claims.email ? String(claims.email) : "";
   if (!email) throw new Error("Google didn't share an email for this account.");
+  const defaultName = (claims.name ? String(claims.name) : "").trim() || email.split("@")[0] || email;
+
+  // Cloud mode: the server verifies the Google token and owns the account.
+  if (await cloudEnabled()) {
+    const before = loadUsers();
+    const knew = Object.values(before).some((u) => u.email?.toLowerCase() === email.toLowerCase());
+    const r = await cloudGoogle(credential);
+    upsertCloudUser(r.key, r.display, r.email);
+    localStorage.setItem(SESSION_KEY, r.key);
+    return { key: r.key, email: r.email || email, display: r.display, created: !knew };
+  }
+
+  // Device-local mode: find the account by email, or create a fresh one.
   const users = loadUsers();
   const lower = email.toLowerCase();
   const existing = Object.keys(users).find((k) => users[k].email?.toLowerCase() === lower);
-  if (!existing) {
-    throw new Error("No account uses this Google email yet. Create an account first, then sign in with Google.");
+  if (existing) {
+    migrateLegacy(existing);
+    localStorage.setItem(SESSION_KEY, existing);
+    return { key: existing, email, display: users[existing].display || existing, created: false };
   }
-  migrateLegacy(existing);
-  localStorage.setItem(SESSION_KEY, existing);
-  return { key: existing, email };
+  const key = uniqueKey(email.split("@")[0] || defaultName, users);
+  users[key] = { display: email.split("@")[0] || defaultName, salt: "", hash: "", createdAt: Date.now(), provider: "google", email };
+  saveUsers(users);
+  migrateLegacy(key);
+  localStorage.setItem(SESSION_KEY, key);
+  return { key, email, display: users[key].display, created: true };
+}
+
+// Rename the shown display name. The account key never changes, so data stays
+// put. Updates the cloud server too when signed into a cloud account.
+export async function setDisplayName(key: string, name: string): Promise<string> {
+  const display = name.trim();
+  if (display.length < 1) throw new Error("Username can't be empty.");
+  if (display.length > 40) throw new Error("Username is too long (40 characters max).");
+  if (display.includes(":")) throw new Error("Username can't contain a colon.");
+  const users = loadUsers();
+  if (!users[key]) throw new Error("Account not found on this device.");
+  users[key].display = display;
+  saveUsers(users);
+  if (cloudActive()) await cloudRename(display);
+  return display;
 }

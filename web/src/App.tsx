@@ -25,7 +25,7 @@ import TradeUpView from "./components/TradeUpView";
 import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import HomeView from "./components/HomeView";
-import { currentUser, displayNameOf, emailOf, logout, deleteAccount } from "./auth";
+import { currentUser, displayNameOf, emailOf, logout, deleteAccount, setDisplayName } from "./auth";
 import { cloudActive, schedulePush, cloudPull, cloudUserKey } from "./cloud";
 
 type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
@@ -78,6 +78,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const [trades, setTrades] = useState<number>(() => loadJSON<number>(TRADES_KEY, 0));
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [, setNameTick] = useState(0); // bump to re-render after a username change
   const earnedRef = useRef<Set<string>>(
     new Set(
       loadJSON<string[] | null>(EARNED_KEY, null) ??
@@ -587,7 +588,14 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       {view === "sets" && <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} />}
       {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
-        <SettingsView settings={settings} onChange={setSettings} onDeleteAccount={onDeleteAccount} email={emailOf(user)} displayName={displayNameOf(user)} />
+        <SettingsView
+          settings={settings}
+          onChange={setSettings}
+          onDeleteAccount={onDeleteAccount}
+          onRename={async (name) => { await setDisplayName(user, name); setNameTick((n) => n + 1); }}
+          email={emailOf(user)}
+          displayName={displayNameOf(user)}
+        />
       )}
       <AdSlot className="ad-bottom" />
       </div>
