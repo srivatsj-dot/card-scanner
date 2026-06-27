@@ -1291,13 +1291,37 @@ async function verifyGoogleToken(credential: string): Promise<{ email: string; n
   return { email: info.email, name: info.name || "" };
 }
 
+// Verify a Google OAuth ACCESS token (from the account-picker popup flow) and
+// return the verified profile: confirm it was issued for this app (tokeninfo),
+// then read the email/name from the userinfo endpoint.
+async function verifyGoogleAccessToken(accessToken: string): Promise<{ email: string; name: string }> {
+  const ti = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
+  if (!ti.ok) throw new cloud.CloudError(401, "Google sign-in couldn't be verified.");
+  const tinfo = (await ti.json()) as { aud?: string; azp?: string };
+  const expectAud = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || "";
+  if (expectAud && tinfo.aud !== expectAud && tinfo.azp !== expectAud) {
+    throw new cloud.CloudError(401, "This Google sign-in is for a different app.");
+  }
+  const ui = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!ui.ok) throw new cloud.CloudError(401, "Couldn't read your Google profile.");
+  const u = (await ui.json()) as { email?: string; email_verified?: boolean; name?: string };
+  if (!u.email || u.email_verified === false) throw new cloud.CloudError(401, "Google didn't confirm a verified email.");
+  return { email: u.email, name: u.name || "" };
+}
+
 app.post("/api/cloud/google", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   try {
-    const credential = (req.body as { credential?: string }).credential || "";
-    if (!credential) { res.status(400).json({ error: "Missing Google credential." }); return; }
-    const { email, name } = await verifyGoogleToken(credential);
-    res.json(await cloud.googleAuth(email, name));
+    const body = req.body as { accessToken?: string; credential?: string };
+    const profile = body.accessToken
+      ? await verifyGoogleAccessToken(body.accessToken)
+      : body.credential
+      ? await verifyGoogleToken(body.credential)
+      : null;
+    if (!profile) { res.status(400).json({ error: "Missing Google sign-in token." }); return; }
+    res.json(await cloud.googleAuth(profile.email, profile.name));
   } catch (err) {
     cloudFail(res, err);
   }

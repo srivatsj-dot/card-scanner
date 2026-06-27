@@ -101,23 +101,31 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
       setBusy(false);
     }
   }
-  const googleBtnRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tokenClientRef = useRef<any>(null);
+  const [googleReady, setGoogleReady] = useState(false);
   const onAuthedRef = useRef(onAuthed);
   onAuthedRef.current = onAuthed;
 
-  // Render Google's "Continue with Google" button on both the Log in and Sign
-  // up tabs — Google now creates an account automatically if none exists.
+  // Set up Google's OAuth account-picker flow behind our OWN generic "Continue
+  // with Google" button — so it never shows a personalized "Continue as <name>".
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || mode === "reset") return;
+    if (!GOOGLE_CLIENT_ID) return;
     function init() {
       const gsi = (window as unknown as { google?: any }).google;
-      if (!gsi?.accounts?.id || !googleBtnRef.current) return;
-      gsi.accounts.id.initialize({
+      if (!gsi?.accounts?.oauth2) return;
+      tokenClientRef.current = gsi.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        callback: async (resp: { credential?: string }) => {
+        scope: "openid email profile",
+        callback: async (resp: { access_token?: string; error?: string }) => {
+          if (resp.error || !resp.access_token) {
+            if (resp.error && resp.error !== "access_denied") setError("Google sign-in failed. Try again.");
+            return;
+          }
+          setBusy(true);
+          setError(null);
           try {
-            if (!resp.credential) throw new Error("Google sign-in was cancelled.");
-            const r = await loginWithGoogle(resp.credential);
+            const r = await loginWithGoogle(resp.access_token);
             if (r.created) {
               trackSignup(); // ad conversion: a real account was created
               notifySignup(r.email, r.display);
@@ -125,18 +133,14 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             onAuthedRef.current();
           } catch (e) {
             setError(e instanceof Error ? e.message : "Google sign-in failed.");
+          } finally {
+            setBusy(false);
           }
         },
       });
-      gsi.accounts.id.renderButton(googleBtnRef.current, {
-        theme: "filled_blue",
-        size: "large",
-        width: 320,
-        text: "continue_with",
-        shape: "pill",
-      });
+      setGoogleReady(true);
     }
-    if ((window as unknown as { google?: any }).google?.accounts?.id) {
+    if ((window as unknown as { google?: any }).google?.accounts?.oauth2) {
       init();
       return;
     }
@@ -151,7 +155,15 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
     }
     script.addEventListener("load", init);
     return () => script?.removeEventListener("load", init);
-  }, [mode]);
+  }, []);
+
+  // Always show the account chooser (never auto-continue as the signed-in user).
+  function startGoogle() {
+    if (busy) return;
+    if (!tokenClientRef.current) { setError("Google sign-in is still loading — try again in a second."); return; }
+    setError(null);
+    tokenClientRef.current.requestAccessToken({ prompt: "select_account" });
+  }
 
   async function submit() {
     if (busy) return;
@@ -256,21 +268,18 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
 
         {(
           <>
-            {GOOGLE_CLIENT_ID ? (
-              <div ref={googleBtnRef} className="google-btn-host" />
-            ) : (
-              <button
-                className="btn-google"
-                onClick={() =>
-                  setError(
-                    t("Google sign-in isn't available right now. Please use a username and password below.")
-                  )
-                }
-              >
-                <GoogleG />
-                {t("Continue with Google")}
-              </button>
-            )}
+            <button
+              className="btn-google"
+              disabled={busy || (!!GOOGLE_CLIENT_ID && !googleReady)}
+              onClick={
+                GOOGLE_CLIENT_ID
+                  ? startGoogle
+                  : () => setError(t("Google sign-in isn't available right now. Please use a username and password below."))
+              }
+            >
+              <GoogleG />
+              {t("Continue with Google")}
+            </button>
             <div className="auth-divider"><span>{t("or")}</span></div>
           </>
         )}

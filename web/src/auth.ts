@@ -231,22 +231,6 @@ export function deleteAccount(key: string): void {
 }
 
 // --- Google sign-in --------------------------------------------------------
-// The browser receives a signed Google ID token (JWT). We read the profile from
-// it to key a local account by the Google user id (`sub`), which is globally
-// unique — so there's never a username clash. Data still lives on this device;
-// Google just provides identity and a display name (no password to remember).
-
-function decodeJwt(token: string): Record<string, unknown> {
-  const part = token.split(".")[1] || "";
-  const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-  const json = decodeURIComponent(
-    atob(b64)
-      .split("")
-      .map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0"))
-      .join("")
-  );
-  return JSON.parse(json) as Record<string, unknown>;
-}
 
 // A unique account key derived from a desired name (for new local accounts).
 function uniqueKey(name: string, users: Users): string {
@@ -256,27 +240,36 @@ function uniqueKey(name: string, users: Users): string {
   return key;
 }
 
+// Read the signed-in Google profile from an OAuth access token (device-local
+// mode resolves it in the browser; cloud mode lets the server verify instead).
+async function googleProfile(accessToken: string): Promise<{ email: string; name: string }> {
+  const r = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) throw new Error("Couldn't verify your Google sign-in. Try again.");
+  const p = (await r.json()) as { email?: string; name?: string };
+  if (!p.email) throw new Error("Google didn't share an email for this account.");
+  return { email: p.email, name: p.name || "" };
+}
+
 // "Continue with Google" — signs in and AUTO-CREATES an account if none exists
 // (no password). The username defaults to the part of the email before the @,
 // and is editable later in Settings. Returns whether a new account was created
 // so the caller can fire the welcome email / signup conversion.
-export async function loginWithGoogle(credential: string): Promise<{ key: string; email: string; display: string; created: boolean }> {
-  const claims = decodeJwt(credential);
-  const email = claims.email ? String(claims.email) : "";
-  if (!email) throw new Error("Google didn't share an email for this account.");
-  const defaultName = (claims.name ? String(claims.name) : "").trim() || email.split("@")[0] || email;
-
+export async function loginWithGoogle(accessToken: string): Promise<{ key: string; email: string; display: string; created: boolean }> {
   // Cloud mode: the server verifies the Google token and owns the account.
   if (await cloudEnabled()) {
     const before = loadUsers();
-    const knew = Object.values(before).some((u) => u.email?.toLowerCase() === email.toLowerCase());
-    const r = await cloudGoogle(credential);
+    const r = await cloudGoogle(accessToken);
+    const knew = Object.values(before).some((u) => u.email?.toLowerCase() === (r.email || "").toLowerCase());
     upsertCloudUser(r.key, r.display, r.email);
     localStorage.setItem(SESSION_KEY, r.key);
-    return { key: r.key, email: r.email || email, display: r.display, created: !knew };
+    return { key: r.key, email: r.email || "", display: r.display, created: !knew };
   }
 
-  // Device-local mode: find the account by email, or create a fresh one.
+  // Device-local mode: resolve the email from Google, then find-or-create.
+  const { email } = await googleProfile(accessToken);
+  const defaultName = email.split("@")[0] || email;
   const users = loadUsers();
   const lower = email.toLowerCase();
   const existing = Object.keys(users).find((k) => users[k].email?.toLowerCase() === lower);

@@ -118,9 +118,9 @@ export async function cloudRegister(username: string, email: string, password: s
 export async function cloudLogin(username: string, password: string) {
   return store(await call<AuthResult>("/api/cloud/login", { username, password }));
 }
-/** Sign in (or auto-create an account) with a Google ID token. */
-export async function cloudGoogle(credential: string) {
-  return store(await call<AuthResult>("/api/cloud/google", { credential }));
+/** Sign in (or auto-create an account) with a Google OAuth access token. */
+export async function cloudGoogle(accessToken: string) {
+  return store(await call<AuthResult>("/api/cloud/google", { accessToken }));
 }
 /** Change the shown display name on the server (account key stays the same). */
 export async function cloudRename(display: string) {
