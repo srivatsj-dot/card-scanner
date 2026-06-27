@@ -33,6 +33,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
   const [facing, setFacing] = useState<"environment" | "user">("environment");
   const [preview, setPreview] = useState<string | null>(null);
   const [blurry, setBlurry] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const t = useT();
 
   useEffect(() => {
@@ -50,8 +51,10 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
           // `exact` actually forces the front/back switch; `ideal` is only a
           // hint that phones often ignore (so both buttons showed the same cam).
           facingMode: exact ? { exact: facing } : { ideal: facing },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          // Ask for the sharpest feed the camera can give — cards have fine text,
+          // and we crop to the guide, so more pixels = a readable, less-blurry shot.
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
           aspectRatio: portrait ? 3 / 4 : 4 / 3, // a hint; desktops may ignore
         });
         let stream: MediaStream;
@@ -136,11 +139,18 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
 
   // Map the on-screen guide rectangle to source pixels (accounting for the
   // object-fit: contain letterboxing) and crop the captured frame to it.
-  function capture() {
+  async function capture() {
     const video = videoRef.current;
-    const guide = guideRef.current;
-    if (!video || !video.videoWidth) return;
+    if (!video || !video.videoWidth || capturing) return;
+    // Lock focus and let the lens settle before grabbing — the single biggest
+    // fix for blurry close-ups of cards.
+    setCapturing(true);
+    await refocus();
+    await new Promise((r) => setTimeout(r, 500));
+    setCapturing(false);
+    if (!video.videoWidth) return;
 
+    const guide = guideRef.current;
     const nW = video.videoWidth, nH = video.videoHeight;
     let sx = 0, sy = 0, sw = nW, sh = nH;
     if (guide) {
@@ -164,7 +174,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
     if (!ctx) return;
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
     setBlurry(sharpness(ctx, canvas.width, canvas.height) < BLUR_THRESHOLD);
-    setPreview(canvas.toDataURL("image/jpeg", 0.92));
+    setPreview(canvas.toDataURL("image/jpeg", 0.95));
   }
 
   function usePhoto() {
@@ -196,7 +206,9 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
         <div className="cam-actions">
           {!error && !preview && (
             <>
-              <button className="btn" onClick={capture} disabled={!ready}>📷 {t("Capture")}</button>
+              <button className="btn" onClick={capture} disabled={!ready || capturing}>
+                {capturing ? <>⏳ {t("Focusing…")}</> : <>📷 {t("Capture")}</>}
+              </button>
               <button
                 className="btn secondary"
                 onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))}

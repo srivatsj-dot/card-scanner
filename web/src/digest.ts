@@ -11,9 +11,19 @@ const inflight = new Map<string, Promise<DigestResult | null>>();
 // Bump when the digest's generation logic changes, so already-cached days are
 // silently regenerated with the new logic instead of showing stale results.
 // (There's no "regenerate" button by design — this is how fixes propagate.)
-const DIGEST_VERSION = 3;
+const DIGEST_VERSION = 4;
 export const isFresh = (d: DigestResult | undefined): d is DigestResult =>
   !!d && (d as { __v?: number }).__v === DIGEST_VERSION;
+
+// Does a briefing actually have anything in it? Used so a temporarily-empty
+// regeneration never replaces a good cached briefing with a blank one.
+function hasContent(d: DigestResult | undefined): boolean {
+  if (!d) return false;
+  if (d.yourCards?.length || d.yourWishlist?.length) return true;
+  return (d.sections || []).some(
+    (s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length
+  );
+}
 
 export function readDigestArchive(cacheKey: string): Archive {
   try {
@@ -40,6 +50,15 @@ async function generate(
   try {
     const d = await getDigest(date, sports, players, wishlist, settings);
     const withTime = { ...d, generatedAt: Date.now(), __v: DIGEST_VERSION };
+    // Never downgrade a good briefing to a blank one: if this regeneration came
+    // back empty but we already had real content cached, keep the good one (just
+    // re-stamp its version so we don't keep retrying it forever).
+    const prev = readDigestArchive(cacheKey)[date];
+    if (!hasContent(withTime) && hasContent(prev)) {
+      const kept = { ...prev, __v: DIGEST_VERSION } as DigestResult;
+      write(cacheKey, date, kept);
+      return kept;
+    }
     write(cacheKey, date, withTime);
     return withTime;
   } catch {
