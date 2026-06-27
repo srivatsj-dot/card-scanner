@@ -301,7 +301,10 @@ export async function pokemonFacts(date: string): Promise<SportFacts | null> {
 
 // Assemble a verified-facts block for the requested categories on a date.
 // Returns "" when nothing is available so the caller can omit it cleanly.
-export async function verifiedSportsFacts(cats: string[], date: string): Promise<string> {
+// Structured verified results per sport (or [] when nothing's available). The
+// digest uses this both to build the prompt AND as a deterministic fallback so
+// the briefing is never blank on a day that genuinely had games.
+export async function verifiedSportsFactsData(cats: string[], date: string): Promise<SportFacts[]> {
   const has = (...keys: string[]) => cats.some((c) => keys.some((k) => c.toLowerCase().includes(k)));
   const jobs: Promise<SportFacts | null>[] = [];
 
@@ -316,10 +319,12 @@ export async function verifiedSportsFacts(cats: string[], date: string): Promise
   if (has("cricket")) jobs.push(cricketFacts(date));
   if (has("pok")) jobs.push(pokemonFacts(date)); // best with LIMITLESS_API_KEY; search-grounded otherwise
 
-  if (jobs.length === 0) return "";
-  const facts = (await Promise.all(jobs.map((j) => j.catch(() => null)))).filter(
-    (f): f is SportFacts => !!f
-  );
+  if (jobs.length === 0) return [];
+  return (await Promise.all(jobs.map((j) => j.catch(() => null)))).filter((f): f is SportFacts => !!f);
+}
+
+export async function verifiedSportsFacts(cats: string[], date: string): Promise<string> {
+  const facts = await verifiedSportsFactsData(cats, date);
   if (facts.length === 0) return "";
   return facts
     .map((f) => `${f.sport} — VERIFIED results for ${date}:\n${f.lines.join("\n")}`)

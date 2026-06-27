@@ -12,7 +12,7 @@ import { ebayPrice, hasEbay } from "./ebay.js";
 import { pokemonLookup } from "./prices.js";
 import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
-import { verifiedSportsFacts, hasLimitless } from "./sports.js";
+import { verifiedSportsFacts, verifiedSportsFactsData, hasLimitless } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema } from "./schemas.js";
 import {
   scanSystemPrompt,
@@ -791,8 +791,11 @@ app.post("/api/digest", async (req: Request, res: Response) => {
   const mine = (players || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
   const want = (wishlist || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 60);
   // Real, dated game results for baseball/hockey — accurate scores and
-  // performances the model can't reliably recall. Best-effort; "" if unavailable.
-  const verified = await verifiedSportsFacts(cats, windowStart).catch(() => "");
+  // performances the model can't reliably recall. Best-effort; [] if unavailable.
+  const verifiedData = await verifiedSportsFactsData(cats, windowStart).catch(() => []);
+  const verified = verifiedData.length
+    ? verifiedData.map((f) => `${f.sport} — VERIFIED results for ${windowStart}:\n${f.lines.join("\n")}`).join("\n\n")
+    : "";
   const parts: Part[] = [
     {
       text:
@@ -845,6 +848,30 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     const anyItems =
       yourCards.length > 0 || yourWishlist.length > 0 ||
       sections.some((s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length);
+    // Deterministic fallback: if the model returned nothing but the verified
+    // feeds DO have real games, build the briefing straight from those, so the
+    // briefing is never blank on a day that actually had results.
+    if (!anyItems && verifiedData.length) {
+      const fbSections = verifiedData.map((f) => ({
+        sport: f.sport,
+        risingStars: [] as string[],
+        declining: [] as string[],
+        // Drop header lines like "Final scores:" / "Results:".
+        storylines: f.lines.filter((l) => !/:\s*$/.test(l)).slice(0, 10),
+        trades: [] as string[],
+        chase: [] as string[],
+        news: [] as string[],
+      })).filter((s) => s.storylines.length);
+      if (fbSections.length) {
+        res.json({
+          overview: "Here's what happened in the leagues you follow.",
+          yourCards,
+          yourWishlist,
+          sections: fbSections,
+        });
+        return;
+      }
+    }
     const clean: DigestShape = {
       overview: anyItems ? result.overview : "A quiet day across the hobby — nothing major to report.",
       yourCards,
@@ -853,6 +880,20 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     };
     res.json(clean);
   } catch (err) {
+    // If the AI call failed but we have real verified results, serve those
+    // rather than erroring out to a blank briefing.
+    const fb = verifiedData
+      .map((f) => ({
+        sport: f.sport,
+        risingStars: [] as string[], declining: [] as string[],
+        storylines: f.lines.filter((l) => !/:\s*$/.test(l)).slice(0, 10),
+        trades: [] as string[], chase: [] as string[], news: [] as string[],
+      }))
+      .filter((s) => s.storylines.length);
+    if (fb.length) {
+      res.json({ overview: "Here's what happened in the leagues you follow.", yourCards: [], yourWishlist: [], sections: fb });
+      return;
+    }
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
   }

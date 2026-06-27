@@ -11,7 +11,7 @@ const inflight = new Map<string, Promise<DigestResult | null>>();
 // Bump when the digest's generation logic changes, so already-cached days are
 // silently regenerated with the new logic instead of showing stale results.
 // (There's no "regenerate" button by design — this is how fixes propagate.)
-const DIGEST_VERSION = 4;
+const DIGEST_VERSION = 5;
 export const isFresh = (d: DigestResult | undefined): d is DigestResult =>
   !!d && (d as { __v?: number }).__v === DIGEST_VERSION;
 
