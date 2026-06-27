@@ -215,7 +215,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
                 <label className="field">
                   <span>{t("Email")}</span>
                   <input
-                    type="email" autoCapitalize="none" autoCorrect="off"
+                    type="email" autoCapitalize="none" autoCorrect="off" autoComplete="off"
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") startReset(); }}
@@ -243,6 +243,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
                   <span>{t("New password")}</span>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") finishReset(); }}
@@ -305,6 +306,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
             type="text"
             autoCapitalize="none"
             autoCorrect="off"
+            autoComplete="off"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
@@ -318,6 +320,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
               type="email"
               autoCapitalize="none"
               autoCorrect="off"
+              autoComplete="off"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
@@ -329,6 +332,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
           <span>{t("Password")}</span>
           <input
             type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
