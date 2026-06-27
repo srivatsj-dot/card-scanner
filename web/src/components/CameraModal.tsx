@@ -46,15 +46,27 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
         return;
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facing }, // rear ("environment") or front ("user")
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            aspectRatio: portrait ? 3 / 4 : 4 / 3, // a hint; desktops may ignore
-          },
-          audio: false,
+        const videoFor = (exact: boolean): MediaTrackConstraints => ({
+          // `exact` actually forces the front/back switch; `ideal` is only a
+          // hint that phones often ignore (so both buttons showed the same cam).
+          facingMode: exact ? { exact: facing } : { ideal: facing },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          aspectRatio: portrait ? 3 / 4 : 4 / 3, // a hint; desktops may ignore
         });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: videoFor(true), audio: false });
+        } catch (exErr) {
+          // No camera in that exact direction (e.g. a laptop with only a front
+          // cam) — fall back to a soft preference instead of failing outright.
+          const name = (exErr as { name?: string })?.name;
+          if (name === "OverconstrainedError" || name === "NotFoundError" || name === "ConstraintNotSatisfiedError") {
+            stream = await navigator.mediaDevices.getUserMedia({ video: videoFor(false), audio: false });
+          } else {
+            throw exErr;
+          }
+        }
         if (cancelled) {
           stream.getTracks().forEach((tr) => tr.stop());
           return;

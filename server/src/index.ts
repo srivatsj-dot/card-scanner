@@ -100,11 +100,18 @@ function keepInWindow(items: unknown, start: string, end: string): string[] {
   for (const raw of items) {
     if (typeof raw !== "string") continue;
     const m = /^\s*[\[(]?(\d{4}-\d{2}-\d{2})[\])]?[\s:.,-]*/.exec(raw);
-    if (!m) continue; // no verifiable date → drop
-    if (m[1] < start || m[1] > end) continue; // tagged outside the window → drop
-    const text = raw.slice(m[0].length).trim();
+    // If the item carries a leading [date] tag, honor it strictly: drop anything
+    // tagged outside the window. If it has NO tag, keep it — the model is
+    // grounded on this window, and dropping every untagged item was nuking real
+    // news and leaving an empty briefing under a full headline.
+    let text = raw.trim();
+    if (m) {
+      if (m[1] < start || m[1] > end) continue; // tagged outside the window → drop
+      text = raw.slice(m[0].length).trim();
+    }
     if (!text) continue;
-    // Reject if the sentence itself cites a day outside the window.
+    // Still reject anything whose sentence cites a day outside the window — that
+    // catches stale events even when they slip in without a leading tag.
     if (datesInProse(text, year).some((d) => d < start || d > end)) continue;
     out.push(text);
   }

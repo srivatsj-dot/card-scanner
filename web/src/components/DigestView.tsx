@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Settings, DigestResult } from "../types";
-import { ensureDigest, regenerateDigest, readDigestArchive } from "../digest";
+import { ensureDigest, regenerateDigest, readDigestArchive, isFresh } from "../digest";
 import { useT } from "../translator";
 
 interface Props {
@@ -142,9 +142,10 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Navigating to a past day with no saved briefing auto-generates it.
+  // Navigating to a past day with no saved (or stale-version) briefing
+  // regenerates it silently.
   useEffect(() => {
-    if (date === today || archive[date] || busy || tried.current.has(date)) return;
+    if (date === today || isFresh(archive[date]) || busy || tried.current.has(date)) return;
     if (date < LAUNCH || date > today) return;
     tried.current.add(date);
     generate(date);
