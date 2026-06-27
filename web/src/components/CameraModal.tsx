@@ -197,7 +197,15 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
             className={`cam-stage ${portrait ? "portrait" : "landscape"}`}
             onClick={refocus}
           >
-            <video ref={videoRef} autoPlay playsInline muted className="cam-video" />
+            <video
+              ref={videoRef}
+              autoPlay playsInline muted
+              className="cam-video"
+              // Mirror the front-camera PREVIEW so it behaves like a normal
+              // selfie mirror ("points the right way"). The capture reads the raw
+              // frame, so the saved card image stays un-mirrored and readable.
+              style={{ transform: facing === "user" ? "scaleX(-1)" : undefined }}
+            />
             {!fullFrame && <div ref={guideRef} className="cam-guide" aria-hidden />}
             {!ready && <div className="cam-hint muted">{t("Starting camera… (tap if it stays black)")}</div>}
           </div>
