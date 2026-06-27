@@ -125,8 +125,7 @@ interface DigestShape {
 function apiKeyGuard(res: Response): boolean {
   if (!hasApiKey) {
     res.status(503).json({
-      error:
-        "No GEMINI_API_KEY configured on the server. Get a free key at https://aistudio.google.com/apikey, then add it to .env.",
+      error: "The scanner is temporarily unavailable. Please try again later.",
     });
     return false;
   }
@@ -138,16 +137,15 @@ function describeError(err: unknown): { status: number; message: string } {
     if (err.status === 429) {
       return {
         status: 429,
-        message:
-          "Gemini free-tier rate limit hit. Wait a minute and try again, or check quota in Google AI Studio.",
+        message: "We're a bit busy right now. Please wait a minute and try again.",
       };
     }
     if (err.status === 400 && /api key/i.test(err.message)) {
-      return { status: 401, message: "Invalid GEMINI_API_KEY." };
+      return { status: 503, message: "The scanner is temporarily unavailable. Please try again later." };
     }
-    return { status: err.status || 500, message: err.message };
+    return { status: err.status || 500, message: "Something went wrong. Please try again." };
   }
-  return { status: 500, message: err instanceof Error ? err.message : "Unexpected server error." };
+  return { status: 500, message: "Something went wrong. Please try again." };
 }
 
 /** Pull JSON out of a Gemini response, tolerating accidental ```json fences. */

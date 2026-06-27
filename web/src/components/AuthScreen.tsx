@@ -263,7 +263,7 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
                 className="btn-google"
                 onClick={() =>
                   setError(
-                    t("Google sign-in isn't set up yet — add a VITE_GOOGLE_CLIENT_ID to your .env to turn it on. For now, use a username and password below.")
+                    t("Google sign-in isn't available right now. Please use a username and password below.")
                   )
                 }
               >

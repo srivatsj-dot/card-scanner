@@ -64,9 +64,9 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
           break;
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Scan failed.";
-          const rateLimited = msg.toLowerCase().includes("rate limit");
+          const rateLimited = (e as { status?: number })?.status === 429 || msg.toLowerCase().includes("rate limit");
           if (rateLimited && attempt < 2) {
-            patch(row.id, { status: "scanning", error: t("Rate limited — waiting, then retrying…") });
+            patch(row.id, { status: "scanning", error: t("Busy — waiting, then retrying…") });
             await sleep(8000 * (attempt + 1));
             continue;
           }
@@ -134,7 +134,7 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
         </div>
         <label className="toggle" style={{ marginTop: 12, marginBottom: 0 }}>
           <input type="checkbox" checked={accurate} onChange={(e) => setAccurate(e.target.checked)} disabled={running} />
-          {t("Verify online (on by default — more accurate; uncheck to go faster / save quota)")}
+          {t("Verify online (on by default — more accurate; uncheck for faster results)")}
         </label>
         <input
           ref={fileRef}

@@ -42,6 +42,7 @@ function loadJSON<T>(key: string, fallback: T): T {
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const isRateLimit = (e: unknown) =>
+  (e as { status?: number })?.status === 429 ||
   String(e instanceof Error ? e.message : e).toLowerCase().includes("rate limit");
 
 function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: () => void; onDeleteAccount: () => void }) {
@@ -213,7 +214,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       if (newFlaws.length) toast(`⚠ ${newFlaws.length} ${t("new flaw(s) spotted")}: ${newFlaws[0]}`);
       else toast(`${t("Condition logged")}: ${grade}`);
     } catch (e) {
-      toast(isRateLimit(e) ? t("Rate limited — try again in a minute") : t("Condition check failed"));
+      toast(isRateLimit(e) ? t("Too busy right now — try again in a minute") : t("Condition check failed"));
     }
   }
 
@@ -252,7 +253,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     try {
       r = await searchCardCached(item.target, aiSettings);
     } catch (e) {
-      toast(isRateLimit(e) ? t("Rate limited — try again in a minute") : t("Couldn't look that up — try again"));
+      toast(isRateLimit(e) ? t("Too busy right now — try again in a minute") : t("Couldn't look that up — try again"));
       return;
     }
     const give = item.give && item.give.length ? item.give : item.steps?.[0]?.giveUp || [];

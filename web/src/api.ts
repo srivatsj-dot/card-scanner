@@ -8,7 +8,9 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+    const err = new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
   }
   return data as T;
 }

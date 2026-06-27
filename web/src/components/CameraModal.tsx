@@ -88,7 +88,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
         const name = (err as { name?: string })?.name;
         if (name === "NotAllowedError" || name === "SecurityError") {
           setError(
-            t("Camera permission is blocked for this site. In Safari: top menu → Safari → Settings for localhost… → set Camera to Allow, then reload. Or just use Upload.")
+            t("Camera access is blocked. Allow camera for this site in your browser settings and reload, or use Upload instead.")
           );
         } else if (name === "NotFoundError") {
           setError(t("No camera was found on this device. Use Upload instead."));

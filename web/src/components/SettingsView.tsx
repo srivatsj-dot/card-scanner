@@ -42,10 +42,10 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
     setEmailMsg(null);
     const r = await notifySignup(email, displayName || "there");
     setSending(false);
-    if (r.ok) setEmailMsg({ ok: true, text: t("Sent! Check your inbox") + (r.via ? ` (${r.via}).` : ".") });
+    if (r.ok) setEmailMsg({ ok: true, text: t("Sent! Check your inbox.") });
     else if (r.reason === "email-not-configured")
-      setEmailMsg({ ok: false, text: t("Email isn't set up on the server. Add GMAIL_USER + GMAIL_APP_PASSWORD (or a Resend key) to .env and restart.") });
-    else setEmailMsg({ ok: false, text: r.error || t("Couldn't send. Check the server logs.") });
+      setEmailMsg({ ok: false, text: t("Email isn't available right now. Please try again later.") });
+    else setEmailMsg({ ok: false, text: t("Couldn't send the email. Please try again.") });
   }
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     onChange({ ...settings, [key]: value });
@@ -175,7 +175,7 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
         />
         {t("Use live web data for current prices & player form")}
         <span className="muted" style={{ fontSize: 12 }}>
-          &nbsp;— {t("turn off if you keep hitting free-tier rate limits (faster, fewer calls)")}
+          &nbsp;— {t("turn off for faster results using offline knowledge")}
         </span>
       </label>
 
@@ -187,7 +187,7 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
         />
         {t("Auto-refresh binder & wishlist prices daily")}
         <span className="muted" style={{ fontSize: 12 }}>
-          &nbsp;— {t("turn off to save quota; you can still refresh manually")}
+          &nbsp;— {t("turn off to refresh prices only when you choose")}
         </span>
       </label>
 
