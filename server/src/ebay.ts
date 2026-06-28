@@ -13,6 +13,7 @@ export const hasEbay = Boolean(EBAY_CLIENT_ID && EBAY_CLIENT_SECRET);
 
 const OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
+const IMAGE_SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search_by_image";
 
 let token = "";
 let tokenExpiry = 0;
@@ -49,6 +50,27 @@ const MARKETPLACE: Record<string, string> = {
   Spain: "EBAY_ES", Ireland: "EBAY_IE",
 };
 
+type Item = { title?: string; price?: { value?: string; currency?: string } };
+
+// Robust price range from a set of listings; trims outliers / graded lots.
+function summarize(items: Item[]): EbayPrice | null {
+  const prices = items
+    .map((it) => Number(it.price?.value))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+  if (prices.length < 3) return null;
+  const trim = Math.floor(prices.length * 0.1);
+  const core = prices.slice(trim, prices.length - trim || prices.length);
+  const at = (p: number) => core[Math.min(core.length - 1, Math.max(0, Math.floor(core.length * p)))];
+  return {
+    low: at(0.2),
+    mid: at(0.5),
+    high: at(0.8),
+    currency: items.find((it) => it.price?.currency)?.price?.currency || "USD",
+    count: prices.length,
+  };
+}
+
 export async function ebayPrice(query: string, region?: string): Promise<EbayPrice | null> {
   if (!hasEbay || !query.trim()) return null;
   try {
@@ -59,25 +81,40 @@ export async function ebayPrice(query: string, region?: string): Promise<EbayPri
       headers: { Authorization: `Bearer ${tok}`, "X-EBAY-C-MARKETPLACE-ID": market },
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { itemSummaries?: { price?: { value?: string; currency?: string } }[] };
-    const items = data.itemSummaries || [];
-    const prices = items
-      .map((it) => Number(it.price?.value))
-      .filter((n) => Number.isFinite(n) && n > 0)
-      .sort((a, b) => a - b);
-    if (prices.length < 3) return null;
-    // Trim the top/bottom 10% to drop junk and graded/lot outliers.
-    const trim = Math.floor(prices.length * 0.1);
-    const core = prices.slice(trim, prices.length - trim || prices.length);
-    const at = (p: number) => core[Math.min(core.length - 1, Math.max(0, Math.floor(core.length * p)))];
-    return {
-      low: at(0.2),
-      mid: at(0.5),
-      high: at(0.8),
-      currency: items.find((it) => it.price?.currency)?.price?.currency || "USD",
-      count: prices.length,
-    };
+    const data = (await res.json()) as { itemSummaries?: Item[] };
+    return summarize(data.itemSummaries || []);
   } catch {
     return null;
+  }
+}
+
+// Identify a card by its PHOTO using eBay's image search: matches the image
+// against live listings, whose titles already carry the right player/set/year/
+// number. Returns the top listing titles (a strong ID hint) plus a price range.
+export async function ebayImageSearch(
+  imageBase64: string,
+  region?: string
+): Promise<{ titles: string[]; price: EbayPrice | null }> {
+  if (!hasEbay || !imageBase64) return { titles: [], price: null };
+  try {
+    const tok = await getToken();
+    const market = (region && MARKETPLACE[region]) || "EBAY_US";
+    const image = imageBase64.replace(/^data:[^;]+;base64,/, "");
+    const res = await fetch(`${IMAGE_SEARCH_URL}?limit=30`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tok}`,
+        "X-EBAY-C-MARKETPLACE-ID": market,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ image }),
+    });
+    if (!res.ok) return { titles: [], price: null };
+    const data = (await res.json()) as { itemSummaries?: Item[] };
+    const items = data.itemSummaries || [];
+    const titles = items.map((it) => it.title || "").filter(Boolean).slice(0, 8);
+    return { titles, price: summarize(items) };
+  } catch {
+    return { titles: [], price: null };
   }
 }

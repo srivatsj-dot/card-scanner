@@ -8,7 +8,7 @@ import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
-import { ebayPrice, hasEbay } from "./ebay.js";
+import { ebayPrice, ebayImageSearch, hasEbay } from "./ebay.js";
 import { pokemonLookup } from "./prices.js";
 import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
@@ -395,10 +395,23 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   ];
 
   try {
-    // Reverse-image search (Google Vision) on the photo: feed the web's best
-    // guess of the card to the model as a strong identification hint. Optional.
-    if (images.length > 0 && hasVision) {
-      const guess = await webDetect(images[0].imageBase64);
+    // Photo-based identification boosters (run together): both feed the model a
+    // strong hint of what the card is, from matching the EXACT photo online.
+    if (images.length > 0) {
+      const [guess, ebayMatch] = await Promise.all([
+        hasVision ? webDetect(images[0].imageBase64).catch(() => null) : Promise.resolve(null),
+        hasEbay ? ebayImageSearch(images[0].imageBase64, settings?.region).catch(() => ({ titles: [], price: null })) : Promise.resolve({ titles: [] as string[], price: null }),
+      ]);
+      // eBay image search: matching listing TITLES already carry the right
+      // player/set/year/number — the strongest single ID signal we have.
+      if (ebayMatch.titles.length) {
+        scanParts.unshift({
+          text:
+            `eBay IMAGE SEARCH of this exact photo returned these matching listing titles (most relevant first):\n- ${ebayMatch.titles.join("\n- ")}\n` +
+            `These are real listings of the same card. Use them as a STRONG hint for the player, set, year, card number, and parallel — but still trust exactly what's printed on the card if they conflict.`,
+        });
+      }
+      // Reverse-image search (Google Vision) on the photo: the web's best guess.
       if (guess && (guess.bestGuess || guess.entities.length)) {
         scanParts.unshift({
           text:
