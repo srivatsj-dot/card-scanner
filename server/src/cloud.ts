@@ -55,6 +55,27 @@ export async function initCloud(): Promise<void> {
     code TEXT NOT NULL,
     expires BIGINT NOT NULL
   )`);
+  // Server-generated morning briefings, shared by all users and persisted so a
+  // restart/redeploy doesn't lose the day's briefing.
+  await p.query(`CREATE TABLE IF NOT EXISTS digests (
+    key TEXT PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at BIGINT NOT NULL
+  )`);
+}
+
+export async function saveDigest(key: string, data: unknown): Promise<void> {
+  if (!hasCloud) return;
+  await db().query(
+    `INSERT INTO digests (key, data, updated_at) VALUES ($1,$2,$3)
+     ON CONFLICT (key) DO UPDATE SET data=$2, updated_at=$3`,
+    [key, JSON.stringify(data ?? {}), Date.now()]
+  );
+}
+export async function loadDigest(key: string): Promise<unknown | null> {
+  if (!hasCloud) return null;
+  const r = await db().query(`SELECT data FROM digests WHERE key=$1`, [key]);
+  return r.rows[0]?.data ?? null;
 }
 
 // --- helpers ---------------------------------------------------------------

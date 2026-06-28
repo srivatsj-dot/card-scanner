@@ -777,38 +777,45 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
   }
 });
 
-// --- Morning digest: daily market update grouped by sport ------------------
-app.post("/api/digest", async (req: Request, res: Response) => {
-  if (!apiKeyGuard(res)) return;
-  const { date, sports, players, wishlist, settings } = req.body as {
-    date?: string;
-    sports?: string[];
-    players?: string[];
-    wishlist?: string[];
-    settings?: Settings;
-  };
-  const cats = (sports || []).map((s) => String(s).trim()).filter(Boolean);
-  if (cats.length === 0) {
-    res.status(400).json({ error: "Enable at least one category for the morning update." });
-    return;
-  }
-  // Target date, clamped to [launch, today].
-  const reqDate = /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? (date as string) : today();
-  const target = reqDate > today() ? today() : reqDate < LAUNCH_DATE ? LAUNCH_DATE : reqDate;
-  // A morning briefing reports what happened the day before. "Yesterday" is the
-  // day before the briefing date, floored at launch so we never reach back
-  // before the service started.
+// --- Morning digest: generated ONCE on the server per day, cached & shared --
+// Bump to regenerate every cached briefing after a logic change.
+const DIGEST_GEN_VERSION = "6";
+// The shared briefing always covers all supported sports; each user's view is
+// filtered to the sports they follow. That lets one generation serve everyone.
+const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
+
+type DigestSection = { sport: string; risingStars: string[]; declining: string[]; storylines: string[]; trades: string[]; chase: string[]; news: string[] };
+type Briefing = { overview: string; yourCards: string[]; yourWishlist: string[]; sections: DigestSection[] };
+
+const factsToSections = (data: { sport: string; lines: string[] }[]): DigestSection[] =>
+  data
+    .map((f) => ({
+      sport: f.sport, risingStars: [], declining: [],
+      storylines: f.lines.filter((l) => !/:\s*$/.test(l)).slice(0, 10),
+      trades: [], chase: [], news: [],
+    }))
+    .filter((s) => s.storylines.length);
+const briefingHasContent = (b: Briefing) =>
+  b.sections.some((s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length);
+
+// Generate one day's shared briefing. NEVER throws — on total failure it returns
+// a verified-feed fallback or a quiet-day briefing, so the app is never blank.
+async function buildDigest(target: string): Promise<Briefing> {
   const yesterday = addDaysISO(target, -1);
   const windowStart = yesterday < LAUNCH_DATE ? LAUNCH_DATE : yesterday;
-  const sys = digestSystemPrompt(settings || {}, cats);
-  const mine = (players || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 80);
-  const want = (wishlist || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 60);
-  // Real, dated game results for baseball/hockey — accurate scores and
-  // performances the model can't reliably recall. Best-effort; [] if unavailable.
+  const cats = ALL_DIGEST_SPORTS;
+  const sys = digestSystemPrompt({}, cats);
   const verifiedData = await verifiedSportsFactsData(cats, windowStart).catch(() => []);
   const verified = verifiedData.length
     ? verifiedData.map((f) => `${f.sport} — VERIFIED results for ${windowStart}:\n${f.lines.join("\n")}`).join("\n\n")
     : "";
+  const quiet = (): Briefing => ({ overview: "A quiet day across the hobby — nothing major to report.", yourCards: [], yourWishlist: [], sections: [] });
+  const fallback = (): Briefing | null => {
+    const s = factsToSections(verifiedData);
+    if (!s.length) return null;
+    const names = [...new Set(s.map((x) => x.sport.replace(/\s*\(.*\)/, "")))].join(", ");
+    return { overview: `Yesterday's scores and standout performances across ${names}.`, yourCards: [], yourWishlist: [], sections: s };
+  };
   const parts: Part[] = [
     {
       text:
@@ -822,30 +829,20 @@ app.post("/api/digest", async (req: Request, res: Response) => {
         `This applies to UNVERIFIED, search-only claims. The VERIFIED RESULTS block below (when present) is already confirmed and correctly dated — you MUST use it. Only drop UNVERIFIED extras you can't confirm; never drop or ignore the verified results.\n` +
         `RELIABILITY: do NOT return an all-empty briefing when the VERIFIED RESULTS block below contains any games — those are real, so always turn the notable ones into storylines and risingStars. A blank briefing is only acceptable when there is genuinely no verified data AND nothing confirmable from search for ${windowStart}. Aim to always give the reader a real briefing built from the verified results.\n\n` +
         `Among VERIFIED events only, lead with the biggest: top performances (multi-homer games, 40-point nights, no-hitters, hat tricks, walk-offs), milestones, and marquee results. Skip minor transactions, independent/minor leagues, and routine IL moves.\n\n` +
-        `MANDATORY FORMAT — every single item in every array (yourCards, yourWishlist, and every bucket) MUST begin with the event's real date in square brackets, e.g. "[${windowStart}] Aaron Judge homered twice as the Yankees beat the Reds." The date is the day the event actually happened, taken from your search results — not a guess. Items are MACHINE-FILTERED after you respond: anything dated outside ${windowStart} to ${target}, or missing a leading [date], is automatically DELETED. So if you can't pin an event to a date inside that range, do not include it at all. Better to return empty arrays than to include undated or out-of-window items.\n` +
-        `Do NOT write any calendar date inside the sentence itself (no "on June 19", no "6/19") — the leading [date] tag is the ONLY place a date goes, and the sentence is stripped of nothing else. An item whose sentence mentions a day outside ${windowStart}–${target} is also deleted, so never reference an out-of-window day. Do not tag an item with an in-window date while describing something that actually happened earlier — that is dishonest and will be discarded.\n\n` +
-        `HEADLINE MUST MATCH THE BODY (the last briefing failed this — the headline trumpeted a 22-1 blowout that appeared in NO section): the "overview" is a one-line summary of the items below it, nothing more. Every result, score, game, or story you name in the overview MUST ALSO appear as a date-tagged item in the matching bucket (storylines / risingStars / news / etc.). Never put an event in the overview that isn't also in a bucket — if it's big enough to headline, it's big enough to be a storyline. If there are no verified items for any bucket, the overview MUST plainly say it was a quiet day (e.g. "A quiet day across the hobby."), NOT a dramatic headline about a game. The overview and the sections can never contradict each other.\n\n` +
+        `MANDATORY FORMAT — every single item in every array (and every bucket) MUST begin with the event's real date in square brackets, e.g. "[${windowStart}] Aaron Judge homered twice as the Yankees beat the Reds." The date is the day the event actually happened, taken from your search results — not a guess. Items are MACHINE-FILTERED after you respond: anything dated outside ${windowStart} to ${target} is automatically DELETED.\n` +
+        `Do NOT write any calendar date inside the sentence itself (no "on June 19", no "6/19") — the leading [date] tag is the ONLY place a date goes. An item whose sentence mentions a day outside ${windowStart}–${target} is also deleted, so never reference an out-of-window day.\n\n` +
+        `HEADLINE MUST MATCH THE BODY: the "overview" is a one-line summary of the items below it. Every result, score, game, or story you name in the overview MUST ALSO appear as an item in the matching bucket. If there are no items for any bucket, the overview MUST plainly say it was a quiet day, NOT a dramatic headline. The overview and the sections can never contradict each other.\n\n` +
         (verified
           ? `=== VERIFIED RESULTS (authoritative — pulled directly from official league data for ${windowStart}) ===\n${verified}\n\n` +
-            `For the sports covered by this VERIFIED block, build "risingStars" and "storylines" ONLY from these real results — these scores and stat lines are correct and correctly dated. Do NOT add, invent, search for, or "remember" any other games or performances for those sports. Pick the most notable lines (multi-HR/multi-goal games, gems, marquee or close finals), write each as one vivid sentence, and tag it [${windowStart}]. You may still use search for those sports' "trades" and "news" (transactions, set/market news) and for any sport NOT in the verified block.\n\n`
+            `For the sports covered by this VERIFIED block, build "risingStars" and "storylines" ONLY from these real results — these scores and stat lines are correct and correctly dated. Do NOT add, invent, search for, or "remember" any other games for those sports. Pick the most notable lines, write each as one vivid sentence, and tag it [${windowStart}]. You may still use search for those sports' "trades" and "news" and for any sport NOT in the verified block.\n\n`
           : "") +
-        (cats.some((c) => c.toLowerCase().includes("pok")) && !/Pok[eé]mon TCG/i.test(verified)
-          ? `=== POKÉMON TCG — ALWAYS COVER ===\nThere's no pre-verified feed for Pokémon, so YOU must research it with Google Search. Find Pokémon TCG tournaments that CONCLUDED on ${windowStart} — Regionals, Special Events, International Championships, Worlds, and major online events — by checking Limitless TCG (limitlesstcg.com and play.limitlesstcg.com) and RK9 (rk9.gg). For each, report the winner and their winning deck/archetype, plus any clear metagame shifts (decks rising/falling). Put these in the Pokémon section's "risingStars"/"storylines". Only report what search actually confirms for ${windowStart}, date-tagged [${windowStart}]; never invent a tournament, winner, or deck. If genuinely nothing concluded that day, a lighter Pokémon section is fine — but do look first. Do NOT leave Pokémon empty just because it's harder than sports.\n\n`
-          : "") +
-        (mine.length ? `The collector's BINDER players/cards:\n- ${mine.join("\n- ")}\n\n` : "") +
-        (want.length ? `The collector's WISHLIST cards:\n- ${want.join("\n- ")}\n\n` : "") +
+        `=== POKÉMON TCG ===\nThere's no pre-verified feed for Pokémon, so research it with Google Search: find Pokémon TCG tournaments that CONCLUDED on ${windowStart} (Regionals, Special Events, Worlds, major online events) via Limitless TCG and RK9, report winners and winning decks plus meta shifts, in the Pokémon section. Only report what search confirms, date-tagged [${windowStart}]; never invent a tournament or deck.\n\n` +
         `Write the briefing for ${target} (covering ${windowStart}), for these categories: ${cats.join(", ")}.`,
     },
   ];
   try {
-    const result = await analyze<DigestShape>(sys, parts, digestSchema, groundedFor(settings));
-    // Deterministically enforce the time window: every item is date-tagged, so
-    // we keep only those inside [windowStart, target] and strip the tag.
-    // The "in your binder"/"from your wishlist" sections only make sense when
-    // the collector actually has cards there — never invent them otherwise.
-    const yourCards = mine.length ? keepInWindow(result.yourCards, windowStart, target) : [];
-    const yourWishlist = want.length ? keepInWindow(result.yourWishlist, windowStart, target) : [];
-    const sections = (result.sections || []).map((s) => ({
+    const result = await analyze<DigestShape>(sys, parts, digestSchema, groundedFor({}));
+    const sections: DigestSection[] = (result.sections || []).map((s) => ({
       sport: s.sport,
       risingStars: keepInWindow(s.risingStars, windowStart, target),
       declining: keepInWindow(s.declining, windowStart, target),
@@ -854,59 +851,68 @@ app.post("/api/digest", async (req: Request, res: Response) => {
       chase: keepInWindow(s.chase, windowStart, target),
       news: keepInWindow(s.news, windowStart, target),
     }));
-    // Safety net for the "big headline, empty body" contradiction: the overview
-    // isn't date-filtered, so if every bucket got filtered to empty, force a
-    // neutral quiet-day headline instead of leaving a dramatic one that nothing
-    // backs up.
-    const anyItems =
-      yourCards.length > 0 || yourWishlist.length > 0 ||
-      sections.some((s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length);
-    // Deterministic fallback: if the model returned nothing but the verified
-    // feeds DO have real games, build the briefing straight from those, so the
-    // briefing is never blank on a day that actually had results.
-    if (!anyItems && verifiedData.length) {
-      const fbSections = verifiedData.map((f) => ({
-        sport: f.sport,
-        risingStars: [] as string[],
-        declining: [] as string[],
-        // Drop header lines like "Final scores:" / "Results:".
-        storylines: f.lines.filter((l) => !/:\s*$/.test(l)).slice(0, 10),
-        trades: [] as string[],
-        chase: [] as string[],
-        news: [] as string[],
-      })).filter((s) => s.storylines.length);
-      if (fbSections.length) {
-        res.json({
-          overview: "Here's what happened in the leagues you follow.",
-          yourCards,
-          yourWishlist,
-          sections: fbSections,
-        });
-        return;
-      }
+    const briefing: Briefing = { overview: result.overview, yourCards: [], yourWishlist: [], sections };
+    if (briefingHasContent(briefing)) return briefing;
+    // Model returned nothing — fall back to the verified feeds, else quiet day.
+    return fallback() || quiet();
+  } catch {
+    return fallback() || quiet();
+  }
+}
+
+// Shared cache: memory (fast) + Postgres (survives restarts). One generation per
+// day serves every user. We only persist briefings that actually have content,
+// so a transient empty result isn't locked in.
+const digestMem = new Map<string, Briefing>();
+const digestInflight = new Map<string, Promise<Briefing>>();
+async function getDailyDigest(target: string): Promise<Briefing> {
+  const key = `${DIGEST_GEN_VERSION}:${target}`;
+  const hit = digestMem.get(key);
+  if (hit) return hit;
+  const fromDb = (await cloud.loadDigest(key).catch(() => null)) as Briefing | null;
+  if (fromDb && Array.isArray(fromDb.sections)) { digestMem.set(key, fromDb); return fromDb; }
+  const running = digestInflight.get(key);
+  if (running) return running;
+  const p = (async () => {
+    const d = await buildDigest(target);
+    if (briefingHasContent(d)) {
+      digestMem.set(key, d);
+      await cloud.saveDigest(key, d).catch(() => {});
     }
-    const clean: DigestShape = {
-      overview: anyItems ? result.overview : "A quiet day across the hobby — nothing major to report.",
-      yourCards,
-      yourWishlist,
-      sections,
-    };
-    res.json(clean);
+    return d;
+  })().finally(() => digestInflight.delete(key));
+  digestInflight.set(key, p);
+  return p;
+}
+
+// Keep TODAY's briefing warm so it's ready the instant anyone opens the app —
+// and gets generated even with no visitors (as long as the server is awake).
+function startDigestScheduler() {
+  if (!hasApiKey) return;
+  const tick = () => { getDailyDigest(today()).catch(() => {}); };
+  setTimeout(tick, 5000); // shortly after boot
+  setInterval(tick, 30 * 60 * 1000); // and every 30 minutes
+}
+
+const normSport = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+app.post("/api/digest", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  const { date, sports } = req.body as { date?: string; sports?: string[] };
+  const cats = (sports || []).map((s) => String(s).trim()).filter(Boolean);
+  if (cats.length === 0) {
+    res.status(400).json({ error: "Enable at least one category for the morning update." });
+    return;
+  }
+  const reqDate = /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? (date as string) : today();
+  const target = reqDate > today() ? today() : reqDate < LAUNCH_DATE ? LAUNCH_DATE : reqDate;
+  try {
+    const shared = await getDailyDigest(target);
+    // Show only the sports this user follows.
+    const keys = cats.map((c) => normSport(c).split(/[\s/(]/)[0]).filter(Boolean);
+    const sections = shared.sections.filter((s) => keys.some((k) => normSport(s.sport).includes(k)));
+    res.json({ overview: shared.overview, yourCards: [], yourWishlist: [], sections });
   } catch (err) {
-    // If the AI call failed but we have real verified results, serve those
-    // rather than erroring out to a blank briefing.
-    const fb = verifiedData
-      .map((f) => ({
-        sport: f.sport,
-        risingStars: [] as string[], declining: [] as string[],
-        storylines: f.lines.filter((l) => !/:\s*$/.test(l)).slice(0, 10),
-        trades: [] as string[], chase: [] as string[], news: [] as string[],
-      }))
-      .filter((s) => s.storylines.length);
-    if (fb.length) {
-      res.json({ overview: "Here's what happened in the leagues you follow.", yourCards: [], yourWishlist: [], sections: fb });
-      return;
-    }
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
   }
@@ -1505,4 +1511,6 @@ app.listen(PORT, () => {
   if (!hasApiKey) {
     console.log("  ⚠  GEMINI_API_KEY is not set — get a free key at https://aistudio.google.com/apikey and add it to .env.");
   }
+  console.log(`  morning briefing: generated server-side daily, cached & shared (auto-refreshes while the server is awake)`);
+  startDigestScheduler();
 });
