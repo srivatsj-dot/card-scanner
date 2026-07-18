@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
-import type { Settings, TradeResult, AskResult, CardEntry, SavedCard, WishItem, LaterItem } from "../types";
-import { evaluateTrade, suggestAsks, suggestOffer } from "../api";
+import { useEffect, useRef, useState } from "react";
+import type { Settings, TradeResult, AskResult, CardEntry, SavedCard, WishItem, LaterItem, TradeOffer, SentOffer } from "../types";
+import { evaluateTrade, suggestAsks, suggestOffer, createOffer, getOffer } from "../api";
 import { describeCard } from "../utils";
 import { useT } from "../translator";
 import CameraModal from "./CameraModal";
@@ -171,6 +171,18 @@ interface TradeProps {
   onWishAll?: (texts: string[]) => void;
   onSaveLater: (item: Omit<LaterItem, "id" | "savedAt">) => void;
   onDoTrade: (target: string, give: string[]) => void;
+  senderName: string;
+  offersKey: string; // localStorage key for this user's sent offers
+}
+
+function statusPill(status: TradeOffer["status"] | "loading", t: (s: string) => string) {
+  switch (status) {
+    case "accepted": return <span className="pill green">✅ {t("Accepted")}</span>;
+    case "declined": return <span className="pill red">✕ {t("Declined")}</span>;
+    case "change_requested": return <span className="pill blue">✏️ {t("Change requested")}</span>;
+    case "pending": return <span className="pill">⏳ {t("Waiting")}</span>;
+    default: return <span className="pill">…</span>;
+  }
 }
 
 // Do you actually own the card described by `text`? Token-match it against the
@@ -185,7 +197,7 @@ function ownsCard(text: string, saved: SavedCard[]): boolean {
   });
 }
 
-export default function TradeView({ settings, saved, wishlist, onTrade, onWishAll, onSaveLater, onDoTrade }: TradeProps) {
+export default function TradeView({ settings, saved, wishlist, onTrade, onWishAll, onSaveLater, onDoTrade, senderName, offersKey }: TradeProps) {
   const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
   const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
   const [trade, setTrade] = useState<TradeResult | null>(null);
@@ -195,7 +207,64 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState<{ side: "your" | "their"; id: number } | null>(null);
   const [pickingWish, setPickingWish] = useState<number | null>(null);
+  // Sent trade offers: ids live in localStorage; live statuses are fetched.
+  const [sent, setSent] = useState<SentOffer[]>(() => {
+    try { return JSON.parse(localStorage.getItem(offersKey) || "[]"); } catch { return []; }
+  });
+  const [statuses, setStatuses] = useState<Record<string, TradeOffer>>({});
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [copied, setCopied] = useState(false);
   const t = useT();
+
+  // Refresh each sent offer's status when the view opens.
+  useEffect(() => {
+    let cancelled = false;
+    sent.slice(0, 10).forEach((s) => {
+      getOffer(s.id)
+        .then((o) => { if (!cancelled) setStatuses((m) => ({ ...m, [s.id]: o })); })
+        .catch(() => {});
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sent.map((s) => s.id).join(",")]);
+
+  function rememberSent(o: SentOffer) {
+    setSent((prev) => {
+      const next = [o, ...prev].slice(0, 20);
+      try { localStorage.setItem(offersKey, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }
+
+  function forgetSent(id: string) {
+    setSent((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      try { localStorage.setItem(offersKey, JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }
+
+  async function sendOffer() {
+    if (!trade) return;
+    setSending(true);
+    setError(null);
+    try {
+      const receivingList = theirSide.map((e) => e.text.trim()).filter(Boolean);
+      const { id } = await createOffer(senderName, givingList, receivingList, trade, settings.currency || "USD");
+      rememberSent({ id, give: givingList, get: receivingList, createdAt: Date.now() });
+      const url = `${window.location.origin}/offer/${id}`;
+      setShareLink(url);
+      setCopied(false);
+      if (navigator.share) {
+        navigator.share({ title: t("Trade offer"), text: `${senderName} ${t("sent you a trade offer")}`, url }).catch(() => {});
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't create the offer.");
+    } finally {
+      setSending(false);
+    }
+  }
 
   function applyPick(card: SavedCard) {
     if (!picking) return;
@@ -356,6 +425,11 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
                   🤝 {t("Do trade")}
                 </button>
               )}
+              {givingList.length > 0 && receivingText && (
+                <button className="btn secondary small" disabled={sending} onClick={sendOffer}>
+                  {sending ? <><span className="spinner" />{t("Creating…")}</> : <>📤 {t("Send offer")}</>}
+                </button>
+              )}
               <button
                 className="btn ghost small"
                 onClick={() => onSaveLater({ target: receivingText || trade.verdict, give: givingText ? [givingText] : [] })}
@@ -364,6 +438,25 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
               </button>
             </div>
           </div>
+          {shareLink && (
+            <div className="trade-rec" style={{ marginTop: 12 }}>
+              <div className="name">🔗 {t("Offer link — send it to your trade partner")}</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <input type="text" readOnly value={shareLink} style={{ flex: 1, minWidth: 200 }} onFocus={(e) => e.target.select()} />
+                <button
+                  className="btn small"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(shareLink).then(() => setCopied(true)).catch(() => {});
+                  }}
+                >
+                  {copied ? `✓ ${t("Copied")}` : t("Copy link")}
+                </button>
+              </div>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+                {t("They'll see both sides with real values and can accept, decline, or ask for a change — no account needed. Check back here for their answer.")}
+              </p>
+            </div>
+          )}
           <div className="grid2" style={{ marginTop: 14 }}>
             <div>
               <h3>{t("Your side")}</h3>
@@ -456,6 +549,52 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
             </div>
           ))}
           {offer.note && <p className="muted" style={{ fontSize: 14 }}>{offer.note}</p>}
+        </div>
+      )}
+
+      {sent.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginBottom: 4 }}>📤 {t("Sent offers")}</h2>
+          <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+            {t("Offers you've shared, with your trade partner's answer.")}
+          </p>
+          {sent.map((s) => {
+            const live = statuses[s.id];
+            const status = live?.status || "loading";
+            return (
+              <div className="trade-rec" key={s.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <div className="name" style={{ minWidth: 0 }}>
+                    {s.give.join(" + ")} → {s.get.join(" + ")}
+                  </div>
+                  {statusPill(status, t)}
+                </div>
+                {status === "change_requested" && live?.message && (
+                  <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14, marginTop: 4 }}>
+                    ✏️ {t("They asked:")} “{live.message}” — {t("adjust the cards above and send a new offer.")}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                  {status === "accepted" && (
+                    <button className="btn small" onClick={() => onDoTrade(s.get.join(" + "), s.give)}>
+                      🤝 {t("Settle into binder")}
+                    </button>
+                  )}
+                  <button
+                    className="btn ghost small"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(`${window.location.origin}/offer/${s.id}`).catch(() => {});
+                    }}
+                  >
+                    {t("Copy link")}
+                  </button>
+                  <button className="btn ghost small" onClick={() => forgetSent(s.id)} style={{ marginLeft: "auto" }}>
+                    🗑 {t("Remove")}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

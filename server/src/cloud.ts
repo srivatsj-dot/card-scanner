@@ -62,6 +62,27 @@ export async function initCloud(): Promise<void> {
     data JSONB NOT NULL,
     updated_at BIGINT NOT NULL
   )`);
+  // Shareable trade offers: sender creates one, the recipient opens the link
+  // (no account needed) and responds. Stored as one blob per offer.
+  await p.query(`CREATE TABLE IF NOT EXISTS offers (
+    id TEXT PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at BIGINT NOT NULL
+  )`);
+}
+
+export async function saveOffer(id: string, data: unknown): Promise<void> {
+  if (!hasCloud) return;
+  await db().query(
+    `INSERT INTO offers (id, data, updated_at) VALUES ($1,$2,$3)
+     ON CONFLICT (id) DO UPDATE SET data=$2, updated_at=$3`,
+    [id, JSON.stringify(data ?? {}), Date.now()]
+  );
+}
+export async function loadOffer(id: string): Promise<unknown | null> {
+  if (!hasCloud) return null;
+  const r = await db().query(`SELECT data FROM offers WHERE id=$1`, [id]);
+  return r.rows[0]?.data ?? null;
 }
 
 export async function saveDigest(key: string, data: unknown): Promise<void> {

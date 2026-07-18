@@ -213,6 +213,29 @@ export interface TradeResult {
   suggestions: string[];
 }
 
+/** A shareable trade offer: the sender's side of the deal plus its fairness
+ * snapshot. The recipient opens the link and responds — no account needed. */
+export interface TradeOffer {
+  id: string;
+  from: string;
+  give: string[]; // sender gives (recipient receives)
+  get: string[]; // sender wants (recipient gives)
+  trade: TradeResult | null;
+  currency: string;
+  status: "pending" | "accepted" | "declined" | "change_requested";
+  message: string;
+  createdAt: number;
+  respondedAt: number | null;
+}
+
+/** Locally-remembered offer the user sent (id + summary for the status list). */
+export interface SentOffer {
+  id: string;
+  give: string[];
+  get: string[];
+  createdAt: number;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;

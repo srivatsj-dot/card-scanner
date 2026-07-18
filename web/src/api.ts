@@ -1,4 +1,4 @@
-import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry, BulkCard, TradeUpResult, DigestResult, ChecklistResult } from "./types";
+import type { ScanResult, TradeResult, AskResult, Settings, ChatMessage, CardEntry, BulkCard, TradeUpResult, DigestResult, ChecklistResult, TradeOffer } from "./types";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -111,6 +111,30 @@ export function evaluateTrade(
 /** Plan a chain of fair trades from owned cards toward a target grail. */
 export function planTradeUp(target: string, owned: string[], settings: Settings): Promise<TradeUpResult> {
   return postJson<TradeUpResult>("/api/tradeup", { target, owned, settings });
+}
+
+/** Create a shareable trade offer; returns its id (link is /offer/<id>). */
+export function createOffer(
+  from: string,
+  give: string[],
+  get: string[],
+  trade: TradeResult | null,
+  currency: string
+): Promise<{ id: string }> {
+  return postJson<{ id: string }>("/api/offer", { from, give, get, trade, currency });
+}
+
+/** Fetch a trade offer (public — this is what the recipient's link loads). */
+export async function getOffer(id: string): Promise<TradeOffer> {
+  const res = await fetch(`/api/offer/${encodeURIComponent(id)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+  return data as TradeOffer;
+}
+
+/** Respond to an offer: accept, decline, or ask for a change (with a note). */
+export function respondOffer(id: string, action: "accept" | "decline" | "change", message?: string): Promise<TradeOffer> {
+  return postJson<TradeOffer>(`/api/offer/${encodeURIComponent(id)}/respond`, { action, message });
 }
 
 /** Daily briefing for a specific date (YYYY-MM-DD) and the given categories. */

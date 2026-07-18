@@ -20,6 +20,7 @@ import AwardsView from "./components/AwardsView";
 import AdSlot from "./components/AdSlot";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
+import OfferView from "./components/OfferView";
 import Logo from "./components/Logo";
 import TradeUpView from "./components/TradeUpView";
 import LaterView from "./components/LaterView";
@@ -585,6 +586,8 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           onWishAll={addWishMany}
           onSaveLater={saveLater}
           onDoTrade={doTrade}
+          senderName={displayNameOf(user)}
+          offersKey={`card-scanner-sent-offers:${user}`}
         />
       )}
       {view === "tradeup" && (
@@ -661,6 +664,11 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   );
 }
 
+// A trade-offer link (/offer/<id>) renders the public offer page — before any
+// auth gate, because the recipient may not have an account. The path is fixed
+// for the life of the page load, so this is computed once at module level.
+const OFFER_PATH_ID = /^\/offer\/([A-Za-z0-9_-]{6,})$/.exec(window.location.pathname)?.[1] || null;
+
 export default function App() {
   const [user, setUser] = useState<string | null>(null);
   // Bumped whenever a cloud pull/merge changes localStorage, to remount MainApp
@@ -699,6 +707,10 @@ export default function App() {
       window.removeEventListener("cloud-synced", onMerged);
     };
   }, [user]);
+
+  if (OFFER_PATH_ID) {
+    return <OfferView id={OFFER_PATH_ID} />;
+  }
 
   if (!user) {
     return <AuthScreen onAuthed={() => setUser(currentUser())} />;

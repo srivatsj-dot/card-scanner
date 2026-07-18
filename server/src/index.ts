@@ -2,7 +2,7 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import { existsSync, readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
@@ -655,6 +655,111 @@ function sideToParts(heading: string, entries: CardEntry[]): Part[] {
   });
   return parts;
 }
+
+// --- Shareable trade offers -------------------------------------------------
+// A sender builds an offer in the trade tool and shares a link; the recipient
+// opens it (no account needed), sees both sides with the eBay-anchored fairness
+// verdict, and accepts, declines, or asks for a change. Persisted in Postgres
+// when configured; the in-memory map is both a fast cache and the no-DB
+// fallback (offers then survive until the next restart).
+interface TradeOffer {
+  id: string;
+  from: string; // sender's display name
+  give: string[]; // cards the sender gives (the recipient would receive these)
+  get: string[]; // cards the sender wants back (the recipient would give these)
+  trade: unknown | null; // fairness evaluation snapshot (sender's perspective)
+  currency: string;
+  status: "pending" | "accepted" | "declined" | "change_requested";
+  message: string; // recipient's note (used by "ask for a change")
+  createdAt: number;
+  respondedAt: number | null;
+}
+const offerMem = new Map<string, TradeOffer>();
+const OFFER_MEM_CAP = 500;
+const cleanList = (v: unknown): string[] =>
+  (Array.isArray(v) ? v : [])
+    .map((x) => String(x ?? "").trim().slice(0, 300))
+    .filter(Boolean)
+    .slice(0, 10);
+
+async function findOffer(id: string): Promise<TradeOffer | null> {
+  const hit = offerMem.get(id);
+  if (hit) return hit;
+  const fromDb = (await cloud.loadOffer(id).catch(() => null)) as TradeOffer | null;
+  if (fromDb && fromDb.id === id) {
+    offerMem.set(id, fromDb);
+    return fromDb;
+  }
+  return null;
+}
+
+async function storeOffer(offer: TradeOffer): Promise<void> {
+  if (offerMem.size >= OFFER_MEM_CAP && !offerMem.has(offer.id)) {
+    const oldest = offerMem.keys().next().value;
+    if (oldest) offerMem.delete(oldest);
+  }
+  offerMem.set(offer.id, offer);
+  await cloud.saveOffer(offer.id, offer).catch(() => {});
+}
+
+app.post("/api/offer", async (req: Request, res: Response) => {
+  const { from, give, get, trade, currency } = req.body as {
+    from?: string; give?: unknown; get?: unknown; trade?: unknown; currency?: string;
+  };
+  const giveList = cleanList(give);
+  const getList = cleanList(get);
+  if (!giveList.length || !getList.length) {
+    res.status(400).json({ error: "An offer needs at least one card on each side." });
+    return;
+  }
+  let tradeSnap: unknown | null = null;
+  if (trade && typeof trade === "object" && JSON.stringify(trade).length <= 20_000) tradeSnap = trade;
+  const offer: TradeOffer = {
+    id: randomBytes(9).toString("base64url"),
+    from: String(from || "A collector").trim().slice(0, 60) || "A collector",
+    give: giveList,
+    get: getList,
+    trade: tradeSnap,
+    currency: String(currency || "USD").slice(0, 8),
+    status: "pending",
+    message: "",
+    createdAt: Date.now(),
+    respondedAt: null,
+  };
+  await storeOffer(offer);
+  res.json({ id: offer.id });
+});
+
+app.get("/api/offer/:id", async (req: Request, res: Response) => {
+  const offer = await findOffer(String(req.params.id || ""));
+  if (!offer) {
+    res.status(404).json({ error: "This offer doesn't exist (or expired after a server restart)." });
+    return;
+  }
+  res.json(offer);
+});
+
+app.post("/api/offer/:id/respond", async (req: Request, res: Response) => {
+  const { action, message } = req.body as { action?: string; message?: string };
+  const offer = await findOffer(String(req.params.id || ""));
+  if (!offer) {
+    res.status(404).json({ error: "This offer doesn't exist (or expired after a server restart)." });
+    return;
+  }
+  if (offer.status === "accepted" || offer.status === "declined") {
+    res.status(409).json({ error: "This offer has already been answered." });
+    return;
+  }
+  if (action !== "accept" && action !== "decline" && action !== "change") {
+    res.status(400).json({ error: "Unknown response." });
+    return;
+  }
+  offer.status = action === "accept" ? "accepted" : action === "decline" ? "declined" : "change_requested";
+  offer.message = String(message || "").trim().slice(0, 500);
+  offer.respondedAt = Date.now();
+  await storeOffer(offer);
+  res.json(offer);
+});
 
 interface TradeSideShape { valueLow?: number; valueHigh?: number; notes?: string }
 interface TradeShape {
