@@ -58,6 +58,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const AUTO_REFRESH_KEY = `card-scanner-last-auto-refresh:${user}`;
   const DIGEST_KEY = `card-scanner-digest:${user}`;
   const WANTED_KEY = `card-scanner-wanted:${user}`;
+  const SET_PCT_KEY = `card-scanner-best-set-pct:${user}`;
 
   const [view, setView] = useState<View>("home");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -77,6 +78,9 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const [theme, setTheme] = useState<Theme>(() => loadJSON<Theme>(THEME_KEY, "dark"));
   const [scans, setScans] = useState<number>(() => loadJSON<number>(SCANS_KEY, 0));
   const [trades, setTrades] = useState<number>(() => loadJSON<number>(TRADES_KEY, 0));
+  // Best set-completion % ever reached (from the Sets view's checks), for the
+  // completion achievements. Persisted so badges stick across sessions.
+  const [bestSetPct, setBestSetPct] = useState<number>(() => loadJSON<number>(SET_PCT_KEY, 0));
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [, setNameTick] = useState(0); // bump to re-render after a username change
@@ -89,11 +93,21 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
             loadJSON<WishItem[]>(WISHLIST_KEY, []),
             loadJSON<number>(SCANS_KEY, 0),
             loadJSON<number>(TRADES_KEY, 0),
-            settings.language
+            settings.language,
+            loadJSON<number>(SET_PCT_KEY, 0)
           )
         )
     )
   );
+
+  // Record a set-completion % from the Sets view; keep the best ever seen.
+  function reportSetPct(pct: number) {
+    setBestSetPct((prev) => {
+      const next = Math.max(prev, pct || 0);
+      if (next !== prev) localStorage.setItem(SET_PCT_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
 
   // Settings the AI sees, augmented with the current wishlist (for wishlist-aware
   // trade/recommendation logic). Not persisted into the saved settings.
@@ -152,7 +166,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   }, [settings, saved, wishlist, later, scans, trades, theme, user]);
   // Unlock-achievement toasts.
   useEffect(() => {
-    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language));
+    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language, bestSetPct));
     const newly = ids.filter((id) => !earnedRef.current.has(id));
     if (newly.length) {
       // Don't fire a wall of banners on the very first computation (e.g. importing
@@ -167,7 +181,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved, wishlist, scans, trades, settings.language]);
+  }, [saved, wishlist, scans, trades, settings.language, bestSetPct]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, JSON.stringify(theme));
@@ -606,7 +620,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           adding={adding}
         />
       )}
-      {view === "sets" && <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} />}
+      {view === "sets" && <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} onSetPct={reportSetPct} />}
       {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
       {view === "settings" && (
         <SettingsView

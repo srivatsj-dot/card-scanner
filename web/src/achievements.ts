@@ -13,6 +13,8 @@ export interface AchStats {
   distinctPlayers: number;
   distinctSets: number;
   distinctDecades: number;
+  maxSetSize: number; // most cards owned from a single set
+  bestSetPct: number; // best set-completion %, 0..1 (from checklist checks)
   hasDupe: boolean;
   hasVintage: boolean;
   hasModern: boolean;
@@ -79,6 +81,12 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "multi_5", emoji: "🧩", title: "Generalist", desc: "Collect 5+ categories.", earned: (s) => s.sportsCount >= 5 },
   { id: "players_10", emoji: "🧑‍🤝‍🧑", title: "People Person", desc: "Own 10 different players.", earned: (s) => s.distinctPlayers >= 10 },
   { id: "sets_5", emoji: "🎴", title: "Set Collector", desc: "Own cards from 5 different sets.", earned: (s) => s.distinctSets >= 5 },
+  // Set building & completion
+  { id: "set_build_25", emoji: "🧱", title: "Set Builder", desc: "Own 25+ cards from a single set.", earned: (s) => s.maxSetSize >= 25 },
+  { id: "set_build_50", emoji: "🏗️", title: "Set Master", desc: "Own 50+ cards from a single set.", earned: (s) => s.maxSetSize >= 50 },
+  { id: "set_half", emoji: "🥈", title: "Halfway There", desc: "Reach 50% completion on a base set.", earned: (s) => s.bestSetPct >= 0.5 },
+  { id: "set_stretch", emoji: "🔥", title: "Home Stretch", desc: "Reach 75% completion on a base set.", earned: (s) => s.bestSetPct >= 0.75 },
+  { id: "set_complete", emoji: "🏆", title: "Completionist", desc: "Complete 100% of a base set.", earned: (s) => s.bestSetPct >= 1 },
   { id: "decades_3", emoji: "⏳", title: "Time Traveler", desc: "Own cards from 3 different decades.", earned: (s) => s.distinctDecades >= 3 },
   { id: "dupe", emoji: "👯", title: "Two of a Kind", desc: "Own two cards of the same player.", earned: (s) => s.hasDupe },
   { id: "vintage", emoji: "🕰️", title: "Old School", desc: "Own a pre-1990 card.", earned: (s) => s.hasVintage },
@@ -120,8 +128,16 @@ export function computeStats(
   wishlist: WishItem[],
   scans: number,
   trades: number,
-  language: string
+  language: string,
+  bestSetPct = 0
 ): AchStats {
+  // Largest single set held (by year|manufacturer|setName), for set-building badges.
+  const setCounts = new Map<string, number>();
+  saved.forEach((s) => {
+    const key = `${s.result.year || ""}|${s.result.manufacturer || ""}|${s.result.setName || ""}`.toLowerCase();
+    if (key.replace(/\|/g, "").trim()) setCounts.set(key, (setCounts.get(key) || 0) + 1);
+  });
+  const maxSetSize = setCounts.size ? Math.max(...setCounts.values()) : 0;
   const blob = (s: SavedCard) =>
     `${s.result.specialEdition || ""} ${s.result.parallel || ""} ${s.result.setName || ""}`.toLowerCase();
   const sportsOwned = new Set<string>();
@@ -162,6 +178,8 @@ export function computeStats(
     distinctPlayers: new Set(players).size,
     distinctSets: new Set(saved.map((s) => (s.result.setName || "").toLowerCase()).filter(Boolean)).size,
     distinctDecades: new Set(decades).size,
+    maxSetSize,
+    bestSetPct: Math.max(0, Math.min(1, bestSetPct || 0)),
     hasDupe: players.length > new Set(players).size,
     hasVintage: decades.some((d) => d <= 198),
     hasModern: decades.some((d) => d >= 202),

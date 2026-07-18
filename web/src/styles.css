@@ -992,6 +992,13 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 
 /* Set completion */
 .set-head { display: flex; gap: 12px; align-items: center; }
+.set-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700; font-family: ui-sans-serif, system-ui, sans-serif;
+  padding: 2px 9px; border-radius: 999px;
+  color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+  white-space: nowrap;
+}
 .set-progress {
   position: relative; height: 24px; border-radius: 999px;
   background: var(--panel-2); border: 1px solid var(--line); overflow: hidden;
