@@ -2,8 +2,10 @@
 # the built web app from the same origin). Connect this repo at render.com and
 # it reads this file. Set secret env vars in the dashboard.
 #
-# Build-time note: VITE_* vars (Google sign-in, AdSense) are baked into the web
-# bundle during build, so set them in the dashboard BEFORE the first deploy.
+# Client-config note: analytics/ads ids (GTAG_ID, ADSENSE_CLIENT, ADS_CONVERSION,
+# ADSENSE_SLOT) can be set as plain dashboard env vars — the server injects them
+# into index.html at runtime, so no rebuild is needed and analytics turns on as
+# soon as the var is set. (The VITE_* build-time names still work too.)
 services:
   - type: web
     name: card-o-rama
@@ -23,6 +25,27 @@ services:
         sync: false
       # Optional — add any you use as dashboard env vars too:
       #   GMAIL_USER, GMAIL_APP_PASSWORD  (welcome + reset emails)
+      #   GTAG_ID                         (Google Analytics; runtime-injected)
+      #   ADSENSE_CLIENT, ADSENSE_SLOT    (AdSense; runtime-injected)
       #   VITE_GOOGLE_CLIENT_ID           (Google sign-in; BUILD-time)
-      #   VITE_ADSENSE_CLIENT, VITE_ADSENSE_SLOT  (AdSense; BUILD-time)
       #   EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, LIMITLESS_API_KEY
+
+  # Scheduled generator: builds each day's morning briefing on a fixed schedule,
+  # independent of any visitor, by pinging the web service's cron endpoint. The
+  # request also wakes the web instance if the free plan let it sleep. Runs daily
+  # at 11:00 UTC (~early morning in the Americas). Adjust the schedule as needed.
+  - type: cron
+    name: card-o-rama-briefing
+    runtime: node
+    schedule: "0 11 * * *"
+    buildCommand: "echo no build needed"
+    # Global fetch (Node 20) hits the public URL; no repo build required.
+    startCommand: >-
+      node -e "fetch(process.env.CRON_TARGET).then(async r=>{console.log('digest',r.status,await r.text())}).catch(e=>{console.error('cron failed:',e.message)})"
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Set this to your web service's public URL + /api/cron/digest, e.g.
+      #   https://card-o-rama.onrender.com/api/cron/digest
+      - key: CRON_TARGET
+        sync: false

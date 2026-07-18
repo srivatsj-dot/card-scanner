@@ -5,12 +5,36 @@
 //   VITE_GTAG_ID        GA4 ("G-XXXX") or Google Ads ("AW-XXXX") tag id
 //   VITE_ADS_CONVERSION optional Google Ads sign-up conversion, "AW-XXXX/label"
 
-const GTAG_ID = import.meta.env.VITE_GTAG_ID as string | undefined;
-const ADS_CONVERSION = import.meta.env.VITE_ADS_CONVERSION as string | undefined;
+// Config resolves from the build-time Vite env first, then falls back to the
+// runtime config the server injects into index.html as window.__APP_CONFIG.
+// The runtime fallback means these ids can be set via the host dashboard alone
+// (no rebuild), which is what makes analytics reliably turn on in production.
+interface AppConfig {
+  gtagId?: string;
+  adsConversion?: string;
+  adsenseClient?: string;
+  adsenseSlot?: string;
+}
+const runtimeConfig: AppConfig =
+  (typeof window !== "undefined" && (window as unknown as { __APP_CONFIG?: AppConfig }).__APP_CONFIG) || {};
+const pick = (buildVal: string | undefined, runtimeVal: string | undefined): string | undefined =>
+  (buildVal && buildVal.trim()) || (runtimeVal && runtimeVal.trim()) || undefined;
+
+const GTAG_ID = pick(import.meta.env.VITE_GTAG_ID as string | undefined, runtimeConfig.gtagId);
+const ADS_CONVERSION = pick(import.meta.env.VITE_ADS_CONVERSION as string | undefined, runtimeConfig.adsConversion);
 
 // Google AdSense publisher id ("ca-pub-XXXXXXXX"). When set, ad units render;
 // when blank, no ad script loads and AdSlot renders nothing.
-export const adsenseClient = import.meta.env.VITE_ADSENSE_CLIENT as string | undefined;
+export const adsenseClient = pick(
+  import.meta.env.VITE_ADSENSE_CLIENT as string | undefined,
+  runtimeConfig.adsenseClient,
+);
+
+// Default AdSense slot id, same build-time-then-runtime resolution.
+export const adsenseSlot = pick(
+  import.meta.env.VITE_ADSENSE_SLOT as string | undefined,
+  runtimeConfig.adsenseSlot,
+);
 
 /** Load the AdSense library once (no-op unless a publisher id is configured). */
 export function initAds(): void {

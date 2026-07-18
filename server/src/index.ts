@@ -1,7 +1,7 @@
 import "./env.js";
 import express from "express";
 import cors from "cors";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";
@@ -896,6 +896,22 @@ function startDigestScheduler() {
 
 const normSport = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
+// Daily generation trigger for an external scheduler (e.g. a Render Cron Job),
+// so today's briefing is built on a fixed schedule even when nobody has opened
+// the app — and even if the web instance was asleep, since the incoming request
+// wakes it. Idempotent: getDailyDigest caches + persists, so repeat calls are
+// cheap no-ops once today's briefing exists.
+app.get("/api/cron/digest", async (_req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  try {
+    const b = await getDailyDigest(today());
+    res.json({ ok: true, date: today(), sections: b.sections.length });
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
 app.post("/api/digest", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
   const { date, sports } = req.body as { date?: string; sports?: string[] };
@@ -1479,11 +1495,36 @@ app.post("/api/cloud/reset", async (req: Request, res: Response) => {
 const webDist = resolve(dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 const servingWeb = existsSync(join(webDist, "index.html"));
 if (servingWeb) {
-  app.use(express.static(webDist));
-  // SPA fallback: any non-API GET returns index.html so client routing works.
+  // Client-side config (GA/Ads/AdSense ids) is normally baked into the JS bundle
+  // at build time by Vite. That makes it fragile on hosts where build-time env
+  // isn't wired up (e.g. a dashboard var that only exists at runtime), which
+  // silently disables analytics — GA then shows 0 users forever. To make it
+  // robust, we also inject these ids from the *runtime* environment into
+  // index.html as window.__APP_CONFIG; the client prefers it when the build-time
+  // value is empty. So setting GTAG_ID in the host dashboard is enough — no
+  // rebuild required. Values accept the VITE_ names too, for a single source.
+  const runtimeConfig = {
+    gtagId: process.env.GTAG_ID || process.env.VITE_GTAG_ID || "",
+    adsConversion: process.env.ADS_CONVERSION || process.env.VITE_ADS_CONVERSION || "",
+    adsenseClient: process.env.ADSENSE_CLIENT || process.env.VITE_ADSENSE_CLIENT || "",
+    adsenseSlot: process.env.ADSENSE_SLOT || process.env.VITE_ADSENSE_SLOT || "",
+  };
+  const rawIndex = readFileSync(join(webDist, "index.html"), "utf8");
+  const configTag = `<script>window.__APP_CONFIG=${JSON.stringify(runtimeConfig).replace(
+    /</g,
+    "\\u003c",
+  )}</script>`;
+  const indexHtml = rawIndex.includes("</head>")
+    ? rawIndex.replace("</head>", `${configTag}</head>`)
+    : configTag + rawIndex;
+
+  // Serve everything except index.html as static; we hand-serve index.html so it
+  // carries the injected runtime config.
+  app.use(express.static(webDist, { index: false }));
+  // SPA fallback: any non-API GET returns the config-injected index.html.
   app.use((req, res, next) => {
     if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
-    res.sendFile(join(webDist, "index.html"));
+    res.type("html").send(indexHtml);
   });
 }
 

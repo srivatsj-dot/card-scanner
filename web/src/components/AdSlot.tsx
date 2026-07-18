@@ -1,11 +1,10 @@
 import { useEffect, useRef } from "react";
-import { adsenseClient } from "../analytics";
+import { adsenseClient, adsenseSlot as DEFAULT_SLOT } from "../analytics";
 
 // A single Google AdSense unit. Renders nothing unless a publisher id
 // (VITE_ADSENSE_CLIENT) and a slot id are configured, so the app is ad-free in
 // dev and until AdSense is approved. Pass a slot id from your AdSense account;
-// defaults to VITE_ADSENSE_SLOT.
-const DEFAULT_SLOT = import.meta.env.VITE_ADSENSE_SLOT as string | undefined;
+// defaults to VITE_ADSENSE_SLOT (build-time or the server's runtime config).
 
 declare global {
   interface Window { adsbygoogle: unknown[] }
