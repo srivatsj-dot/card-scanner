@@ -21,6 +21,8 @@ import AdSlot from "./components/AdSlot";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
 import OfferView from "./components/OfferView";
+import { bumpStreak, dayISO, liveStreak, makeQuests, questProgress, weekOf } from "./quests";
+import type { Streak, QuestState, QuestCounters } from "./quests";
 import Logo from "./components/Logo";
 import TradeUpView from "./components/TradeUpView";
 import LaterView from "./components/LaterView";
@@ -60,6 +62,8 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   const DIGEST_KEY = `card-scanner-digest:${user}`;
   const WANTED_KEY = `card-scanner-wanted:${user}`;
   const SET_PCT_KEY = `card-scanner-best-set-pct:${user}`;
+  const STREAK_KEY = `card-scanner-streak:${user}`;
+  const QUESTS_KEY = `card-scanner-quests:${user}`;
 
   const [view, setView] = useState<View>("home");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -82,6 +86,9 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   // Best set-completion % ever reached (from the Sets view's checks), for the
   // completion achievements. Persisted so badges stick across sessions.
   const [bestSetPct, setBestSetPct] = useState<number>(() => loadJSON<number>(SET_PCT_KEY, 0));
+  // Daily briefing streak + this week's quests.
+  const [streak, setStreak] = useState<Streak | null>(() => loadJSON<Streak | null>(STREAK_KEY, null));
+  const [questState, setQuestState] = useState<QuestState | null>(() => loadJSON<QuestState | null>(QUESTS_KEY, null));
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [, setNameTick] = useState(0); // bump to re-render after a username change
@@ -100,6 +107,42 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
         )
     )
   );
+
+  // Live counters the quests measure against (briefingDays lives in questState).
+  const questCounters: QuestCounters = {
+    scans, trades, cards: saved.length, wishlist: wishlist.length,
+    briefingDays: questState?.briefingDays || 0, bestSetPct,
+  };
+
+  // Keep quests on the current week — regenerate from this week's baseline when
+  // the week rolls over (or on first run).
+  useEffect(() => {
+    const week = weekOf(dayISO());
+    if (!questState || questState.week !== week) {
+      const fresh = makeQuests(week, questCounters);
+      setQuestState(fresh);
+      localStorage.setItem(QUESTS_KEY, JSON.stringify(fresh));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questState?.week]);
+
+  // Opening the morning briefing advances the daily streak (once per day) and
+  // counts toward this week's briefing quest.
+  useEffect(() => {
+    if (view !== "today") return;
+    const today = dayISO();
+    const next = bumpStreak(streak, today);
+    if (next === streak) return; // already counted today
+    setStreak(next);
+    localStorage.setItem(STREAK_KEY, JSON.stringify(next));
+    setQuestState((qs) => {
+      if (!qs) return qs;
+      const upd = { ...qs, briefingDays: qs.briefingDays + 1 };
+      localStorage.setItem(QUESTS_KEY, JSON.stringify(upd));
+      return upd;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   // Record a set-completion % from the Sets view; keep the best ever seen.
   function reportSetPct(pct: number) {
@@ -167,7 +210,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   }, [settings, saved, wishlist, later, scans, trades, theme, user]);
   // Unlock-achievement toasts.
   useEffect(() => {
-    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language, bestSetPct));
+    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language, bestSetPct, streak?.best || 0));
     const newly = ids.filter((id) => !earnedRef.current.has(id));
     if (newly.length) {
       // Don't fire a wall of banners on the very first computation (e.g. importing
@@ -182,7 +225,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved, wishlist, scans, trades, settings.language, bestSetPct]);
+  }, [saved, wishlist, scans, trades, settings.language, bestSetPct, streak]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, JSON.stringify(theme));
@@ -565,7 +608,15 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
         </div>
 
       {view === "home" && (
-        <HomeView saved={saved} wishlist={wishlist} scans={scans} currency={settings.currency} onGo={(v) => setView(v)} />
+        <HomeView
+          saved={saved}
+          wishlist={wishlist}
+          scans={scans}
+          currency={settings.currency}
+          onGo={(v) => setView(v)}
+          streak={liveStreak(streak, dayISO())}
+          quests={questState ? questProgress(questState, questCounters) : []}
+        />
       )}
       {view === "today" && (
         <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
@@ -624,7 +675,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
         />
       )}
       {view === "sets" && <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} onSetPct={reportSetPct} />}
-      {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} />}
+      {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} />}
       {view === "settings" && (
         <SettingsView
           settings={settings}

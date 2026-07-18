@@ -1,4 +1,5 @@
 import type { SavedCard, WishItem } from "../types";
+import type { QuestProgress } from "../quests";
 import { money } from "../utils";
 import { useT } from "../translator";
 import Logo from "./Logo";
@@ -9,9 +10,11 @@ interface Props {
   scans: number;
   currency: string;
   onGo: (v: "scan" | "search" | "bulk" | "today" | "trade" | "binder" | "wishlist") => void;
+  streak: number;
+  quests: QuestProgress[];
 }
 
-export default function HomeView({ saved, wishlist, scans, currency, onGo }: Props) {
+export default function HomeView({ saved, wishlist, scans, currency, onGo, streak, quests }: Props) {
   const t = useT();
   const total = saved.reduce((s, c) => s + (c.result.estimatedValue?.mid || 0), 0);
   const cur = saved[0]?.result.estimatedValue?.currency || currency;
@@ -55,6 +58,30 @@ export default function HomeView({ saved, wishlist, scans, currency, onGo }: Pro
             <span className="home-stat-num">☀️</span>
             <span className="home-stat-label">{t("briefing")}</span>
           </button>
+        </div>
+      )}
+
+      {quests.length > 0 && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0 }}>🎯 {t("This week's quests")}</h2>
+            <button className="quest-streak" onClick={() => onGo("today")} title={t("Check the morning briefing every day to keep it going")}>
+              🔥 {streak} {t("day streak")}
+            </button>
+          </div>
+          <div className="quest-list">
+            {quests.map((q) => (
+              <div className={`quest ${q.done ? "done" : ""}`} key={q.id}>
+                <div className="quest-row">
+                  <span className="quest-title">{q.done ? "✅" : q.emoji} {t(q.title)}</span>
+                  <span className="quest-count">{q.label}</span>
+                </div>
+                <div className="quest-bar">
+                  <div className="quest-bar-fill" style={{ width: `${Math.round(q.progress * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

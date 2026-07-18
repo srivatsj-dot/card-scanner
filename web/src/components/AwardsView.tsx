@@ -8,11 +8,13 @@ interface Props {
   scans: number;
   trades: number;
   lang: string;
+  bestSetPct: number;
+  streakDays: number;
 }
 
-export default function AwardsView({ saved, wishlist, scans, trades, lang }: Props) {
+export default function AwardsView({ saved, wishlist, scans, trades, lang, bestSetPct, streakDays }: Props) {
   const t = useT();
-  const stats = computeStats(saved, wishlist, scans, trades, lang);
+  const stats = computeStats(saved, wishlist, scans, trades, lang, bestSetPct, streakDays);
   const earnedCount = ACHIEVEMENTS.filter((a) => a.earned(stats)).length;
 
   return (
