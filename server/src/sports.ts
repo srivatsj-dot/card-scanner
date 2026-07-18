@@ -252,6 +252,28 @@ export async function cricketFacts(date: string): Promise<SportFacts | null> {
   return lines.length ? { sport: "Cricket", lines: ["Results:", ...lines] } : null;
 }
 
+// Safely turn a Limitless standings row's deck into a readable name. The `deck`
+// field comes in several shapes: a plain string, an object with `.name`, or an
+// object carrying only Pokémon `icons` (no name) — the last of which used to
+// stringify to the literal "[object Object]" in the briefing. Never returns an
+// object; falls back to title-cased icon names, then "".
+function deckName(top: any): string {
+  const d = top?.deck ?? top?.archetype ?? top?.list;
+  if (!d) return "";
+  if (typeof d === "string") return d.trim();
+  if (typeof d?.name === "string" && d.name.trim()) return d.name.trim();
+  const icons = d?.icons || d?.pokemon || top?.icons;
+  if (Array.isArray(icons) && icons.length) {
+    const parts = icons
+      .map((ic: any) => (typeof ic === "string" ? ic : ic?.name || ic?.slug || ""))
+      .filter((s: string) => typeof s === "string" && s.trim())
+      .slice(0, 2)
+      .map((s: string) => s.replace(/[-_]+/g, " ").replace(/\b\w/g, (m: string) => m.toUpperCase()));
+    if (parts.length) return parts.join(" ");
+  }
+  return "";
+}
+
 // --- Pokémon TCG: tournament results + winning decks (Limitless, keyed) -----
 export async function pokemonFacts(date: string): Promise<SportFacts | null> {
   // The key is optional — if set we get authoritative data; without it we still
@@ -288,8 +310,9 @@ export async function pokemonFacts(date: string): Promise<SportFacts | null> {
         const rows = Array.isArray(standings) ? standings : standings?.standings || [];
         const top = rows.find((r: any) => Number(r?.placing ?? r?.placement) === 1) || rows[0];
         if (top) {
-          const player = top?.player?.name || top?.name || top?.player || "";
-          const deck = top?.deck?.name || top?.deck || top?.archetype?.name || "";
+          const rawPlayer = top?.player?.name || top?.name || top?.player || "";
+          const player = typeof rawPlayer === "string" ? rawPlayer.trim() : "";
+          const deck = deckName(top);
           winnerLine = [player && `won by ${player}`, deck && `with ${deck}`].filter(Boolean).join(" ");
         }
       }

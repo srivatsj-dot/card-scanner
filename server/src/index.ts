@@ -779,7 +779,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "6";
+const DIGEST_GEN_VERSION = "7";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
@@ -798,6 +798,36 @@ const factsToSections = (data: { sport: string; lines: string[] }[]): DigestSect
 const briefingHasContent = (b: Briefing) =>
   b.sections.some((s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length);
 
+// Build a real one-line headline from the verified-feed fallback, instead of the
+// old generic "scores and standout performances across X, Y". Leads with the
+// single most notable line (a standout stat line or a result) and tallies the
+// rest, so the overview actually reflects the body even when the AI writer was
+// unavailable and we're serving raw verified data.
+function fallbackOverview(sections: DigestSection[]): string {
+  const clean = (l: string) => l.replace(/^[\s•\-–—]+/, "").trim();
+  const sportNames = [...new Set(sections.map((s) => s.sport.replace(/\s*\(.*\)/, "")))];
+  const all = sections.flatMap((s) => s.storylines.map(clean)).filter(Boolean);
+  if (!all.length) return `Yesterday's results across ${sportNames.join(", ")}.`;
+  // A real sports result/performance makes a stronger headline than an online
+  // Pokémon tournament, so lead with one when available; only fall back to a
+  // Pokémon line (or any line) if that's all there is.
+  const sportsLines = sections
+    .filter((s) => !/pok[eé]mon/i.test(s.sport))
+    .flatMap((s) => s.storylines.map(clean))
+    .filter(Boolean);
+  const notable = /\bHR\b|\bRBI\b|\d+\s*K\b|goals?|no-hitter|walk-?off|\(final\)/i;
+  const lead =
+    sportsLines.find((l) => notable.test(l)) ||
+    sportsLines[0] ||
+    all.find((l) => /won by/i.test(l)) ||
+    all[0];
+  const more = all.length - 1;
+  const tail = more > 0
+    ? ` — plus ${more} more result${more === 1 ? "" : "s"} across ${sportNames.join(", ")}`
+    : "";
+  return `${lead}${tail}.`;
+}
+
 // Generate one day's shared briefing. NEVER throws — on total failure it returns
 // a verified-feed fallback or a quiet-day briefing, so the app is never blank.
 async function buildDigest(target: string): Promise<Briefing> {
@@ -813,8 +843,7 @@ async function buildDigest(target: string): Promise<Briefing> {
   const fallback = (): Briefing | null => {
     const s = factsToSections(verifiedData);
     if (!s.length) return null;
-    const names = [...new Set(s.map((x) => x.sport.replace(/\s*\(.*\)/, "")))].join(", ");
-    return { overview: `Yesterday's scores and standout performances across ${names}.`, yourCards: [], yourWishlist: [], sections: s };
+    return { overview: fallbackOverview(s), yourCards: [], yourWishlist: [], sections: s };
   };
   const parts: Part[] = [
     {
