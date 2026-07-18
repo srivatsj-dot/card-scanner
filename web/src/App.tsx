@@ -245,18 +245,18 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   function removeLater(id: string) {
     setLater((prev) => prev.filter((w) => w.id !== id));
   }
-  // Land a saved item: add the card you got to the binder and remove the
-  // originals you traded away (best-effort match).
-  async function laterToBinder(item: LaterItem) {
-    if (!confirm(`${t("Add to your binder?")} "${item.target}" ${t("will be added, and the cards you traded away removed.")}`)) return;
+  // Settle a trade against the binder: look up the card received and add it,
+  // then remove the card(s) given away (best-effort token match). Shared by the
+  // "Do trade" button (when you own what you're giving) and the "For later"
+  // lander. Returns true on success. Counts as a completed trade.
+  async function settleTrade(target: string, give: string[]): Promise<boolean> {
     let r: ScanResult;
     try {
-      r = await searchCardCached(item.target, aiSettings);
+      r = await searchCardCached(target, aiSettings);
     } catch (e) {
       toast(isRateLimit(e) ? t("Too busy right now — try again in a minute") : t("Couldn't look that up — try again"));
-      return;
+      return false;
     }
-    const give = item.give && item.give.length ? item.give : item.steps?.[0]?.giveUp || [];
     setSaved((prev) => {
       const list = prev.slice();
       for (const g of give) {
@@ -272,8 +272,27 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
       return list;
     });
     saveCard(r, undefined);
-    removeLater(item.id);
-    setView("binder");
+    setTrades((n) => n + 1);
+    return true;
+  }
+
+  // "Do trade" from the trade tool: you own what you're giving, so log it now —
+  // add what you receive, drop what you gave, and jump to the binder.
+  async function doTrade(target: string, give: string[]) {
+    const ok = await settleTrade(target, give);
+    if (ok) setView("binder");
+  }
+
+  // Land a saved item: add the card you got to the binder and remove the
+  // originals you traded away (best-effort match).
+  async function laterToBinder(item: LaterItem) {
+    if (!confirm(`${t("Add to your binder?")} "${item.target}" ${t("will be added, and the cards you traded away removed.")}`)) return;
+    const give = item.give && item.give.length ? item.give : item.steps?.[0]?.giveUp || [];
+    const ok = await settleTrade(item.target, give);
+    if (ok) {
+      removeLater(item.id);
+      setView("binder");
+    }
   }
 
   function wishToBinder(item: WishItem) {
@@ -551,6 +570,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           onTrade={() => setTrades((n) => n + 1)}
           onWishAll={addWishMany}
           onSaveLater={saveLater}
+          onDoTrade={doTrade}
         />
       )}
       {view === "tradeup" && (

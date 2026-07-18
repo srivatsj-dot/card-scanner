@@ -170,9 +170,22 @@ interface TradeProps {
   onTrade: () => void;
   onWishAll?: (texts: string[]) => void;
   onSaveLater: (item: Omit<LaterItem, "id" | "savedAt">) => void;
+  onDoTrade: (target: string, give: string[]) => void;
 }
 
-export default function TradeView({ settings, saved, wishlist, onTrade, onWishAll, onSaveLater }: TradeProps) {
+// Do you actually own the card described by `text`? Token-match it against the
+// binder (same heuristic used to remove given cards when a trade is settled), so
+// the "Do trade" button only appears when you really hold what you'd give.
+function ownsCard(text: string, saved: SavedCard[]): boolean {
+  const tokens = text.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 2);
+  if (tokens.length < 2) return false;
+  return saved.some((c) => {
+    const desc = describeCard(c.result).toLowerCase();
+    return tokens.filter((tk) => desc.includes(tk)).length >= 2;
+  });
+}
+
+export default function TradeView({ settings, saved, wishlist, onTrade, onWishAll, onSaveLater, onDoTrade }: TradeProps) {
   const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
   const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
   const [trade, setTrade] = useState<TradeResult | null>(null);
@@ -204,8 +217,11 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
 
   const hasGiving = yourSide.some((e) => e.text.trim() || e.dataUrl);
   const hasReceiving = theirSide.some((e) => e.text.trim() || e.dataUrl);
-  const givingText = yourSide.map((e) => e.text.trim()).filter(Boolean).join(" + ");
+  const givingList = yourSide.map((e) => e.text.trim()).filter(Boolean);
+  const givingText = givingList.join(" + ");
   const receivingText = theirSide.map((e) => e.text.trim()).filter(Boolean).join(" + ");
+  // You can actually DO the trade (not just save it) when you own what you'd give.
+  const ownsGiving = givingList.some((txt) => ownsCard(txt, saved));
 
   function reset() {
     setTrade(null);
@@ -330,12 +346,23 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
               {fairnessPill(trade.fairness, t)}
               <h2 style={{ margin: 0 }}>{trade.verdict}</h2>
             </div>
-            <button
-              className="btn ghost small"
-              onClick={() => onSaveLater({ target: receivingText || trade.verdict, give: givingText ? [givingText] : [] })}
-            >
-              🔖 {t("Save for later")}
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {ownsGiving && receivingText && (
+                <button
+                  className="btn small"
+                  title={t("You own what you're giving — log this trade to your binder")}
+                  onClick={() => onDoTrade(receivingText, givingList)}
+                >
+                  🤝 {t("Do trade")}
+                </button>
+              )}
+              <button
+                className="btn ghost small"
+                onClick={() => onSaveLater({ target: receivingText || trade.verdict, give: givingText ? [givingText] : [] })}
+              >
+                🔖 {t("Save for later")}
+              </button>
+            </div>
           </div>
           <div className="grid2" style={{ marginTop: 14 }}>
             <div>
