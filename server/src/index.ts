@@ -446,7 +446,13 @@ app.post("/api/price-check", async (req: Request, res: Response) => {
   const result = card || {};
   try {
     if (result.identified && result.estimatedValue && !isPokemon(result)) {
-      await verifyPrice(result, settings);
+      // eBay-first: real eBay data always wins. If the scan already set an
+      // eBay-based price, keep it untouched — do NOT let the AI sold-comp pass
+      // overwrite real listing data with an estimate. Only when there's no eBay
+      // price for this card do we fall back to the grounded verify pass.
+      const alreadyEbay = /ebay/i.test(result.estimatedValue.note || "");
+      const applied = alreadyEbay ? true : await applyEbayPrice(result, settings);
+      if (!applied) await verifyPrice(result, settings);
     }
   } catch {
     /* keep the original estimate */
@@ -606,9 +612,15 @@ app.post("/api/bulk", async (req: Request, res: Response) => {
 
   try {
     const out = await analyze<{ cards: ScanResultShape[] }>(sys, parts, bulkSchema, groundedFor(settings));
-    // Real Pokémon market prices for any Pokémon cards in the batch (free API).
+    // eBay-first: real eBay prices for each identified card, with the free
+    // Pokémon catalog as the fallback when eBay has nothing (or isn't configured).
     if (Array.isArray(out.cards)) {
-      await Promise.all(out.cards.map((c) => applyPokemonPrice(c).catch(() => {})));
+      await Promise.all(
+        out.cards.map(async (c) => {
+          const applied = await applyEbayPrice(c, settings).catch(() => false);
+          if (!applied) await applyPokemonPrice(c).catch(() => {});
+        })
+      );
     }
     res.json(out);
   } catch (err) {
