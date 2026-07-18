@@ -251,7 +251,7 @@ export const digestSchema = {
 export const tradeSchema = {
   type: "OBJECT",
   properties: {
-    fairness: { ...STR, description: "Exactly one of: fair, favors_you, favors_them, lopsided." },
+    fairness: { ...STR, description: "Exactly one of: fair, favors_you, favors_them. Use 'fair' when the two sides are within ~20% in overall worth; only pick a direction when one side is clearly ahead. Do NOT output 'lopsided' or any other value." },
     verdict: { ...STR, description: "One-line headline judgment." },
     yourSide: {
       type: "OBJECT",

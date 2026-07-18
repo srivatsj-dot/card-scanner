@@ -644,6 +644,44 @@ function sideToParts(heading: string, entries: CardEntry[]): Part[] {
   return parts;
 }
 
+interface TradeSideShape { valueLow?: number; valueHigh?: number; notes?: string }
+interface TradeShape {
+  fairness?: string;
+  verdict?: string;
+  yourSide?: TradeSideShape;
+  theirSide?: TradeSideShape;
+  valueGapNote?: string;
+  reasoning?: string;
+  suggestions?: string[];
+}
+
+const sideMid = (side?: TradeSideShape): number => {
+  const lo = Number(side?.valueLow), hi = Number(side?.valueHigh);
+  if (Number.isFinite(lo) && Number.isFinite(hi)) return (lo + hi) / 2;
+  if (Number.isFinite(hi)) return hi;
+  if (Number.isFinite(lo)) return lo;
+  return NaN;
+};
+
+// The model used to return the directionless verdict "lopsided" far too often,
+// and the UI could only render it as a red pill regardless of who came out
+// ahead — so a fair-sounding explanation would sit under a scary "Lopsided"
+// label. We no longer accept "lopsided": resolve any non-directional or invalid
+// verdict to fair / favors_you / favors_them from the actual per-side values.
+// (favors_you = the cards RECEIVED are worth more than the cards GIVEN UP.)
+function normalizeFairness(t: TradeShape): TradeShape {
+  if (t.fairness === "fair" || t.fairness === "favors_you" || t.fairness === "favors_them") return t;
+  const you = sideMid(t.yourSide), them = sideMid(t.theirSide);
+  if (Number.isFinite(you) && Number.isFinite(them) && (you > 0 || them > 0)) {
+    const hi = Math.max(you, them), lo = Math.min(you, them);
+    const gap = hi > 0 ? (hi - lo) / hi : 0;
+    t.fairness = gap <= 0.2 ? "fair" : them > you ? "favors_you" : "favors_them";
+  } else {
+    t.fairness = "fair";
+  }
+  return t;
+}
+
 // --- Evaluate a trade, or suggest what to ask for --------------------------
 app.post("/api/trade", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
@@ -720,7 +758,7 @@ app.post("/api/trade", async (req: Request, res: Response) => {
       ...sideToParts("Cards I give up (my side)", giving),
       ...sideToParts("Cards I receive (their side)", receiving),
     ];
-    res.json(await analyze(sys, parts, tradeSchema, groundedFor(settings)));
+    res.json(normalizeFairness(await analyze<TradeShape>(sys, parts, tradeSchema, groundedFor(settings))));
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });

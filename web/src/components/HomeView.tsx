@@ -71,7 +71,7 @@ export default function HomeView({ saved, wishlist, scans, currency, onGo }: Pro
 
       <div className="card home-foot">
         <p className="muted" style={{ margin: 0 }}>
-          {t("Values and outlooks are AI estimates from your photo plus live data — a smart starting point, not a market feed. Always sanity-check before a big trade.")}
+          {t("Values are based on recent eBay sold prices and other real market comps — actual sales, not guesses. Still a starting point, so check the latest sold listings before a big trade.")}
         </p>
         <p className="muted" style={{ margin: "10px 0 0", fontSize: 13 }}>
           <a href="/faq.html" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>{t("FAQ")}</a>
