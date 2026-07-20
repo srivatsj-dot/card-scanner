@@ -32,7 +32,7 @@ export default function ResultCard({
   if (!result.identified) {
     return (
       <div className="card">
-        <h2>{tr("Couldn't identify a card")}</h2>
+        <h2><span className="pill red">{tr("Not identified")}</span></h2>
         <p className="muted">
           {tr("The photo didn't clearly show a trading card. Try a sharper, well-lit shot of the front of the card filling most of the frame.")}
         </p>

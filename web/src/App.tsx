@@ -48,22 +48,28 @@ const isRateLimit = (e: unknown) =>
   (e as { status?: number })?.status === 429 ||
   String(e instanceof Error ? e.message : e).toLowerCase().includes("rate limit");
 
-function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: () => void; onDeleteAccount: () => void }) {
+function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: string | null; onRequestLogin: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
+  // Guest mode: user === null. All screens work (scan, search, briefing,
+  // trades) but anything that SAVES to a collection is gated behind
+  // requireAuth(), which opens the login screen instead.
+  const isGuest = user == null;
+  const ns = user ?? "guest";
+  const userName = user ? displayNameOf(user) : "Guest";
   // All persisted state is namespaced per account, so each user has their own
   // binder, wishlist, settings, and progress in the same browser.
-  const SETTINGS_KEY = `card-scanner-settings:${user}`;
-  const BINDER_KEY = `card-scanner-binder:${user}`;
-  const WISHLIST_KEY = `card-scanner-wishlist:${user}`;
-  const THEME_KEY = `card-scanner-theme:${user}`;
-  const SCANS_KEY = `card-scanner-scans:${user}`;
-  const TRADES_KEY = `card-scanner-trades:${user}`;
-  const EARNED_KEY = `card-scanner-earned:${user}`;
-  const AUTO_REFRESH_KEY = `card-scanner-last-auto-refresh:${user}`;
-  const DIGEST_KEY = `card-scanner-digest:${user}`;
-  const WANTED_KEY = `card-scanner-wanted:${user}`;
-  const SET_PCT_KEY = `card-scanner-best-set-pct:${user}`;
-  const STREAK_KEY = `card-scanner-streak:${user}`;
-  const QUESTS_KEY = `card-scanner-quests:${user}`;
+  const SETTINGS_KEY = `card-scanner-settings:${ns}`;
+  const BINDER_KEY = `card-scanner-binder:${ns}`;
+  const WISHLIST_KEY = `card-scanner-wishlist:${ns}`;
+  const THEME_KEY = `card-scanner-theme:${ns}`;
+  const SCANS_KEY = `card-scanner-scans:${ns}`;
+  const TRADES_KEY = `card-scanner-trades:${ns}`;
+  const EARNED_KEY = `card-scanner-earned:${ns}`;
+  const AUTO_REFRESH_KEY = `card-scanner-last-auto-refresh:${ns}`;
+  const DIGEST_KEY = `card-scanner-digest:${ns}`;
+  const WANTED_KEY = `card-scanner-wanted:${ns}`;
+  const SET_PCT_KEY = `card-scanner-best-set-pct:${ns}`;
+  const STREAK_KEY = `card-scanner-streak:${ns}`;
+  const QUESTS_KEY = `card-scanner-quests:${ns}`;
 
   const [view, setView] = useState<View>("home");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -144,6 +150,16 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
+  // Saving anything to a collection needs an account: guests get sent to the
+  // login screen instead. Returns whether the caller may proceed.
+  function requireAuth(): boolean {
+    if (isGuest) {
+      onRequestLogin();
+      return false;
+    }
+    return true;
+  }
+
   // Record a set-completion % from the Sets view; keep the best ever seen.
   function reportSetPct(pct: number) {
     setBestSetPct((prev) => {
@@ -206,7 +222,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   // Cross-device sync: when signed into a cloud account, push the collection to
   // the server (debounced) whenever any synced state changes.
   useEffect(() => {
-    if (cloudActive()) schedulePush(user);
+    if (user && cloudActive()) schedulePush(user);
   }, [settings, saved, wishlist, later, scans, trades, theme, user]);
   // Unlock-achievement toasts.
   useEffect(() => {
@@ -237,6 +253,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   }, [settings.language]);
 
   function saveCard(result: ScanResult, frontDataUrl: string | undefined) {
+    if (!requireAuth()) return;
     const now = Date.now();
     setSaved((prev) => [
       {
@@ -297,6 +314,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
 
   // --- "For later" list (saved trades / cards to acquire) ------------------
   function saveLater(item: Omit<LaterItem, "id" | "savedAt">) {
+    if (!requireAuth()) return;
     setLater((prev) => [{ id: uid(), savedAt: Date.now(), ...item }, ...prev]);
     toast(t("Saved to For later"));
   }
@@ -308,6 +326,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   // "Do trade" button (when you own what you're giving) and the "For later"
   // lander. Returns true on success. Counts as a completed trade.
   async function settleTrade(target: string, give: string[]): Promise<boolean> {
+    if (!requireAuth()) return false;
     let r: ScanResult;
     try {
       r = await searchCardCached(target, aiSettings);
@@ -354,6 +373,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   }
 
   function wishToBinder(item: WishItem) {
+    if (!requireAuth()) return;
     if (!item.result) return;
     saveCard(item.result, undefined);
     setWishlist((prev) => prev.filter((w) => w.id !== item.id));
@@ -361,6 +381,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   }
 
   async function addWish(text: string) {
+    if (!requireAuth()) return;
     const id = uid();
     setWishlist((prev) => [{ id, addedAt: Date.now(), text }, ...prev]);
     setAdding(true);
@@ -377,6 +398,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   // Add several text descriptions to the wishlist at once (e.g. all of a card's
   // recommended trade targets). Items appear instantly; prices fill in parallel.
   async function addWishMany(texts: string[]) {
+    if (!requireAuth()) return;
     const clean = texts.map((s) => s.trim()).filter(Boolean);
     if (clean.length === 0) return;
     const items = clean.map((text) => ({ id: uid(), addedAt: Date.now(), text }));
@@ -395,6 +417,7 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
   // Add cards we already have full results for (e.g. bulk-detected cards) — no
   // lookup needed since the value is already known.
   function addWishResults(results: ScanResult[]) {
+    if (!requireAuth()) return;
     if (results.length === 0) return;
     const items = results.map((result) => ({
       id: uid(),
@@ -590,11 +613,19 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
           <div className="user-menu">
-            <span className="user-chip" title={displayNameOf(user)}>
-              <span className="user-avatar">{displayNameOf(user).slice(0, 1).toUpperCase()}</span>
-              <span className="user-name">{displayNameOf(user)}</span>
-            </span>
-            <button className="btn ghost small" onClick={onLogout}>{t("Log out")}</button>
+            {isGuest ? (
+              <button className="btn small" onClick={onRequestLogin} style={{ width: "100%" }}>
+                👤 {t("Log in / Sign up")}
+              </button>
+            ) : (
+              <>
+                <span className="user-chip" title={userName}>
+                  <span className="user-avatar">{userName.slice(0, 1).toUpperCase()}</span>
+                  <span className="user-name">{userName}</span>
+                </span>
+                <button className="btn ghost small" onClick={onLogout}>{t("Log out")}</button>
+              </>
+            )}
           </div>
         </div>
       </aside>
@@ -637,8 +668,9 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           onWishAll={addWishMany}
           onSaveLater={saveLater}
           onDoTrade={doTrade}
-          senderName={displayNameOf(user)}
-          offersKey={`card-scanner-sent-offers:${user}`}
+          senderName={userName}
+          onRequireLogin={isGuest ? onRequestLogin : undefined}
+          offersKey={`card-scanner-sent-offers:${ns}`}
         />
       )}
       {view === "tradeup" && (
@@ -680,10 +712,10 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
         <SettingsView
           settings={settings}
           onChange={setSettings}
-          onDeleteAccount={onDeleteAccount}
-          onRename={async (name) => { await setDisplayName(user, name); setNameTick((n) => n + 1); }}
-          email={emailOf(user)}
-          displayName={displayNameOf(user)}
+          onDeleteAccount={() => { if (!requireAuth()) return; onDeleteAccount(); }}
+          onRename={async (name) => { if (!user) { onRequestLogin(); return; } await setDisplayName(user, name); setNameTick((n) => n + 1); }}
+          email={(user && emailOf(user)) || undefined}
+          displayName={userName}
         />
       )}
       {/* AdSense policy: ads may only appear alongside real publisher content —
@@ -729,11 +761,13 @@ const OFFER_PATH_ID = /^\/offer\/([A-Za-z0-9_-]{6,})$/.exec(window.location.path
 
 export default function App() {
   const [user, setUser] = useState<string | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
   // Bumped whenever a cloud pull/merge changes localStorage, to remount MainApp
   // so it re-reads the freshly-synced collection from storage.
   const [syncTick, setSyncTick] = useState(0);
 
-  // Always open to the login screen — don't auto-resume a saved session.
+  // Don't auto-resume a saved session: everyone starts as a guest (main
+  // screens open, saving prompts login) and signs in deliberately.
   useEffect(() => {
     logout();
     if (!document.documentElement.dataset.theme) {
@@ -770,22 +804,32 @@ export default function App() {
     return <OfferView id={OFFER_PATH_ID} />;
   }
 
-  if (!user) {
-    return <AuthScreen onAuthed={() => setUser(currentUser())} />;
+  // Guest mode: the main screens are open without an account — scanning,
+  // searching, the briefing, trades. The auth screen appears only when the
+  // visitor tries to SAVE something (binder, wishlist, for-later …) or taps
+  // "Log in". Public screens also give crawlers real content to index.
+  if (showAuth && !user) {
+    return (
+      <AuthScreen
+        onAuthed={() => { setUser(currentUser()); setShowAuth(false); }}
+        onBack={() => setShowAuth(false)}
+      />
+    );
   }
 
   // key fully remounts MainApp on account switch OR after a sync changed
   // storage, so all per-user state re-initializes from namespaced storage.
   return (
     <MainApp
-      key={`${user}#${syncTick}`}
+      key={`${user ?? "guest"}#${syncTick}`}
       user={user}
+      onRequestLogin={() => setShowAuth(true)}
       onLogout={() => {
         logout();
         setUser(null);
       }}
       onDeleteAccount={() => {
-        deleteAccount(user);
+        if (user) deleteAccount(user);
         setUser(null);
       }}
     />

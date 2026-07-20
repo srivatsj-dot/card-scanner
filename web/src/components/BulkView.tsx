@@ -192,7 +192,10 @@ export default function BulkView({ settings, onSave, onWish }: Props) {
                             </div>
                           </>
                         ) : (
-                          <div className="muted">{t("Couldn't read this card")} — {c.note}</div>
+                          <div>
+                            <span className="pill red">{t("Not identified")}</span>
+                            {c.note && <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>{c.note}</span>}
+                          </div>
                         )}
                       </div>
                       {c.identified && (

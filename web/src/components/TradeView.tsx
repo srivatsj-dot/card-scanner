@@ -173,6 +173,7 @@ interface TradeProps {
   onDoTrade: (target: string, give: string[]) => void;
   senderName: string;
   offersKey: string; // localStorage key for this user's sent offers
+  onRequireLogin?: () => void; // set for guests: sending an offer needs an account
 }
 
 function statusPill(status: TradeOffer["status"] | "loading", t: (s: string) => string) {
@@ -197,7 +198,7 @@ function ownsCard(text: string, saved: SavedCard[]): boolean {
   });
 }
 
-export default function TradeView({ settings, saved, wishlist, onTrade, onWishAll, onSaveLater, onDoTrade, senderName, offersKey }: TradeProps) {
+export default function TradeView({ settings, saved, wishlist, onTrade, onWishAll, onSaveLater, onDoTrade, senderName, offersKey, onRequireLogin }: TradeProps) {
   const [yourSide, setYourSide] = useState<CardEntry[]>([newEntry()]);
   const [theirSide, setTheirSide] = useState<CardEntry[]>([newEntry()]);
   const [trade, setTrade] = useState<TradeResult | null>(null);
@@ -247,6 +248,7 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
 
   async function sendOffer() {
     if (!trade) return;
+    if (onRequireLogin) { onRequireLogin(); return; } // guests: log in first
     setSending(true);
     setError(null);
     try {

@@ -8,7 +8,7 @@ import Logo from "./Logo";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
+export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void; onBack?: () => void }) {
   const t = useT();
   const [mode, setMode] = useState<"login" | "register" | "reset">(hasAnyAccount() ? "login" : "register");
   const [username, setUsername] = useState("");
@@ -360,6 +360,11 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
         <p className="muted" style={{ fontSize: 12, marginTop: 14, marginBottom: 0 }}>
           {t("Accounts are stored on this device. A forgotten password can be reset with a code emailed to the address on your account.")}
         </p>
+        {onBack && (
+          <button className="link-btn" style={{ marginTop: 12 }} onClick={onBack}>
+            ← {t("Continue without an account")}
+          </button>
+        )}
         <p className="muted" style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
           <a href="/briefing" style={{ color: "var(--accent)" }}>☀️ {t("Read today's free collector briefing")}</a>
           {" · "}
