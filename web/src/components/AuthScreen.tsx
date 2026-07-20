@@ -360,6 +360,13 @@ export default function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
         <p className="muted" style={{ fontSize: 12, marginTop: 14, marginBottom: 0 }}>
           {t("Accounts are stored on this device. A forgotten password can be reset with a code emailed to the address on your account.")}
         </p>
+        <p className="muted" style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
+          <a href="/briefing" style={{ color: "var(--accent)" }}>☀️ {t("Read today's free collector briefing")}</a>
+          {" · "}
+          <a href="/faq.html" style={{ color: "var(--accent)" }}>{t("FAQ")}</a>
+          {" · "}
+          <a href="/privacy.html" style={{ color: "var(--accent)" }}>{t("Privacy")}</a>
+        </p>
         </>)}
         </div>
       </div>

@@ -1096,6 +1096,86 @@ app.get("/api/cron/digest", async (_req: Request, res: Response) => {
   }
 });
 
+// --- Public daily briefing page (no login, server-rendered, crawlable) ------
+// The app lives behind a login, so crawlers (Google, AdSense) would otherwise
+// see nothing but an auth screen — which reads as "no publisher content". This
+// page publishes the day's briefing as real, indexable HTML. It serves the
+// cached briefing only (no generation on request), so crawler hits are free.
+const stripDateTag = (s: string) => s.replace(/^\s*\[\d{4}-\d{2}-\d{2}\]\s*/, "").replace(/^[\s•\-–—]+/, "").trim();
+
+function briefingHtml(date: string, b: Briefing): string {
+  const bucketNames: [keyof DigestSection, string][] = [
+    ["storylines", "🔥 Storylines"], ["risingStars", "📈 Rising stars"], ["declining", "📉 Cooling off"],
+    ["trades", "🔁 Moves & trades"], ["chase", "👀 Ones to watch"], ["news", "💰 Market news"],
+  ];
+  const sections = b.sections
+    .map((s) => {
+      const buckets = bucketNames
+        .map(([key, label]) => {
+          const items = (s[key] as string[]).map(stripDateTag).filter(Boolean);
+          if (!items.length) return "";
+          return `<h3>${label}</h3><ul>${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`;
+        })
+        .join("");
+      return buckets ? `<section><h2>${escapeHtml(s.sport)}</h2>${buckets}</section>` : "";
+    })
+    .join("");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card-O-Rama Daily Briefing — ${escapeHtml(date)}</title>
+<meta name="description" content="Today's trading-card briefing: real scores, standout performances, and card-market news across baseball, basketball, football, soccer, hockey, cricket, and Pokémon TCG.">
+<link rel="icon" href="/favicon-32.png">
+<style>
+  body { font-family: Georgia, 'Times New Roman', serif; max-width: 720px; margin: 0 auto; padding: 24px 16px; color: #1c1c1c; background: #faf9f6; line-height: 1.6; }
+  header { text-align: center; border-bottom: 2px solid #1c1c1c; margin-bottom: 24px; padding-bottom: 12px; }
+  h1 { margin: 0; font-size: 28px; }
+  .date { color: #666; font-style: italic; }
+  h2 { border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 32px; }
+  h3 { margin-bottom: 4px; }
+  ul { margin-top: 4px; }
+  .overview { font-size: 18px; font-weight: 600; }
+  footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 12px; font-size: 14px; color: #555; }
+  a { color: #b4451f; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🃏 Card-O-Rama Daily Briefing</h1>
+  <div class="date">${escapeHtml(date)}</div>
+</header>
+<p class="overview">${escapeHtml(b.overview)}</p>
+${sections || "<p>A quiet day across the hobby — check back tomorrow.</p>"}
+<footer>
+  <p>Fresh every morning: real results, standout performances, and card-market news for collectors —
+  across baseball, basketball, football, soccer, hockey, cricket, and Pokémon TCG.</p>
+  <p><a href="/">Open the Card-O-Rama app</a> — scan any card, price it with real eBay data, check trades, and track set completion.
+  · <a href="/faq.html">FAQ</a> · <a href="/privacy.html">Privacy</a></p>
+</footer>
+</body>
+</html>`;
+}
+
+app.get("/briefing", async (_req: Request, res: Response) => {
+  // Serve only what's already cached — today's if generated, else yesterday's —
+  // so crawler traffic never triggers AI generation.
+  const key = (d: string) => `${DIGEST_GEN_VERSION}:${d}`;
+  let date = today();
+  let b = digestMem.get(key(date)) || ((await cloud.loadDigest(key(date)).catch(() => null)) as Briefing | null);
+  if (!b) {
+    date = addDaysISO(today(), -1);
+    b = digestMem.get(key(date)) || ((await cloud.loadDigest(key(date)).catch(() => null)) as Briefing | null);
+  }
+  res.set("Cache-Control", "public, max-age=900");
+  if (!b || !Array.isArray(b.sections)) {
+    res.type("html").send(briefingHtml(today(), { overview: "Today's briefing is being prepared — check back shortly.", yourCards: [], yourWishlist: [], sections: [] }));
+    return;
+  }
+  res.type("html").send(briefingHtml(date, b));
+});
+
 app.post("/api/digest", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
   const { date, sports } = req.body as { date?: string; sports?: string[] };

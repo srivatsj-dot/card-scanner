@@ -686,7 +686,14 @@ function MainApp({ user, onLogout, onDeleteAccount }: { user: string; onLogout: 
           displayName={displayNameOf(user)}
         />
       )}
-      <AdSlot className="ad-bottom" />
+      {/* AdSense policy: ads may only appear alongside real publisher content —
+          never on functional screens (settings, awards), empty states, or
+          screens still loading. Gate the ad to content-rich views only. */}
+      {(view === "today" ||
+        (view === "scan" && !!scan) ||
+        (view === "search" && !!search) ||
+        (view === "binder" && saved.length >= 3) ||
+        (view === "sets" && saved.length >= 3)) && <AdSlot className="ad-bottom" />}
       </div>
 
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("Ask a question")}</button>
