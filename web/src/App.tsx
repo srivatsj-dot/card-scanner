@@ -33,7 +33,7 @@ import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import HomeView from "./components/HomeView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount, setDisplayName } from "./auth";
-import { cloudActive, schedulePush, cloudPull, cloudUserKey } from "./cloud";
+import { cloudActive, schedulePush, cloudPull, cloudUserKey, marketOffers } from "./cloud";
 
 type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "market" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
@@ -155,6 +155,18 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questState?.week]);
+
+  // Surface new incoming trade offers on the briefing: fetch pending offers when
+  // Today opens, and pop them up until the user has looked at the marketplace.
+  const [pendingOffers, setPendingOffers] = useState<number>(0);
+  useEffect(() => {
+    if (view !== "today" || isGuest || !cloudActive()) return;
+    let cancelled = false;
+    marketOffers()
+      .then((o) => { if (!cancelled) setPendingOffers(o.incoming.filter((x) => x.status === "pending").length); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [view, isGuest]);
 
   // Opening the morning briefing advances the daily streak (once per day) and
   // counts toward this week's briefing quest.
@@ -687,7 +699,15 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         />
       )}
       {view === "today" && (
-        <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
+        <>
+          {pendingOffers > 0 && (
+            <div className="card offer-alert" onClick={() => { setView("market"); setPendingOffers(0); }}>
+              🔔 {t("You have")} {pendingOffers} {t(pendingOffers === 1 ? "new trade offer" : "new trade offers")} —{" "}
+              <span className="link-inline">{t("review in the Marketplace")}</span>
+            </div>
+          )}
+          <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
+        </>
       )}
       {view === "scan" && (
         <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
