@@ -240,7 +240,7 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
         {t("Only suggest cards of the same kind as the card (e.g. baseball → baseball)")}
       </label>
 
-      <h3 style={{ marginTop: 18 }}>🛒 {t("Trade marketplace")}</h3>
+      <h3 style={{ marginTop: 18 }}>🛒 {t("Trade")}</h3>
       <label className="toggle">
         <input
           type="checkbox"

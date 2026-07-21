@@ -74,6 +74,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const SET_PCT_KEY = `card-scanner-best-set-pct:${ns}`;
   const STREAK_KEY = `card-scanner-streak:${ns}`;
   const QUESTS_KEY = `card-scanner-quests:${ns}`;
+  const QUEST_MASTER_KEY = `card-scanner-quest-master:${ns}`;
 
   const [view, setView] = useState<View>("home");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -99,6 +100,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   // Daily briefing streak + this week's quests.
   const [streak, setStreak] = useState<Streak | null>(() => loadJSON<Streak | null>(STREAK_KEY, null));
   const [questState, setQuestState] = useState<QuestState | null>(() => loadJSON<QuestState | null>(QUESTS_KEY, null));
+  const [questMaster, setQuestMaster] = useState<boolean>(() => loadJSON<boolean>(QUEST_MASTER_KEY, false));
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // New accounts get a 3-question setup (language, style, cards) once.
@@ -191,6 +193,17 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       return [];
     });
   }
+
+  // Award "Quest Master" the first time every quest in a week is completed.
+  useEffect(() => {
+    if (questMaster || !questState) return;
+    const prog = questProgress(questState, questCounters);
+    if (prog.length && prog.every((q) => q.done)) {
+      setQuestMaster(true);
+      localStorage.setItem(QUEST_MASTER_KEY, JSON.stringify(true));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questState, scans, trades, saved.length, wishlist.length, bestSetPct]);
 
   // Opening the morning briefing advances the daily streak (once per day) and
   // counts toward this week's briefing quest.
@@ -286,7 +299,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   }, [settings, saved, wishlist, later, scans, trades, theme, user]);
   // Unlock-achievement toasts.
   useEffect(() => {
-    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language, bestSetPct, streak?.best || 0));
+    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language, bestSetPct, streak?.best || 0, questMaster));
     const newly = ids.filter((id) => !earnedRef.current.has(id));
     if (newly.length) {
       // Don't fire a wall of banners on the very first computation (e.g. importing
@@ -301,7 +314,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved, wishlist, scans, trades, settings.language, bestSetPct, streak]);
+  }, [saved, wishlist, scans, trades, settings.language, bestSetPct, streak, questMaster]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, JSON.stringify(theme));
@@ -664,9 +677,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           {navBtn("search", t("Search"))}
           {navBtn("bulk", t("Bulk"))}
           <div className="side-group">{t("Trade")}</div>
-          {navBtn("trade", t("Trade"))}
+          {navBtn("trade", t("Check trade"))}
           {navBtn("tradeup", <>📈 {t("Trade-Up")}</>)}
-          {navBtn("market", <>🛒 {t("Marketplace")}{incomingPending > 0 ? ` 🔴 ${incomingPending}` : ""}</>)}
+          {navBtn("market", <>🛒 {t("Trade")}{incomingPending > 0 ? ` 🔴 ${incomingPending}` : ""}</>)}
           {navBtn("later", <>🔖 {t("For later")}</>)}
           <div className="side-group">{t("Collection")}</div>
           {navBtn("binder", <>{t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}</>)}
@@ -734,7 +747,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
                     : t("declined your trade.")}
                 </div>
               ))}
-              <span className="link-inline">{t("Open the Marketplace")}</span>
+              <span className="link-inline">{t("Open Trade")}</span>
               <button
                 className="btn ghost small"
                 style={{ marginLeft: 8 }}
@@ -827,7 +840,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {view === "awards" && (isGuest ? (
         <GuestGate feature="Earn achievements as your collection grows." onLogin={onRequestLogin} />
       ) : (
-        <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} />
+        <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} questMaster={questMaster} />
       ))}
       {view === "settings" && (
         <SettingsView

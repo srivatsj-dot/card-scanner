@@ -63,8 +63,8 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   if (!cloudOn) {
     return (
       <div className="card">
-        <h2>{t("Trade marketplace")}</h2>
-        <p className="muted">{t("The marketplace needs cloud accounts, which aren't enabled on this server. Set DATABASE_URL to turn it on.")}</p>
+        <h2>{t("Trade")}</h2>
+        <p className="muted">{t("Trading with other collectors needs cloud accounts, which aren't enabled on this server. Set DATABASE_URL to turn it on.")}</p>
       </div>
     );
   }
@@ -143,7 +143,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   return (
     <div>
       <div className="card">
-        <h2 style={{ marginTop: 0, marginBottom: 8 }}>{t("Trade marketplace")}</h2>
+        <h2 style={{ marginTop: 0, marginBottom: 8 }}>{t("Trade")}</h2>
         <div className="auth-tabs">
           <button className={tab === "find" ? "active" : ""} onClick={() => setTab("find")}>{t("Find a trader")}</button>
           <button className={tab === "offers" ? "active" : ""} onClick={() => { setTab("offers"); loadOffers(); }}>

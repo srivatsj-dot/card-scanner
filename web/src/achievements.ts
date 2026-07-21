@@ -16,6 +16,7 @@ export interface AchStats {
   maxSetSize: number; // most cards owned from a single set
   bestSetPct: number; // best set-completion %, 0..1 (from checklist checks)
   streakDays: number; // consecutive days checking the morning briefing
+  questMaster: boolean; // completed all of a week's quests at least once
   hasDupe: boolean;
   hasVintage: boolean;
   hasModern: boolean;
@@ -111,6 +112,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "streak_3", emoji: "🔥", title: "Warming Up", desc: "Check the morning briefing 3 days in a row.", earned: (s) => s.streakDays >= 3 },
   { id: "streak_7", emoji: "📆", title: "Daily Ritual", desc: "Check the morning briefing 7 days in a row.", earned: (s) => s.streakDays >= 7 },
   { id: "streak_30", emoji: "🧠", title: "Hobby Scholar", desc: "Check the morning briefing 30 days in a row.", earned: (s) => s.streakDays >= 30 },
+  { id: "quest_master", emoji: "🎖️", title: "Quest Master", desc: "Complete all of a week's quests.", earned: (s) => s.questMaster },
 ];
 
 const decade = (year: string | null) => {
@@ -135,7 +137,8 @@ export function computeStats(
   trades: number,
   language: string,
   bestSetPct = 0,
-  streakDays = 0
+  streakDays = 0,
+  questMaster = false
 ): AchStats {
   // Largest single set held (by year|manufacturer|setName), for set-building badges.
   const setCounts = new Map<string, number>();
@@ -187,6 +190,7 @@ export function computeStats(
     maxSetSize,
     bestSetPct: Math.max(0, Math.min(1, bestSetPct || 0)),
     streakDays: Math.max(0, streakDays || 0),
+    questMaster: !!questMaster,
     hasDupe: players.length > new Set(players).size,
     hasVintage: decades.some((d) => d <= 198),
     hasModern: decades.some((d) => d >= 202),

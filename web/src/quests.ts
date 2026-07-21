@@ -75,49 +75,58 @@ export interface QuestProfile {
   binderSize: number;
 }
 
-// Deterministic pick so quests are stable across a week (no Math.random, which
-// is unavailable here anyway) — vary by the week string + a salt.
-function pick<T>(arr: T[], week: string, salt: number): T {
-  let h = salt;
-  for (let i = 0; i < week.length; i++) h = (h * 31 + week.charCodeAt(i)) >>> 0;
-  return arr[h % arr.length];
+// A stable-per-week seed derived from the week key (no Math.random — unavailable
+// here and would break determinism). Different weeks → different seed → different
+// quests, but the SAME week always regenerates identically.
+function weekSeed(week: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < week.length; i++) h = Math.imul(h ^ week.charCodeAt(i), 16777619) >>> 0;
+  return h;
 }
+// Pull a pseudo-random small int from the seed at a given "slot".
+const roll = (seed: number, slot: number, mod: number) => ((Math.imul(seed ^ (slot * 0x9e3779b1), 2654435761) >>> 0) % mod);
+const choose = <T>(arr: T[], seed: number, slot: number): T => arr[roll(seed, slot, arr.length)];
 
-/** Generate this week's quests, personalized to the collector's profile. */
+/** Generate this week's quests — personalized AND rotated so each week differs. */
 export function makeQuests(week: string, now: QuestCounters, profile?: QuestProfile): QuestState {
   const p: QuestProfile = profile || { categories: [], collectorType: "any", hasWishlist: now.wishlist > 0, inProgressSet: now.bestSetPct > 0 && now.bestSetPct < 0.95, binderSize: now.cards };
-  const cat = p.categories.length ? pick(p.categories, week, 7) : "";
-  const quests: Quest[] = [];
+  const seed = weekSeed(week);
+  const cat = p.categories.length ? choose(p.categories, seed, 1) : "";
 
-  // 1) A scanning quest, flavored by category and collector type.
-  if (cat) {
-    quests.push({ id: "scan_cat", emoji: "📷", title: `Scan 3 ${cat} cards`, metric: "scans", target: now.scans + 3 });
-  } else {
-    quests.push({ id: "scan_5", emoji: "📷", title: "Identify 5 cards", metric: "scans", target: now.scans + 5 });
-  }
+  // Two CORE quests every week, but with week-varied counts so they never feel
+  // identical.
+  const scanN = choose([3, 5, 8], seed, 2);
+  const addN = choose(p.binderSize >= 50 ? [5, 8, 10] : [2, 3, 4], seed, 3);
+  const quests: Quest[] = [
+    cat
+      ? { id: "scan", emoji: "📷", title: `Scan ${scanN} ${cat} cards`, metric: "scans", target: now.scans + scanN }
+      : { id: "scan", emoji: "📷", title: `Identify ${scanN} cards`, metric: "scans", target: now.scans + scanN },
+    { id: "binder", emoji: "📒", title: `Add ${addN} cards to your binder`, metric: "cards", target: now.cards + addN },
+  ];
 
-  // 2) A collection-growth quest that scales with how big the binder already is.
-  const addN = p.binderSize >= 50 ? 5 : 3;
-  quests.push({ id: "binder_add", emoji: "📒", title: `Add ${addN} cards to your binder`, metric: "cards", target: now.cards + addN });
-
-  // 3) Trade activity — money collectors get a slightly higher bar.
-  const tradeN = p.collectorType === "money" ? 3 : 2;
-  quests.push({ id: "trade_n", emoji: "🤝", title: `Evaluate ${tradeN} trades`, metric: "trades", target: now.trades + tradeN });
-
-  // 4) A goal tied to what they're actually doing: finishing a set, building a
-  //    wishlist, or (for talent collectors with neither) keeping up with news.
+  // A rotating POOL — pick 3 different ones each week so the set keeps changing.
+  const tradeN = p.collectorType === "money" ? choose([2, 3, 4], seed, 4) : choose([1, 2, 3], seed, 4);
+  const briefN = choose([3, 4, 5], seed, 5);
+  const wishN = choose([2, 3], seed, 6);
+  const pool: Quest[] = [
+    { id: "trade", emoji: "🤝", title: `Evaluate ${tradeN} trades`, metric: "trades", target: now.trades + tradeN },
+    { id: "briefing", emoji: "☀️", title: `Check the morning briefing on ${briefN} days`, metric: "briefingDays", target: briefN },
+    { id: "wish", emoji: "♡", title: cat ? `Wishlist ${wishN} ${cat} cards` : `Add ${wishN} cards to your wishlist`, metric: "wishlist", target: now.wishlist + wishN },
+  ];
   if (p.inProgressSet) {
-    quests.push({ id: "set_up_5", emoji: "🎴", title: "Raise your best set completion by 5%", metric: "bestSetPct", target: Math.min(1, now.bestSetPct + 0.05) });
-  } else if (p.hasWishlist || p.collectorType === "money") {
-    quests.push({ id: "wish_3", emoji: "♡", title: cat ? `Add 3 ${cat} cards to your wishlist` : "Add 3 cards to your wishlist", metric: "wishlist", target: now.wishlist + 3 });
-  } else {
-    quests.push({ id: "briefing_5b", emoji: "☀️", title: "Check the morning briefing on 4 days", metric: "briefingDays", target: 4 });
+    pool.push({ id: "set_up", emoji: "🎴", title: "Raise your best set completion by 5%", metric: "bestSetPct", target: Math.min(1, now.bestSetPct + 0.05) });
   }
-
-  // 5) Always keep a briefing-streak quest (unless #4 already is one).
-  if (!quests.some((q) => q.metric === "briefingDays")) {
-    quests.push({ id: "briefing_5", emoji: "☀️", title: "Check the morning briefing on 5 days", metric: "briefingDays", target: 5 });
+  // Deterministically rotate the pool order by week, then take 3.
+  const ordered = pool
+    .map((q, i) => ({ q, k: roll(seed, 10 + i, 997) }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.q);
+  const chosen = ordered.slice(0, 3);
+  // Always guarantee a briefing quest so streak-building stays encouraged.
+  if (!chosen.some((q) => q.metric === "briefingDays")) {
+    chosen[chosen.length - 1] = pool.find((q) => q.metric === "briefingDays")!;
   }
+  quests.push(...chosen);
 
   return { week, baseline: { ...now }, briefingDays: 0, quests };
 }

@@ -348,7 +348,7 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
   return (
     <div>
       <div className="card">
-        <h2>{t("Trade tool")}</h2>
+        <h2>{t("Check trade")}</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           {t("Add the cards on each side — type them, snap a photo, or pull one from your binder. You can add multiple cards per side. Then check if a trade is fair, or ask what you should get back.")}
         </p>
