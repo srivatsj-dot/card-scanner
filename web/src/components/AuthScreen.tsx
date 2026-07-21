@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { login, register, hasAnyAccount, loginWithGoogle, accountByEmail, resetPassword, maskEmail } from "../auth";
+import { login, register, hasAnyAccount, loginWithGoogle, accountByEmail, resetPassword, maskEmail, currentUser } from "../auth";
 import { notifySignup, sendResetCode } from "../api";
 import { cloudEnabled, cloudForgot, cloudReset } from "../cloud";
 import { trackSignup } from "../analytics";
@@ -7,6 +7,12 @@ import { useT } from "../translator";
 import Logo from "./Logo";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+// Mark the just-created account so MainApp shows the onboarding questions once.
+function flagOnboarding() {
+  const u = currentUser();
+  if (u) try { localStorage.setItem(`card-scanner-onboard:${u}`, "1"); } catch { /* ignore */ }
+}
 
 export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void; onBack?: () => void }) {
   const t = useT();
@@ -129,6 +135,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
             if (r.created) {
               trackSignup(); // ad conversion: a real account was created
               notifySignup(r.email, r.display);
+              flagOnboarding(); // new account → show the 3-question setup
             }
             onAuthedRef.current();
           } catch (e) {
@@ -174,6 +181,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
         await register(username, password, email);
         trackSignup(); // ad conversion: a real account was created
         notifySignup(email, username);
+        flagOnboarding(); // new account → show the 3-question setup
       } else {
         await login(username, password);
       }

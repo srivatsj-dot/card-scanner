@@ -992,6 +992,33 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 
 /* Set completion */
 .set-head { display: flex; gap: 12px; align-items: center; }
+/* Entry login modal + onboarding + guest gate */
+.login-modal, .onboarding {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(440px, 92vw); max-height: 88vh; overflow: auto; z-index: 60;
+}
+.modal-x {
+  position: absolute; top: 10px; right: 12px;
+  width: 32px; height: 32px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  font-size: 15px; cursor: pointer; line-height: 1; display: grid; place-items: center;
+}
+.modal-x:hover { background: var(--line); }
+.guest-gate { text-align: center; padding: 36px 22px; }
+.link-inline {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline;
+}
+.onb-select { width: 100%; }
+.onb-options { display: flex; flex-direction: column; gap: 10px; }
+.onb-choice {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 12px 14px; border-radius: var(--radius);
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text); cursor: pointer;
+}
+.onb-choice.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.onb-choice-emoji { font-size: 24px; flex-shrink: 0; }
+
 /* Weekly quests + briefing streak (Home) */
 .quest-streak {
   display: inline-flex; align-items: center; gap: 4px;

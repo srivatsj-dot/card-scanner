@@ -21,6 +21,9 @@ import AdSlot from "./components/AdSlot";
 import ChatDrawer from "./components/ChatDrawer";
 import AuthScreen from "./components/AuthScreen";
 import OfferView from "./components/OfferView";
+import LoginModal from "./components/LoginModal";
+import Onboarding from "./components/Onboarding";
+import GuestGate from "./components/GuestGate";
 import { bumpStreak, dayISO, liveStreak, makeQuests, questProgress, weekOf } from "./quests";
 import type { Streak, QuestState, QuestCounters } from "./quests";
 import Logo from "./components/Logo";
@@ -97,6 +100,17 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const [questState, setQuestState] = useState<QuestState | null>(() => loadJSON<QuestState | null>(QUESTS_KEY, null));
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // New accounts get a 3-question setup (language, style, cards) once.
+  const ONBOARD_KEY = `card-scanner-onboard:${ns}`;
+  const [needsOnboarding, setNeedsOnboarding] = useState(
+    () => !isGuest && (() => { try { return localStorage.getItem(ONBOARD_KEY) === "1"; } catch { return false; } })()
+  );
+  function finishOnboarding(patch: Partial<Settings>) {
+    setSettings((s) => ({ ...s, ...patch }));
+    if (patch.language) setLanguage(patch.language);
+    try { localStorage.removeItem(ONBOARD_KEY); } catch { /* ignore */ }
+    setNeedsOnboarding(false);
+  }
   const [, setNameTick] = useState(0); // bump to re-render after a username change
   const earnedRef = useRef<Set<string>>(
     new Set(
@@ -673,17 +687,23 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           offersKey={`card-scanner-sent-offers:${ns}`}
         />
       )}
-      {view === "tradeup" && (
+      {view === "tradeup" && (isGuest ? (
+        <GuestGate feature="Plan a path of fair trades from cards you own toward a grail card." onLogin={onRequestLogin} />
+      ) : (
         <TradeUpView
           settings={aiSettings}
           saved={saved}
           onSaveLater={(target, result) => saveLater({ target, give: result.steps[0]?.giveUp || [], steps: result.steps })}
         />
-      )}
-      {view === "later" && (
+      ))}
+      {view === "later" && (isGuest ? (
+        <GuestGate feature="Save trades and cards to come back to later." onLogin={onRequestLogin} />
+      ) : (
         <LaterView later={later} onRemove={removeLater} onAddToBinder={laterToBinder} />
-      )}
-      {view === "binder" && (
+      ))}
+      {view === "binder" && (isGuest ? (
+        <GuestGate feature="Keep a binder of your cards that re-prices itself and tracks value over time." onLogin={onRequestLogin} />
+      ) : (
         <BinderView
           saved={saved}
           onRemove={(id) => setSaved((prev) => prev.filter((c) => c.id !== id))}
@@ -693,8 +713,10 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onConditionCheck={checkCondition}
           onSetPhoto={setCardPhoto}
         />
-      )}
-      {view === "wishlist" && (
+      ))}
+      {view === "wishlist" && (isGuest ? (
+        <GuestGate feature="Build a wishlist of cards you want, priced and tracked for you." onLogin={onRequestLogin} />
+      ) : (
         <WishlistView
           wishlist={wishlist}
           onAdd={addWish}
@@ -705,9 +727,17 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           refreshing={refreshing}
           adding={adding}
         />
-      )}
-      {view === "sets" && <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} onSetPct={reportSetPct} />}
-      {view === "awards" && <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} />}
+      ))}
+      {view === "sets" && (isGuest ? (
+        <GuestGate feature="Track set completion across your binder and earn badges." onLogin={onRequestLogin} />
+      ) : (
+        <SetsView saved={saved} settings={aiSettings} onWish={addWishMany} onSetPct={reportSetPct} />
+      ))}
+      {view === "awards" && (isGuest ? (
+        <GuestGate feature="Earn achievements as your collection grows." onLogin={onRequestLogin} />
+      ) : (
+        <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} />
+      ))}
       {view === "settings" && (
         <SettingsView
           settings={settings}
@@ -733,6 +763,8 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {chatOpen && (
         <ChatDrawer settings={aiSettings} cardContext={lastResult} onClose={() => setChatOpen(false)} />
       )}
+
+      {needsOnboarding && <Onboarding settings={settings} onDone={finishOnboarding} />}
 
       <div className="toasts">
         {toasts.map((t) => <div className="toast" key={t.id}>{t.msg}</div>)}
@@ -762,6 +794,14 @@ const OFFER_PATH_ID = /^\/offer\/([A-Za-z0-9_-]{6,})$/.exec(window.location.path
 export default function App() {
   const [user, setUser] = useState<string | null>(null);
   const [showAuth, setShowAuth] = useState(false);
+  // Entry welcome modal: shown once per browser session for guests.
+  const [showLoginModal, setShowLoginModal] = useState(() => {
+    try { return sessionStorage.getItem("card-scanner-welcomed") !== "1"; } catch { return true; }
+  });
+  const dismissWelcome = () => {
+    setShowLoginModal(false);
+    try { sessionStorage.setItem("card-scanner-welcomed", "1"); } catch { /* ignore */ }
+  };
   // Bumped whenever a cloud pull/merge changes localStorage, to remount MainApp
   // so it re-reads the freshly-synced collection from storage.
   const [syncTick, setSyncTick] = useState(0);
@@ -820,18 +860,26 @@ export default function App() {
   // key fully remounts MainApp on account switch OR after a sync changed
   // storage, so all per-user state re-initializes from namespaced storage.
   return (
-    <MainApp
-      key={`${user ?? "guest"}#${syncTick}`}
-      user={user}
-      onRequestLogin={() => setShowAuth(true)}
-      onLogout={() => {
-        logout();
-        setUser(null);
-      }}
-      onDeleteAccount={() => {
-        if (user) deleteAccount(user);
-        setUser(null);
-      }}
-    />
+    <>
+      <MainApp
+        key={`${user ?? "guest"}#${syncTick}`}
+        user={user}
+        onRequestLogin={() => { dismissWelcome(); setShowAuth(true); }}
+        onLogout={() => {
+          logout();
+          setUser(null);
+        }}
+        onDeleteAccount={() => {
+          if (user) deleteAccount(user);
+          setUser(null);
+        }}
+      />
+      {showLoginModal && !user && (
+        <LoginModal
+          onLogin={() => { dismissWelcome(); setShowAuth(true); }}
+          onGuest={dismissWelcome}
+        />
+      )}
+    </>
   );
 }
