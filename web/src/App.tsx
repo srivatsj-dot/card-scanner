@@ -139,7 +139,16 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   useEffect(() => {
     const week = weekOf(dayISO());
     if (!questState || questState.week !== week) {
-      const fresh = makeQuests(week, questCounters);
+      // Personalize from the collector's categories, style, wishlist, and sets.
+      const owned = Array.from(new Set(saved.map((s) => (s.result.sport || "").trim()).filter(Boolean)));
+      const cats = owned.length ? owned : (settings.sport ? [settings.sport] : settings.digestSports || []);
+      const fresh = makeQuests(week, questCounters, {
+        categories: cats.slice(0, 5),
+        collectorType: settings.collectorType,
+        hasWishlist: wishlist.length > 0,
+        inProgressSet: bestSetPct > 0 && bestSetPct < 0.95,
+        binderSize: saved.length,
+      });
       setQuestState(fresh);
       localStorage.setItem(QUESTS_KEY, JSON.stringify(fresh));
     }
