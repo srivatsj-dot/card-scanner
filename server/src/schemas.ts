@@ -13,6 +13,7 @@ export const scanSchema = {
       type: "BOOLEAN",
       description: "Whether a trading card was confidently identified in the image.",
     },
+    idConfidence: { ...NUM, description: "How sure you are of the IDENTIFICATION (player, set, year, number, parallel), on a 1-10 scale. 10 = certain (clear photo, corroborated by eBay/reverse-image matches); 1 = a wild guess. Base it on photo clarity AND whether the eBay image-search titles and reverse-image results AGREE with what you read. Lower it when signals conflict or the card is blurry/obscured." },
     player: { ...nullableStr, description: "Player or subject name." },
     sport: { ...nullableStr, description: "Category, e.g. Baseball, Basketball, Pokémon, Soccer, Cricket." },
     team: nullableStr,
@@ -130,6 +131,7 @@ export const scanSchema = {
   },
   required: [
     "identified",
+    "idConfidence",
     "player",
     "sport",
     "team",

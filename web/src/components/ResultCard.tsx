@@ -74,6 +74,21 @@ export default function ResultCard({
               )}
               {result.pokemon?.rarity && <span className="pill">{result.pokemon.rarity}</span>}
             </div>
+            {typeof result.idConfidence === "number" && (
+              <div style={{ marginTop: 10 }}>
+                <span
+                  className={`pill ${result.idConfidence >= 8 ? "green" : result.idConfidence >= 5 ? "blue" : "red"}`}
+                  title={tr("How sure the identification is, from 1 to 10, based on photo clarity and eBay/reverse-image matches.")}
+                >
+                  🎯 {tr("ID accuracy")} {Math.round(result.idConfidence)}/10
+                </span>
+                {result.idConfidence < 5 && (
+                  <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>
+                    {tr("Low — try a sharper, straight-on photo.")}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ textAlign: "center" }}>
             <div className="score-ring" style={{ ["--p" as any]: score }}>

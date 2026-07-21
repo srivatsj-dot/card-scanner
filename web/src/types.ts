@@ -89,6 +89,7 @@ export const defaultSettings: Settings = {
 
 export interface ScanResult {
   identified: boolean;
+  idConfidence?: number; // 1-10, how sure the identification is
   player: string | null;
   sport: string | null;
   team: string | null;
