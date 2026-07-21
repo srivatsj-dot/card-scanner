@@ -934,7 +934,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "7";
+const DIGEST_GEN_VERSION = "8";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
