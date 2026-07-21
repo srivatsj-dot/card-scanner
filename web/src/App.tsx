@@ -316,6 +316,18 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     }
   }
 
+  // Toggle a card flag: favorite (protect from trade suggestions) or notNeeded
+  // (surface as trade bait). Mutually exclusive — a card can't be both.
+  function toggleFlag(id: string, flag: "favorite" | "notNeeded") {
+    setSaved((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        const on = !c[flag];
+        return { ...c, favorite: false, notNeeded: false, [flag]: on };
+      })
+    );
+  }
+
   // Attach (or replace) a photo on a saved binder card.
   async function setCardPhoto(id: string, dataUrl: string) {
     const thumb = await makeThumbnail(dataUrl);
@@ -721,6 +733,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           refreshing={refreshing}
           onConditionCheck={checkCondition}
           onSetPhoto={setCardPhoto}
+          onToggleFlag={toggleFlag}
         />
       ))}
       {view === "wishlist" && (isGuest ? (

@@ -101,15 +101,15 @@ export function buildConstraints(settings: Settings): string {
   }
   if (settings.collectorType === "money") {
     lines.push(
-      `COLLECTOR TYPE: This is a MONEY collector — they care about dollar value, resale, and price appreciation more than fandom. ` +
-        `Prioritize cards that hold or grow in value: liquid, easy-to-sell names, proven blue-chips, and good value-for-money. ` +
-        `When recommending trades or judging fairness, optimize for financial upside, and frame insights around investment value.`
+      `COLLECTOR TYPE (WEIGH THIS HEAVILY — it should visibly shape every recommendation): This is a MONEY collector. They care about dollar value, resale, and price appreciation far more than fandom. ` +
+        `Prioritize cards that hold or grow in value: liquid, easy-to-sell names, proven blue-chips, graded slabs, and good value-for-money. ` +
+        `Every trade idea and insight MUST optimize for financial upside and be framed around investment value — if a suggestion isn't a smart money move, don't make it.`
     );
   } else if (settings.collectorType === "talent") {
     lines.push(
-      `COLLECTOR TYPE: This is a TALENT collector — they care about how good the player actually is (skill, performance, upside) more than the card's price tag. ` +
+      `COLLECTOR TYPE (WEIGH THIS HEAVILY — it should visibly shape every recommendation): This is a TALENT collector. They care about how good the player actually is (skill, performance, upside) far more than the card's price tag. ` +
         `Favor genuinely talented players, rising stars, and high-ceiling prospects even when their cards are inexpensive, and steer away from overpriced cards of mediocre players. ` +
-        `When recommending trades, optimize for player quality and on-field/on-court talent over pure resale value, and frame insights around the player rather than the money.`
+        `Every trade idea MUST optimize for player quality and on-field/on-court talent over pure resale value, framed around the player rather than the money.`
     );
   }
   const wl = (settings.wishlist || []).map((w) => w.trim()).filter(Boolean);
@@ -122,7 +122,15 @@ export function buildConstraints(settings: Settings): string {
     );
   }
   if (settings.customInstructions && settings.customInstructions.trim()) {
-    lines.push(`Collector's custom instructions (follow these): ${settings.customInstructions.trim()}`);
+    lines.push(
+      `COLLECTOR'S OWN INSTRUCTIONS (TREAT AS TOP PRIORITY — these are the collector's explicit words and OVERRIDE your defaults wherever they apply; obey them in every recommendation, value note, and trade idea, short of endorsing an unfair trade): ${settings.customInstructions.trim()}`
+    );
+  }
+  // Inter-category is allowed by default; only same-kind mode restricts it.
+  if (!settings.sameKindOnly) {
+    lines.push(
+      `CROSS-CATEGORY TRADES ARE ALLOWED and encouraged where they serve the collector: a great trade can swap across categories (e.g. a baseball card for a Pokémon card) when the value is fair and it fits their interests, wishlist, and collector type. When you give trade suggestions, include at least one strong CROSS-CATEGORY idea alongside same-category ones (unless their filters/blocked categories rule it out).`
+    );
   }
 
   if (lines.length === 0) return "";
@@ -177,7 +185,7 @@ export function askSystemPrompt(settings: Settings): string {
 export function offerSystemPrompt(settings: Settings): string {
   return (
     APPRAISER_ROLE +
-    `\n\nThe collector WANTS to acquire the card(s) listed (the receive side) and is asking WHAT THEY SHOULD GIVE to fairly get it. Estimate the target's value, then suggest 2-4 DISTINCT options of cards to offer that add up to a fair package — each option should be roughly fair (a small premium to land the card is fine, never wildly overpay). STRONGLY prefer cards the collector already OWNS (their binder, listed) so the trade is actionable; you may add a realistic "plus a little cash" note where it helps. For each option, put the card(s) to give in cardSuggestion, the rough total give value in estimatedValue, why the other side accepts in reason, and how likely they accept in likelihood. Respect the collector's filters.` +
+    `\n\nThe collector WANTS to acquire the card(s) listed (the receive side) and is asking WHAT THEY SHOULD GIVE to fairly get it. Estimate the target's value, then suggest 2-4 DISTINCT options of cards to offer that add up to a fair package — each option should be roughly fair (a small premium to land the card is fine, never wildly overpay). STRONGLY prefer cards the collector already OWNS (their binder, listed) so the trade is actionable; you may add a realistic "plus a little cash" note where it helps. Cards tagged "[marked for trade]" are ones the collector especially wants to move — prefer offering those. Do NOT suggest giving a card that isn't in their listed binder. For each option, put the card(s) to give in cardSuggestion, the rough total give value in estimatedValue, why the other side accepts in reason, and how likely they accept in likelihood. Respect the collector's filters.` +
     buildConstraints(settings)
   );
 }

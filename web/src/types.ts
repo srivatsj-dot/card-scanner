@@ -192,6 +192,8 @@ export interface SavedCard {
   previousMid?: number | null; // prior mid value, to show ▲/▼ change
   history?: { t: number; mid: number }[]; // value points over time, for the chart
   conditionLog?: { t: number; grade: string; flaws: string[] }[]; // condition over time
+  favorite?: boolean; // protected: keep out of trade suggestions
+  notNeeded?: boolean; // trade bait: offer this up first
 }
 
 /** A card on the wishlist (wanted, with an estimated price). */

@@ -180,60 +180,59 @@ export default function ResultCard({
         </div>
       )}
 
-      {result.recommendedTrades.length > 0 && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <h3 style={{ margin: 0 }}>{tr("Good trades to chase")}</h3>
-            {onWishAll && (
-              <button
-                className="btn ghost small"
-                onClick={() => onWishAll(result.recommendedTrades.map((t) => `${t.player} ${t.cardSuggestion}`))}
-              >
-                ♡ {tr("Add all to wishlist")}
-              </button>
-            )}
-          </div>
-          {result.recommendedTrades.map((t, i) => (
-            <div className="trade-rec" key={i}>
-              <div className="name">{t.player}</div>
-              <div className="sub">
-                {t.cardSuggestion}
-                {t.comparableValue ? ` · ${t.comparableValue}` : ""}
-              </div>
-              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{t.reason}</div>
+      {(() => {
+        // One combined "Trade ideas" section. Upgrades to chase and fair same-
+        // value asks were two near-identical lists; merge them, tag each by kind,
+        // and drop duplicate players so there's one clear list.
+        const ideas = [
+          ...result.recommendedTrades.map((t) => ({
+            player: t.player, card: t.cardSuggestion, value: t.comparableValue,
+            reason: t.reason, kind: "upgrade" as const,
+          })),
+          ...(result.similarValueTargets || []).map((t) => ({
+            player: t.player, card: t.cardSuggestion, value: t.estimatedValue,
+            reason: t.reason, kind: "swap" as const,
+          })),
+        ];
+        const seen = new Set<string>();
+        const merged = ideas.filter((x) => {
+          const k = `${x.player}|${x.card}`.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        if (merged.length === 0) return null;
+        return (
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <h3 style={{ margin: 0 }}>{tr("Trade ideas")}</h3>
+              {onWishAll && (
+                <button className="btn ghost small" onClick={() => onWishAll(merged.map((x) => `${x.player} ${x.card}`))}>
+                  ♡ {tr("Add all to wishlist")}
+                </button>
+              )}
             </div>
-          ))}
-        </div>
-      )}
-
-      {result.similarValueTargets?.length > 0 && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <h3 style={{ margin: 0 }}>{tr("Similar value — what to ask for")}</h3>
-            {onWishAll && (
-              <button
-                className="btn ghost small"
-                onClick={() => onWishAll(result.similarValueTargets.map((t) => `${t.player} ${t.cardSuggestion}`))}
-              >
-                ♡ {tr("Add all to wishlist")}
-              </button>
-            )}
-          </div>
-          <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
-            {tr("If you traded this card away, these are fair same-value asks the other side would likely accept.")}
-          </p>
-          {result.similarValueTargets.map((t, i) => (
-            <div className="trade-rec" key={i}>
-              <div className="name">{t.player}</div>
-              <div className="sub">
-                {t.cardSuggestion}
-                {t.estimatedValue ? ` · ${t.estimatedValue}` : ""}
+            <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
+              {tr("Upgrades worth chasing, and fair same-value swaps you could ask for if you traded this card.")}
+            </p>
+            {merged.map((x, i) => (
+              <div className="trade-rec" key={i}>
+                <div className="name">
+                  {x.player}{" "}
+                  <span className={`pill ${x.kind === "upgrade" ? "green" : "blue"}`} style={{ fontSize: 11 }}>
+                    {x.kind === "upgrade" ? `⬆ ${tr("Upgrade")}` : `⇄ ${tr("Fair swap")}`}
+                  </span>
+                </div>
+                <div className="sub">
+                  {x.card}
+                  {x.value ? ` · ${x.value}` : ""}
+                </div>
+                <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{x.reason}</div>
               </div>
-              <div style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>{t.reason}</div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })()}
 
       {result.warnings.length > 0 && (
         <div className="card">

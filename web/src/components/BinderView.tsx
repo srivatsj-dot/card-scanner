@@ -14,6 +14,7 @@ interface Props {
   refreshing: boolean;
   onConditionCheck: (id: string, dataUrl: string) => Promise<void>;
   onSetPhoto: (id: string, dataUrl: string) => void;
+  onToggleFlag: (id: string, flag: "favorite" | "notNeeded") => void;
 }
 
 /** Condition history, newest first, flagging flaws new since the prior check. */
@@ -60,7 +61,7 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag }: Props) {
   const t = useT();
   const [openId, setOpenId] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>("recent");
@@ -180,6 +181,8 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                 <div style={{ marginTop: 4 }}>
                   {r.sport && <span className="pill">{r.sport}</span>}
                   {r.parallel && <span className="pill gold">{r.parallel}</span>}
+                  {s.favorite && <span className="pill gold">⭐ {t("Favorite")}</span>}
+                  {s.notNeeded && <span className="pill blue">🔁 {t("For trade")}</span>}
                   <ChangeBadge card={s} />
                 </div>
               </div>
@@ -199,6 +202,20 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                       <button className="btn ghost small" onClick={() => uploadPhoto(s.id)} title={t("Upload")}>⬆</button>
                     </>
                   )}
+                  <button
+                    className={`btn ghost small ${s.favorite ? "flag-on" : ""}`}
+                    onClick={() => onToggleFlag(s.id, "favorite")}
+                    title={t("Favorite — protect from trade suggestions")}
+                  >
+                    {s.favorite ? "⭐" : "☆"}
+                  </button>
+                  <button
+                    className={`btn ghost small ${s.notNeeded ? "flag-on" : ""}`}
+                    onClick={() => onToggleFlag(s.id, "notNeeded")}
+                    title={t("Mark not needed — offer this up in trades")}
+                  >
+                    🔁
+                  </button>
                   <button className="btn ghost small" onClick={() => setCamFor(s.id)} disabled={checking === s.id} title={t("Re-scan to log condition")}>
                     {checking === s.id ? <><span className="spinner" />{t("Checking…")}</> : `🩺 ${t("Condition")}`}
                   </button>

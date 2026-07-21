@@ -331,7 +331,11 @@ export default function TradeView({ settings, saved, wishlist, onTrade, onWishAl
     setLoading("offer");
     reset();
     try {
-      const owned = saved.map((s) => describeCard(s.result));
+      // Never offer a favorite; surface "not needed" cards as trade bait first.
+      const owned = saved
+        .filter((s) => !s.favorite)
+        .sort((a, b) => (b.notNeeded ? 1 : 0) - (a.notNeeded ? 1 : 0))
+        .map((s) => describeCard(s.result) + (s.notNeeded ? " [marked for trade]" : ""));
       setOffer(await suggestOffer(theirSide, owned, settings));
       onTrade();
     } catch (e) {
