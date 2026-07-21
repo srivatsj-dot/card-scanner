@@ -156,17 +156,41 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questState?.week]);
 
-  // Surface new incoming trade offers on the briefing: fetch pending offers when
-  // Today opens, and pop them up until the user has looked at the marketplace.
-  const [pendingOffers, setPendingOffers] = useState<number>(0);
+  // Trade-offer notifications, split by direction:
+  //  • INCOMING pending offers → a badge in the trades section (Marketplace nav).
+  //  • Responses to YOUR sent offers (accepted/declined) → the morning briefing,
+  //    shown once until acknowledged.
+  const SEEN_RESP_KEY = `card-scanner-seen-offer-responses:${ns}`;
+  const [incomingPending, setIncomingPending] = useState(0);
+  const [answeredOut, setAnsweredOut] = useState<{ id: string; who: string; status: string }[]>([]);
   useEffect(() => {
-    if (view !== "today" || isGuest || !cloudActive()) return;
+    if (isGuest || !cloudActive()) return;
     let cancelled = false;
     marketOffers()
-      .then((o) => { if (!cancelled) setPendingOffers(o.incoming.filter((x) => x.status === "pending").length); })
+      .then((o) => {
+        if (cancelled) return;
+        setIncomingPending(o.incoming.filter((x) => x.status === "pending").length);
+        let seen: string[] = [];
+        try { seen = JSON.parse(localStorage.getItem(SEEN_RESP_KEY) || "[]"); } catch { /* ignore */ }
+        const seenSet = new Set(seen);
+        setAnsweredOut(
+          o.outgoing
+            .filter((x) => (x.status === "accepted" || x.status === "declined") && !seenSet.has(x.id))
+            .map((x) => ({ id: x.id, who: x.toDisplay, status: x.status }))
+        );
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [view, isGuest]);
+  function ackResponses() {
+    setAnsweredOut((cur) => {
+      try {
+        const prev: string[] = JSON.parse(localStorage.getItem(SEEN_RESP_KEY) || "[]");
+        localStorage.setItem(SEEN_RESP_KEY, JSON.stringify([...new Set([...prev, ...cur.map((x) => x.id)])]));
+      } catch { /* ignore */ }
+      return [];
+    });
+  }
 
   // Opening the morning briefing advances the daily streak (once per day) and
   // counts toward this week's briefing quest.
@@ -642,7 +666,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           <div className="side-group">{t("Trade")}</div>
           {navBtn("trade", t("Trade"))}
           {navBtn("tradeup", <>📈 {t("Trade-Up")}</>)}
-          {navBtn("market", <>🛒 {t("Marketplace")}</>)}
+          {navBtn("market", <>🛒 {t("Marketplace")}{incomingPending > 0 ? ` 🔴 ${incomingPending}` : ""}</>)}
           {navBtn("later", <>🔖 {t("For later")}</>)}
           <div className="side-group">{t("Collection")}</div>
           {navBtn("binder", <>{t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}</>)}
@@ -700,10 +724,24 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       )}
       {view === "today" && (
         <>
-          {pendingOffers > 0 && (
-            <div className="card offer-alert" onClick={() => { setView("market"); setPendingOffers(0); }}>
-              🔔 {t("You have")} {pendingOffers} {t(pendingOffers === 1 ? "new trade offer" : "new trade offers")} —{" "}
-              <span className="link-inline">{t("review in the Marketplace")}</span>
+          {answeredOut.length > 0 && (
+            <div className="card offer-alert" onClick={() => { setView("market"); ackResponses(); }}>
+              {answeredOut.map((r) => (
+                <div key={r.id}>
+                  {r.status === "accepted" ? "🤝" : "✕"} {r.who}{" "}
+                  {r.status === "accepted"
+                    ? t("accepted your trade — the cards have been swapped!")
+                    : t("declined your trade.")}
+                </div>
+              ))}
+              <span className="link-inline">{t("Open the Marketplace")}</span>
+              <button
+                className="btn ghost small"
+                style={{ marginLeft: 8 }}
+                onClick={(e) => { e.stopPropagation(); ackResponses(); }}
+              >
+                {t("Dismiss")}
+              </button>
             </div>
           )}
           <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
