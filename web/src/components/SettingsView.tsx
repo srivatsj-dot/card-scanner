@@ -253,6 +253,29 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
         </span>
       </label>
 
+      <label className="field" style={{ marginTop: 8 }}>
+        <span>{t("Who can send me trade requests")}</span>
+        <select
+          value={settings.tradeRequestsFrom || "anyone"}
+          onChange={(e) => set("tradeRequestsFrom", e.target.value as Settings["tradeRequestsFrom"])}
+        >
+          <option value="anyone">{t("Anyone")}</option>
+          <option value="friends">{t("Friends only")}</option>
+          <option value="list">{t("Only specific usernames")}</option>
+        </select>
+      </label>
+      {settings.tradeRequestsFrom === "list" && (
+        <label className="field">
+          <span>{t("Allowed usernames (comma-separated)")}</span>
+          <input
+            type="text"
+            value={(settings.tradeAllowList || []).join(", ")}
+            placeholder="alice, bob, charlie"
+            onChange={(e) => set("tradeAllowList", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+          />
+        </label>
+      )}
+
       <h3 style={{ marginTop: 18 }}>{t("Block card types")}</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
         {t("Never recommend cards from the categories you check.")}

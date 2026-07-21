@@ -18,6 +18,8 @@ export interface Settings {
   morningUpdate: boolean; // show the daily card digest
   digestSports: string[]; // sports included in the morning update
   emailOffers?: boolean; // email me when a trade offer arrives / is answered
+  tradeRequestsFrom?: "anyone" | "friends" | "list"; // who may send me offers
+  tradeAllowList?: string[]; // usernames allowed when tradeRequestsFrom = "list"
 }
 
 /** A card as shown in the marketplace (someone else's binder, or your picks). */
@@ -101,6 +103,8 @@ export const defaultSettings: Settings = {
   morningUpdate: true,
   digestSports: [...BLOCKABLE_CATEGORIES],
   emailOffers: false,
+  tradeRequestsFrom: "anyone",
+  tradeAllowList: [],
 };
 
 export interface ScanResult {

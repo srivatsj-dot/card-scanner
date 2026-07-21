@@ -165,6 +165,29 @@ export function marketRespond(id: string, action: "accept" | "decline" | "cancel
   return call<{ offer: MarketOfferDTO }>(`/api/market/offer/${encodeURIComponent(id)}/respond`, { action }, true);
 }
 
+export interface FriendUserDTO { username: string; display: string }
+export function friendsList() {
+  return authGet<{ friends: FriendUserDTO[]; incoming: FriendUserDTO[]; outgoing: FriendUserDTO[] }>("/api/friends");
+}
+export function friendRequest(to: string) { return call<{ display: string }>("/api/friends/request", { to }, true); }
+export function friendRespond(other: string, accept: boolean) { return call("/api/friends/respond", { other, accept }, true); }
+export function friendRemove(other: string) { return call("/api/friends/remove", { other }, true); }
+
+export interface PeopleHit { username: string; display: string; matches: MarketCardDTO[] }
+export function peopleSearch(q: string) {
+  return authGet<{ results: PeopleHit[] }>(`/api/market/people?q=${encodeURIComponent(q)}`);
+}
+
+export interface ChatMsgDTO { id: number; from: string; mine: boolean; body: string; at: number }
+export interface ThreadDTO { username: string; display: string; last: string; at: number }
+export function chatThreads() { return authGet<{ threads: ThreadDTO[] }>("/api/chat/threads"); }
+export function chatThread(username: string, after = 0) {
+  return authGet<{ messages: ChatMsgDTO[] }>(`/api/chat/${encodeURIComponent(username)}?after=${after}`);
+}
+export function chatSend(username: string, body: string) {
+  return call(`/api/chat/${encodeURIComponent(username)}`, { body }, true);
+}
+
 export async function cloudForgot(email: string) { await call("/api/cloud/forgot", { email }); }
 export async function cloudReset(email: string, code: string, password: string) {
   await call("/api/cloud/reset", { email, code, password });

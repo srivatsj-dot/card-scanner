@@ -69,6 +69,24 @@ export async function initCloud(): Promise<void> {
     data JSONB NOT NULL,
     updated_at BIGINT NOT NULL
   )`);
+  // Friend graph: one row per directed edge. status 'pending' (a requested b) or
+  // 'accepted' (mutual — both directions get an accepted row).
+  await p.query(`CREATE TABLE IF NOT EXISTS friend_edges (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    friend_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (user_id, friend_id)
+  )`);
+  // Direct messages between two accounts (marketplace chat).
+  await p.query(`CREATE TABLE IF NOT EXISTS messages (
+    id BIGSERIAL PRIMARY KEY,
+    from_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at BIGINT NOT NULL
+  )`);
+  await p.query(`CREATE INDEX IF NOT EXISTS messages_pair ON messages (from_id, to_id, id)`);
 }
 
 export async function saveOffer(id: string, data: unknown): Promise<void> {
@@ -93,7 +111,7 @@ interface MarketUser { id: number; username: string; display: string; email: str
 // A card as stored in a binder blob (we only touch id + carry the rest through).
 interface BinderCard { id?: unknown; result?: { player?: string; year?: string; manufacturer?: string; setName?: string; sport?: string; estimatedValue?: { mid?: number; currency?: string } }; thumbnail?: string; [k: string]: unknown }
 
-async function findUserByName(name: string): Promise<MarketUser | null> {
+export async function findUserByName(name: string): Promise<MarketUser | null> {
   const key = (name || "").trim().toLowerCase();
   if (!key) return null;
   // Match the stable username OR the shown display name (case-insensitive).
@@ -189,6 +207,9 @@ export async function createMarketOffer(
   if (!to) throw new CloudError(404, "No collector found with that username.");
   if (to.id === fromUserId) throw new CloudError(400, "You can't trade with yourself.");
   if (!give.length || !want.length) throw new CloudError(400, "Pick at least one card on each side.");
+  if (!(await canSendOfferTo(fromUserId, to.id))) {
+    throw new CloudError(403, `${to.display} only accepts trade requests from certain collectors.`);
+  }
   const id = newToken().slice(0, 16);
   const offer: MarketOffer = {
     id,
@@ -270,6 +291,163 @@ export async function respondMarketOffer(
   const from = (await db().query(`SELECT email FROM users WHERE id=$1`, [fromId])).rows[0];
   const notify = (await settingOf(fromId, "emailOffers")) === true;
   return { offer, fromEmail: from?.email ?? null, notify };
+}
+
+// --- Friends ---------------------------------------------------------------
+export interface FriendUser { username: string; display: string }
+
+export async function areFriends(a: number, b: number): Promise<boolean> {
+  const r = await db().query(`SELECT 1 FROM friend_edges WHERE user_id=$1 AND friend_id=$2 AND status='accepted'`, [a, b]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+/** A → requests → B. */
+export async function sendFriendRequest(fromId: number, toName: string): Promise<{ display: string }> {
+  const to = await findUserByName(toName);
+  if (!to) throw new CloudError(404, "No collector found with that username.");
+  if (to.id === fromId) throw new CloudError(400, "You can't friend yourself.");
+  const existing = (await db().query(`SELECT status FROM friend_edges WHERE user_id=$1 AND friend_id=$2`, [fromId, to.id])).rows[0];
+  if (existing?.status === "accepted") throw new CloudError(409, "You're already friends.");
+  const now = Date.now();
+  // If THEY already requested US, accept it instead of stacking a request.
+  const reverse = (await db().query(`SELECT status FROM friend_edges WHERE user_id=$1 AND friend_id=$2`, [to.id, fromId])).rows[0];
+  if (reverse?.status === "pending") {
+    await respondFriend(fromId, to.id, true);
+    return { display: to.display };
+  }
+  await db().query(
+    `INSERT INTO friend_edges (user_id, friend_id, status, created_at) VALUES ($1,$2,'pending',$3)
+     ON CONFLICT (user_id, friend_id) DO NOTHING`,
+    [fromId, to.id, now]
+  );
+  return { display: to.display };
+}
+
+/** `userId` responds to a pending request FROM `otherId`. */
+export async function respondFriend(userId: number, otherId: number, accept: boolean): Promise<void> {
+  const pending = (await db().query(`SELECT 1 FROM friend_edges WHERE user_id=$1 AND friend_id=$2 AND status='pending'`, [otherId, userId])).rows[0];
+  if (!pending) throw new CloudError(404, "No pending request from that user.");
+  if (!accept) {
+    await db().query(`DELETE FROM friend_edges WHERE user_id=$1 AND friend_id=$2`, [otherId, userId]);
+    return;
+  }
+  const now = Date.now();
+  await db().query(`UPDATE friend_edges SET status='accepted' WHERE user_id=$1 AND friend_id=$2`, [otherId, userId]);
+  await db().query(
+    `INSERT INTO friend_edges (user_id, friend_id, status, created_at) VALUES ($1,$2,'accepted',$3)
+     ON CONFLICT (user_id, friend_id) DO UPDATE SET status='accepted'`,
+    [userId, otherId, now]
+  );
+}
+
+export async function removeFriend(userId: number, otherName: string): Promise<void> {
+  const other = await findUserByName(otherName);
+  if (!other) return;
+  await db().query(`DELETE FROM friend_edges WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)`, [userId, other.id]);
+}
+
+async function usersByIds(ids: number[]): Promise<Record<number, FriendUser>> {
+  if (!ids.length) return {};
+  const r = await db().query(`SELECT id, username, display FROM users WHERE id = ANY($1)`, [ids]);
+  const m: Record<number, FriendUser> = {};
+  for (const u of r.rows) m[u.id] = { username: u.username, display: u.display };
+  return m;
+}
+
+export async function listFriends(userId: number): Promise<{ friends: FriendUser[]; incoming: FriendUser[]; outgoing: FriendUser[] }> {
+  const rows = (await db().query(
+    `SELECT user_id, friend_id, status FROM friend_edges WHERE user_id=$1 OR friend_id=$1`, [userId]
+  )).rows;
+  const friendIds: number[] = [], incomingIds: number[] = [], outgoingIds: number[] = [];
+  for (const e of rows) {
+    if (e.status === "accepted" && e.user_id === userId) friendIds.push(e.friend_id);
+    else if (e.status === "pending" && e.friend_id === userId) incomingIds.push(e.user_id);
+    else if (e.status === "pending" && e.user_id === userId) outgoingIds.push(e.friend_id);
+  }
+  const info = await usersByIds([...friendIds, ...incomingIds, ...outgoingIds]);
+  const map = (ids: number[]) => ids.map((i) => info[i]).filter(Boolean);
+  return { friends: map(friendIds), incoming: map(incomingIds), outgoing: map(outgoingIds) };
+}
+
+// --- Trade-request privacy: may `fromId` send an offer to `toId`? -----------
+export async function canSendOfferTo(fromId: number, toId: number): Promise<boolean> {
+  const mode = (await settingOf(toId, "tradeRequestsFrom")) || "anyone";
+  if (mode === "anyone") return true;
+  if (mode === "friends") return areFriends(toId, fromId);
+  if (mode === "list") {
+    const allow = (await settingOf(toId, "tradeAllowList")) as unknown;
+    const from = (await db().query(`SELECT username, display FROM users WHERE id=$1`, [fromId])).rows[0];
+    const names = (Array.isArray(allow) ? allow : []).map((x) => String(x).trim().toLowerCase());
+    return names.includes((from?.username || "").toLowerCase()) || names.includes((from?.display || "").toLowerCase());
+  }
+  return true;
+}
+
+// --- People search: who owns a card matching the query? --------------------
+export async function searchPeopleByCard(query: string, limit = 20): Promise<{ username: string; display: string; matches: MarketCard[] }[]> {
+  if (!hasCloud) return [];
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const terms = q.split(/[^a-z0-9]+/).filter((t) => t.length > 1);
+  // Scan binders (bounded) and match card labels against the query terms.
+  const rows = (await db().query(
+    `SELECT u.username, u.display, d.blob->>'binder' AS binder
+       FROM user_data d JOIN users u ON u.id = d.user_id
+      WHERE d.blob ? 'binder' LIMIT 500`
+  )).rows;
+  const out: { username: string; display: string; matches: MarketCard[] }[] = [];
+  for (const row of rows) {
+    let cards: BinderCard[] = [];
+    try { const a = JSON.parse(row.binder); if (Array.isArray(a)) cards = a; } catch { /* skip */ }
+    const matches = cards
+      .filter((c) => {
+        const label = cardLabel(c).toLowerCase();
+        return terms.every((t) => label.includes(t));
+      })
+      .map(toMarketCard);
+    if (matches.length) out.push({ username: row.username, display: row.display, matches });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// --- Direct messages (marketplace chat) ------------------------------------
+export interface ChatMsg { id: number; from: string; mine: boolean; body: string; at: number }
+
+export async function sendMessage(fromId: number, toName: string, body: string): Promise<void> {
+  const text = (body || "").trim().slice(0, 2000);
+  if (!text) throw new CloudError(400, "Message is empty.");
+  const to = await findUserByName(toName);
+  if (!to) throw new CloudError(404, "No collector found with that username.");
+  if (to.id === fromId) throw new CloudError(400, "You can't message yourself.");
+  await db().query(`INSERT INTO messages (from_id, to_id, body, created_at) VALUES ($1,$2,$3,$4)`, [fromId, to.id, text, Date.now()]);
+}
+
+export async function loadThread(userId: number, otherName: string, afterId = 0): Promise<ChatMsg[]> {
+  const other = await findUserByName(otherName);
+  if (!other) return [];
+  const r = await db().query(
+    `SELECT id, from_id, body, created_at FROM messages
+      WHERE ((from_id=$1 AND to_id=$2) OR (from_id=$2 AND to_id=$1)) AND id > $3
+      ORDER BY id ASC LIMIT 200`,
+    [userId, other.id, afterId]
+  );
+  return r.rows.map((m) => ({ id: Number(m.id), from: other.display, mine: m.from_id === userId, body: m.body, at: Number(m.created_at) }));
+}
+
+/** Distinct people the user has a conversation with, most-recent first. */
+export async function listThreads(userId: number): Promise<{ username: string; display: string; last: string; at: number }[]> {
+  const r = await db().query(
+    `SELECT other, display, username, body, created_at FROM (
+       SELECT DISTINCT ON (other) other, m.body, m.created_at
+       FROM (
+         SELECT CASE WHEN from_id=$1 THEN to_id ELSE from_id END AS other, body, created_at
+         FROM messages WHERE from_id=$1 OR to_id=$1
+       ) m ORDER BY other, created_at DESC
+     ) x JOIN users u ON u.id = x.other ORDER BY created_at DESC LIMIT 50`,
+    [userId]
+  );
+  return r.rows.map((t) => ({ username: t.username, display: t.display, last: t.body, at: Number(t.created_at) }));
 }
 
 export async function saveDigest(key: string, data: unknown): Promise<void> {

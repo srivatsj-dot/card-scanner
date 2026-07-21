@@ -1023,6 +1023,25 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .ok-box { background: rgba(58,210,159,0.12); border: 1px solid var(--good, #3ad29f); color: var(--text); padding: 10px 12px; border-radius: var(--radius); }
 .offer-alert { cursor: pointer; border-color: var(--accent); font-weight: 600; }
 .offer-alert:hover { background: var(--panel-2); }
+.market-tabs { flex-wrap: wrap; }
+
+/* Inter-account chat */
+.chat-layout { display: grid; grid-template-columns: minmax(160px, 240px) 1fr; gap: 12px; align-items: start; }
+@media (max-width: 640px) { .chat-layout { grid-template-columns: 1fr; } }
+.chat-threads { max-height: 60vh; overflow: auto; }
+.thread-row {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 6px;
+  border-radius: var(--radius); background: var(--panel-2); border: 1px solid var(--line); color: var(--text); cursor: pointer;
+}
+.thread-row.sel { border-color: var(--accent); }
+.chat-window { display: flex; flex-direction: column; min-height: 320px; }
+.chat-messages { flex: 1; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 52vh; padding: 4px 0; }
+.chat-bubble {
+  max-width: 78%; padding: 8px 12px; border-radius: 14px; font-size: 14px;
+  font-family: ui-sans-serif, system-ui, sans-serif; word-break: break-word;
+}
+.chat-bubble.mine { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.chat-bubble.theirs { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .link-inline {
   background: none; border: none; padding: 0; cursor: pointer;
   color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline;

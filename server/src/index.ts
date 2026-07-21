@@ -1784,6 +1784,90 @@ app.post("/api/market/offer/:id/respond", async (req: Request, res: Response) =>
   } catch (err) { cloudFail(res, err); }
 });
 
+// People search: who owns a card matching the query.
+app.get("/api/market/people", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    if (!(await marketUser(req, res))) return;
+    res.json({ results: await cloud.searchPeopleByCard(String(req.query.q || "")) });
+  } catch (err) { cloudFail(res, err); }
+});
+
+// --- Friends ---------------------------------------------------------------
+app.get("/api/friends", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    res.json(await cloud.listFriends(userId));
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.post("/api/friends/request", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const { to } = req.body as { to?: string };
+    res.json(await cloud.sendFriendRequest(userId, String(to || "")));
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.post("/api/friends/respond", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const { other, accept } = req.body as { other?: string; accept?: boolean };
+    const u = await cloud.findUserByName(String(other || ""));
+    if (!u) { res.status(404).json({ error: "No such user." }); return; }
+    await cloud.respondFriend(userId, u.id, accept !== false);
+    res.json({ ok: true });
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.post("/api/friends/remove", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const { other } = req.body as { other?: string };
+    await cloud.removeFriend(userId, String(other || ""));
+    res.json({ ok: true });
+  } catch (err) { cloudFail(res, err); }
+});
+
+// --- Direct messages (marketplace chat) ------------------------------------
+app.get("/api/chat/threads", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    res.json({ threads: await cloud.listThreads(userId) });
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.get("/api/chat/:username", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const after = Number(req.query.after || 0) || 0;
+    res.json({ messages: await cloud.loadThread(userId, String(req.params.username || ""), after) });
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.post("/api/chat/:username", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const { body } = req.body as { body?: string };
+    await cloud.sendMessage(userId, String(req.params.username || ""), String(body || ""));
+    res.json({ ok: true });
+  } catch (err) { cloudFail(res, err); }
+});
+
 app.delete("/api/cloud/account", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   try {
