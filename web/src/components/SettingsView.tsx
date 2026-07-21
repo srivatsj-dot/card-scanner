@@ -240,6 +240,19 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
         {t("Only suggest cards of the same kind as the card (e.g. baseball → baseball)")}
       </label>
 
+      <h3 style={{ marginTop: 18 }}>🛒 {t("Trade marketplace")}</h3>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={!!settings.emailOffers}
+          onChange={(e) => set("emailOffers", e.target.checked)}
+        />
+        {t("Email me when a trade offer arrives or is answered")}
+        <span className="muted" style={{ fontSize: 12 }}>
+          &nbsp;— {t("needs an email on your account")}
+        </span>
+      </label>
+
       <h3 style={{ marginTop: 18 }}>{t("Block card types")}</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
         {t("Never recommend cards from the categories you check.")}

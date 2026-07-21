@@ -140,6 +140,31 @@ export async function cloudDeleteAccount() {
   localStorage.removeItem(TUSER_KEY);
   localStorage.removeItem(VERSION_KEY);
 }
+// --- Trade marketplace (all authed with the cloud bearer token) ------------
+async function authGet<T>(path: string): Promise<T> {
+  const res = await fetch(path, { headers: { Authorization: `Bearer ${cloudToken()}` } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+  return data as T;
+}
+export interface MarketCardDTO { id: string; label: string; sport: string; value: number; currency: string; thumb: string }
+export interface MarketOfferDTO {
+  id: string; fromUser: string; fromDisplay: string; toUser: string; toDisplay: string;
+  give: unknown[]; want: unknown[]; status: string; createdAt: number; respondedAt: number | null;
+}
+export function marketLookup(username: string) {
+  return authGet<{ username: string; display: string; cards: MarketCardDTO[] }>(`/api/market/binder/${encodeURIComponent(username)}`);
+}
+export function marketOffers() {
+  return authGet<{ incoming: MarketOfferDTO[]; outgoing: MarketOfferDTO[] }>(`/api/market/offers`);
+}
+export function marketSendOffer(to: string, give: unknown[], want: unknown[]) {
+  return call<{ id: string }>("/api/market/offer", { to, give, want }, true);
+}
+export function marketRespond(id: string, action: "accept" | "decline" | "cancel") {
+  return call<{ offer: MarketOfferDTO }>(`/api/market/offer/${encodeURIComponent(id)}/respond`, { action }, true);
+}
+
 export async function cloudForgot(email: string) { await call("/api/cloud/forgot", { email }); }
 export async function cloudReset(email: string, code: string, password: string) {
   await call("/api/cloud/reset", { email, code, password });

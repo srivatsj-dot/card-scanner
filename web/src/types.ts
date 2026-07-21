@@ -17,6 +17,21 @@ export interface Settings {
   region: string; // market location for pricing, "" = global/auto
   morningUpdate: boolean; // show the daily card digest
   digestSports: string[]; // sports included in the morning update
+  emailOffers?: boolean; // email me when a trade offer arrives / is answered
+}
+
+/** A card as shown in the marketplace (someone else's binder, or your picks). */
+export interface MarketCard { id: string; label: string; sport: string; value: number; currency: string; thumb: string }
+
+/** A directed trade offer between two accounts. */
+export interface MarketOffer {
+  id: string;
+  fromUser: string; fromDisplay: string;
+  toUser: string; toDisplay: string;
+  give: SavedCard[]; // sender gives (recipient receives)
+  want: SavedCard[]; // sender wants (recipient gives)
+  status: "pending" | "accepted" | "declined" | "cancelled";
+  createdAt: number; respondedAt: number | null;
 }
 
 export const CATEGORIES = [
@@ -85,6 +100,7 @@ export const defaultSettings: Settings = {
   region: "",
   morningUpdate: true,
   digestSports: [...BLOCKABLE_CATEGORIES],
+  emailOffers: false,
 };
 
 export interface ScanResult {

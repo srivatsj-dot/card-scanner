@@ -85,6 +85,193 @@ export async function loadOffer(id: string): Promise<unknown | null> {
   return r.rows[0]?.data ?? null;
 }
 
+// --- Trade marketplace: look up another collector by username, view their
+// binder, and send a directed offer. Accepting auto-swaps the cards between the
+// two accounts' binders. All accounts are searchable (per product decision).
+
+interface MarketUser { id: number; username: string; display: string; email: string | null }
+// A card as stored in a binder blob (we only touch id + carry the rest through).
+interface BinderCard { id?: unknown; result?: { player?: string; year?: string; manufacturer?: string; setName?: string; sport?: string; estimatedValue?: { mid?: number; currency?: string } }; thumbnail?: string; [k: string]: unknown }
+
+async function findUserByName(name: string): Promise<MarketUser | null> {
+  const key = (name || "").trim().toLowerCase();
+  if (!key) return null;
+  // Match the stable username OR the shown display name (case-insensitive).
+  const r = await db().query(
+    `SELECT id, username, display, email FROM users WHERE username=$1 OR LOWER(display)=$1 LIMIT 1`,
+    [key]
+  );
+  const u = r.rows[0];
+  return u ? { id: u.id, username: u.username, display: u.display, email: u.email } : null;
+}
+
+// The binder lives in the user's data blob as a JSON *string* under "binder".
+async function binderOf(userId: number): Promise<BinderCard[]> {
+  const r = await db().query(`SELECT blob FROM user_data WHERE user_id=$1`, [userId]);
+  const raw = r.rows[0]?.blob?.binder;
+  if (typeof raw !== "string") return [];
+  try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
+// Read a boolean setting out of the blob (settings is also a JSON string).
+async function settingOf(userId: number, key: string): Promise<unknown> {
+  const r = await db().query(`SELECT blob FROM user_data WHERE user_id=$1`, [userId]);
+  const raw = r.rows[0]?.blob?.settings;
+  if (typeof raw !== "string") return undefined;
+  try { return JSON.parse(raw)?.[key]; } catch { return undefined; }
+}
+
+// Overwrite the binder inside the blob and bump the version (server-authoritative
+// — the swap is a server action, so we don't do optimistic concurrency here).
+async function setBinder(userId: number, cards: BinderCard[]): Promise<void> {
+  await db().query(
+    `UPDATE user_data
+       SET blob = jsonb_set(COALESCE(blob,'{}'::jsonb), '{binder}', to_jsonb($2::text)),
+           version = version + 1, updated_at = $3
+     WHERE user_id = $1`,
+    [userId, JSON.stringify(cards), Date.now()]
+  );
+}
+
+const cardLabel = (c: BinderCard): string => {
+  const r = c.result || {};
+  return [r.year, r.manufacturer, r.setName, r.player].map((x) => (x || "").toString().trim()).filter(Boolean).join(" ") || "Card";
+};
+
+export interface MarketCard { id: string; label: string; sport: string; value: number; currency: string; thumb: string }
+export function toMarketCard(c: BinderCard): MarketCard {
+  const r = c.result || {};
+  return {
+    id: String(c.id ?? ""),
+    label: cardLabel(c),
+    sport: (r.sport || "").toString(),
+    value: Number(r.estimatedValue?.mid) || 0,
+    currency: (r.estimatedValue?.currency || "USD").toString(),
+    thumb: typeof c.thumbnail === "string" ? c.thumbnail : "",
+  };
+}
+
+/** Public binder view for the marketplace: look someone up by username/display. */
+export async function lookupBinder(username: string): Promise<{ username: string; display: string; cards: MarketCard[] } | null> {
+  if (!hasCloud) return null;
+  const u = await findUserByName(username);
+  if (!u) return null;
+  const cards = (await binderOf(u.id)).filter((c) => c.id != null).map(toMarketCard);
+  return { username: u.username, display: u.display, cards };
+}
+
+export interface MarketOffer {
+  id: string;
+  fromUser: string; fromDisplay: string;
+  toUser: string; toDisplay: string;
+  give: BinderCard[]; // cards the sender gives (full snapshots, to move on accept)
+  want: BinderCard[]; // cards the sender wants from the recipient
+  status: "pending" | "accepted" | "declined" | "cancelled";
+  createdAt: number; respondedAt: number | null;
+}
+
+const reid = (c: BinderCard, now: number): BinderCard => ({
+  ...c,
+  id: `${now.toString(36)}-${Math.abs(hash(JSON.stringify(c.id) + now)).toString(36)}`,
+  savedAt: now,
+});
+function hash(s: string): number { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+
+/** Create a directed offer from `fromUserId` to the named recipient. */
+export async function createMarketOffer(
+  fromUserId: number,
+  toUsername: string,
+  give: BinderCard[],
+  want: BinderCard[]
+): Promise<{ id: string; toDisplay: string; toEmail: string | null; notify: boolean }> {
+  const from = (await db().query(`SELECT id, username, display FROM users WHERE id=$1`, [fromUserId])).rows[0];
+  const to = await findUserByName(toUsername);
+  if (!to) throw new CloudError(404, "No collector found with that username.");
+  if (to.id === fromUserId) throw new CloudError(400, "You can't trade with yourself.");
+  if (!give.length || !want.length) throw new CloudError(400, "Pick at least one card on each side.");
+  const id = newToken().slice(0, 16);
+  const offer: MarketOffer = {
+    id,
+    fromUser: from.username, fromDisplay: from.display,
+    toUser: to.username, toDisplay: to.display,
+    give, want, status: "pending", createdAt: Date.now(), respondedAt: null,
+  };
+  await db().query(
+    `INSERT INTO offers (id, data, updated_at) VALUES ($1,$2,$3)`,
+    [`m_${id}`, JSON.stringify({ market: true, fromId: fromUserId, toId: to.id, offer }), Date.now()]
+  );
+  const notify = (await settingOf(to.id, "emailOffers")) === true;
+  return { id, toDisplay: to.display, toEmail: to.email, notify };
+}
+
+async function loadMarketRow(id: string): Promise<{ fromId: number; toId: number; offer: MarketOffer } | null> {
+  const r = await db().query(`SELECT data FROM offers WHERE id=$1`, [`m_${id}`]);
+  const d = r.rows[0]?.data;
+  return d && d.market ? { fromId: d.fromId, toId: d.toId, offer: d.offer } : null;
+}
+
+/** Incoming (to me) and outgoing (from me) offers for a user. */
+export async function listMarketOffers(userId: number): Promise<{ incoming: MarketOffer[]; outgoing: MarketOffer[] }> {
+  const r = await db().query(
+    `SELECT data FROM offers WHERE (data->>'market')='true' AND ((data->>'toId')=$1 OR (data->>'fromId')=$1) ORDER BY updated_at DESC LIMIT 100`,
+    [String(userId)]
+  );
+  const incoming: MarketOffer[] = [], outgoing: MarketOffer[] = [];
+  for (const row of r.rows) {
+    const d = row.data;
+    if (!d?.offer) continue;
+    if (Number(d.toId) === userId) incoming.push(d.offer);
+    else if (Number(d.fromId) === userId) outgoing.push(d.offer);
+  }
+  return { incoming, outgoing };
+}
+
+/** Respond to a directed offer. Accept auto-swaps the cards between binders. */
+export async function respondMarketOffer(
+  userId: number,
+  id: string,
+  action: "accept" | "decline" | "cancel"
+): Promise<{ offer: MarketOffer; fromEmail: string | null; notify: boolean }> {
+  const row = await loadMarketRow(id);
+  if (!row) throw new CloudError(404, "That offer no longer exists.");
+  const { fromId, toId, offer } = row;
+  if (offer.status !== "pending") throw new CloudError(409, "This offer was already answered.");
+  if (action === "cancel") {
+    if (userId !== fromId) throw new CloudError(403, "Only the sender can cancel.");
+    offer.status = "cancelled";
+  } else {
+    if (userId !== toId) throw new CloudError(403, "Only the recipient can accept or decline.");
+    offer.status = action === "accept" ? "accepted" : "declined";
+  }
+  offer.respondedAt = Date.now();
+
+  if (offer.status === "accepted") {
+    // Auto-swap using the REAL cards currently in each binder (resolved by id),
+    // so the actual card objects move — give: sender→recipient, want: recipient→
+    // sender. Cards no longer present (traded/removed since) are simply skipped.
+    const now = Date.now();
+    const giveIds = new Set(offer.give.map((c) => String(c.id)));
+    const wantIds = new Set(offer.want.map((c) => String(c.id)));
+    const fromCards = await binderOf(fromId);
+    const toCards = await binderOf(toId);
+    const givenReal = fromCards.filter((c) => giveIds.has(String(c.id)));
+    const wantedReal = toCards.filter((c) => wantIds.has(String(c.id)));
+    const newFrom = fromCards.filter((c) => !giveIds.has(String(c.id))).concat(wantedReal.map((c) => reid(c, now)));
+    const newTo = toCards.filter((c) => !wantIds.has(String(c.id))).concat(givenReal.map((c) => reid(c, now + 1)));
+    await setBinder(fromId, newFrom);
+    await setBinder(toId, newTo);
+  }
+
+  await db().query(
+    `UPDATE offers SET data = jsonb_set(data, '{offer}', $2::jsonb), updated_at=$3 WHERE id=$1`,
+    [`m_${id}`, JSON.stringify(offer), Date.now()]
+  );
+  // Notify the sender of the outcome if they opted into email.
+  const from = (await db().query(`SELECT email FROM users WHERE id=$1`, [fromId])).rows[0];
+  const notify = (await settingOf(fromId, "emailOffers")) === true;
+  return { offer, fromEmail: from?.email ?? null, notify };
+}
+
 export async function saveDigest(key: string, data: unknown): Promise<void> {
   if (!hasCloud) return;
   await db().query(

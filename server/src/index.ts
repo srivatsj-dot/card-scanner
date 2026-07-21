@@ -1715,6 +1715,75 @@ app.post("/api/cloud/logout", async (req: Request, res: Response) => {
   try { await cloud.logout(bearer(req)); res.json({ ok: true }); } catch (err) { cloudFail(res, err); }
 });
 
+// --- Trade marketplace: look up a collector, view their binder, send a directed
+// offer; accepting auto-swaps the cards between both accounts' binders. --------
+async function marketUser(req: Request, res: Response): Promise<number | null> {
+  const userId = await cloud.userForToken(bearer(req));
+  if (!userId) { res.status(401).json({ error: "Sign in to use the trade marketplace." }); return null; }
+  return userId;
+}
+
+app.get("/api/market/binder/:username", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    if (!(await marketUser(req, res))) return;
+    const found = await cloud.lookupBinder(String(req.params.username || ""));
+    if (!found) { res.status(404).json({ error: "No collector found with that username." }); return; }
+    res.json(found);
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.get("/api/market/offers", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    res.json(await cloud.listMarketOffers(userId));
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.post("/api/market/offer", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const { to, give, want } = req.body as { to?: string; give?: unknown[]; want?: unknown[] };
+    const r = await cloud.createMarketOffer(userId, String(to || ""), (give as never[]) || [], (want as never[]) || []);
+    res.json({ id: r.id });
+    // Best-effort email to the recipient if they opted in.
+    if (r.notify && r.toEmail) {
+      sendEmail(
+        r.toEmail,
+        "New trade offer on Card-O-Rama",
+        `<p>You have a new trade offer waiting in Card-O-Rama. Open the app's Marketplace to review it.</p>`,
+        "market-offer"
+      ).catch(() => {});
+    }
+  } catch (err) { cloudFail(res, err); }
+});
+
+app.post("/api/market/offer/:id/respond", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const { action } = req.body as { action?: string };
+    if (action !== "accept" && action !== "decline" && action !== "cancel") {
+      res.status(400).json({ error: "Unknown response." }); return;
+    }
+    const r = await cloud.respondMarketOffer(userId, String(req.params.id || ""), action);
+    res.json({ offer: r.offer });
+    if (r.notify && r.fromEmail && (action === "accept" || action === "decline")) {
+      sendEmail(
+        r.fromEmail,
+        `Your trade offer was ${action === "accept" ? "accepted" : "declined"}`,
+        `<p>Your trade offer was <strong>${action === "accept" ? "accepted" : "declined"}</strong>. ${action === "accept" ? "The cards have been swapped between your binders." : ""} Open Card-O-Rama to see.</p>`,
+        "market-respond"
+      ).catch(() => {});
+    }
+  } catch (err) { cloudFail(res, err); }
+});
+
 app.delete("/api/cloud/account", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   try {

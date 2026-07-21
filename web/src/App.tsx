@@ -24,6 +24,7 @@ import OfferView from "./components/OfferView";
 import LoginModal from "./components/LoginModal";
 import Onboarding from "./components/Onboarding";
 import GuestGate from "./components/GuestGate";
+import MarketView from "./components/MarketView";
 import { bumpStreak, dayISO, liveStreak, makeQuests, questProgress, weekOf } from "./quests";
 import type { Streak, QuestState, QuestCounters } from "./quests";
 import Logo from "./components/Logo";
@@ -34,7 +35,7 @@ import HomeView from "./components/HomeView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount, setDisplayName } from "./auth";
 import { cloudActive, schedulePush, cloudPull, cloudUserKey } from "./cloud";
 
-type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
+type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "market" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -629,6 +630,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           <div className="side-group">{t("Trade")}</div>
           {navBtn("trade", t("Trade"))}
           {navBtn("tradeup", <>📈 {t("Trade-Up")}</>)}
+          {navBtn("market", <>🛒 {t("Marketplace")}</>)}
           {navBtn("later", <>🔖 {t("For later")}</>)}
           <div className="side-group">{t("Collection")}</div>
           {navBtn("binder", <>{t("Binder")}{saved.length > 0 ? ` (${saved.length})` : ""}</>)}
@@ -717,6 +719,15 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onSaveLater={(target, result) => saveLater({ target, give: result.steps[0]?.giveUp || [], steps: result.steps })}
         />
       ))}
+      {view === "market" && (
+        <MarketView
+          saved={saved}
+          settings={aiSettings}
+          cloudOn={cloudActive()}
+          isGuest={isGuest}
+          onRequireLogin={onRequestLogin}
+        />
+      )}
       {view === "later" && (isGuest ? (
         <GuestGate feature="Save trades and cards to come back to later." onLogin={onRequestLogin} />
       ) : (
