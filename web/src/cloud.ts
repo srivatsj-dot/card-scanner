@@ -173,11 +173,6 @@ export function friendRequest(to: string) { return call<{ display: string }>("/a
 export function friendRespond(other: string, accept: boolean) { return call("/api/friends/respond", { other, accept }, true); }
 export function friendRemove(other: string) { return call("/api/friends/remove", { other }, true); }
 
-export interface PeopleHit { username: string; display: string; matches: MarketCardDTO[] }
-export function peopleSearch(q: string) {
-  return authGet<{ results: PeopleHit[] }>(`/api/market/people?q=${encodeURIComponent(q)}`);
-}
-
 export interface ChatMsgDTO { id: number; from: string; mine: boolean; body: string; at: number }
 export interface ThreadDTO { username: string; display: string; last: string; at: number }
 export function chatThreads() { return authGet<{ threads: ThreadDTO[] }>("/api/chat/threads"); }

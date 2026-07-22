@@ -3,7 +3,6 @@ import type { Settings } from "../types";
 import { CATEGORIES, BLOCKABLE_CATEGORIES, REGIONS } from "../types";
 import { LANGS } from "../i18n";
 import { useT } from "../translator";
-import { notifySignup } from "../api";
 
 interface Props {
   settings: Settings;
@@ -32,20 +31,6 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
     } finally {
       setSavingName(false);
     }
-  }
-  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [sending, setSending] = useState(false);
-
-  async function sendTestEmail() {
-    if (!email) return;
-    setSending(true);
-    setEmailMsg(null);
-    const r = await notifySignup(email, displayName || "there");
-    setSending(false);
-    if (r.ok) setEmailMsg({ ok: true, text: t("Sent! Check your inbox.") });
-    else if (r.reason === "email-not-configured")
-      setEmailMsg({ ok: false, text: t("Email isn't available right now. Please try again later.") });
-    else setEmailMsg({ ok: false, text: t("Couldn't send the email. Please try again.") });
   }
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     onChange({ ...settings, [key]: value });
@@ -308,23 +293,6 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
       <p className="muted" style={{ fontSize: 13 }}>
         {t("Tip: write your preferences in plain English, like which brands or sets to avoid.")}
       </p>
-
-      {email && (
-        <>
-          <h3 style={{ marginTop: 22 }}>{t("Email")}</h3>
-          <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-            {t("Send a test welcome email to")} <strong>{email}</strong> {t("to check email delivery is working.")}
-          </p>
-          <button className="btn secondary small" onClick={sendTestEmail} disabled={sending}>
-            {sending ? <><span className="spinner" />{t("Sending…")}</> : `✉ ${t("Send test email")}`}
-          </button>
-          {emailMsg && (
-            <p style={{ fontSize: 13, marginTop: 10, marginBottom: 0 }} className={emailMsg.ok ? "" : "warn"}>
-              {emailMsg.ok ? "✓ " : "⚠ "}{emailMsg.text}
-            </p>
-          )}
-        </>
-      )}
 
       <h3 style={{ marginTop: 22 }}>{t("Account")}</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>

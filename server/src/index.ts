@@ -1784,15 +1784,6 @@ app.post("/api/market/offer/:id/respond", async (req: Request, res: Response) =>
   } catch (err) { cloudFail(res, err); }
 });
 
-// People search: who owns a card matching the query.
-app.get("/api/market/people", async (req: Request, res: Response) => {
-  if (!cloudGuard(res)) return;
-  try {
-    if (!(await marketUser(req, res))) return;
-    res.json({ results: await cloud.searchPeopleByCard(String(req.query.q || "")) });
-  } catch (err) { cloudFail(res, err); }
-});
-
 // --- Friends ---------------------------------------------------------------
 app.get("/api/friends", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;

@@ -103,7 +103,6 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const [questMaster, setQuestMaster] = useState<boolean>(() => loadJSON<boolean>(QUEST_MASTER_KEY, false));
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [tradePrefill, setTradePrefill] = useState<string | null>(null); // username to auto-look-up in Trade
   // New accounts get a 3-question setup (language, style, cards) once.
   const ONBOARD_KEY = `card-scanner-onboard:${ns}`;
   const [needsOnboarding, setNeedsOnboarding] = useState(
@@ -710,7 +709,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
                   <span className="user-avatar">{userName.slice(0, 1).toUpperCase()}</span>
                   <span className="user-name">{userName}</span>
                 </span>
-                <button className="btn ghost small" onClick={onLogout}>{t("Log out")}</button>
+                <button className="btn ghost small" onClick={() => { setView("home"); onLogout(); }}>{t("Log out")}</button>
               </>
             )}
           </div>
@@ -734,6 +733,8 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onGo={(v) => setView(v)}
           streak={liveStreak(streak, dayISO())}
           quests={questState ? questProgress(questState, questCounters) : []}
+          isGuest={isGuest}
+          onLogin={onRequestLogin}
         />
       )}
       {view === "today" && (
@@ -765,7 +766,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
       )}
       {view === "search" && (
-        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} cloudOn={cloudActive()} isGuest={isGuest} onRequireLogin={onRequestLogin} onTradeWith={(u) => { setTradePrefill(u); setView("market"); }} />
+        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
       )}
       {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />}
       {view === "trade" && (
@@ -798,8 +799,6 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           cloudOn={cloudActive()}
           isGuest={isGuest}
           onRequireLogin={onRequestLogin}
-          prefillUser={tradePrefill}
-          onPrefillDone={() => setTradePrefill(null)}
         />
       )}
       {view === "later" && (isGuest ? (

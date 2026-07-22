@@ -383,34 +383,6 @@ export async function canSendOfferTo(fromId: number, toId: number): Promise<bool
   return true;
 }
 
-// --- People search: who owns a card matching the query? --------------------
-export async function searchPeopleByCard(query: string, limit = 20): Promise<{ username: string; display: string; matches: MarketCard[] }[]> {
-  if (!hasCloud) return [];
-  const q = query.trim().toLowerCase();
-  if (q.length < 2) return [];
-  const terms = q.split(/[^a-z0-9]+/).filter((t) => t.length > 1);
-  // Scan binders (bounded) and match card labels against the query terms.
-  const rows = (await db().query(
-    `SELECT u.username, u.display, d.blob->>'binder' AS binder
-       FROM user_data d JOIN users u ON u.id = d.user_id
-      WHERE d.blob ? 'binder' LIMIT 500`
-  )).rows;
-  const out: { username: string; display: string; matches: MarketCard[] }[] = [];
-  for (const row of rows) {
-    let cards: BinderCard[] = [];
-    try { const a = JSON.parse(row.binder); if (Array.isArray(a)) cards = a; } catch { /* skip */ }
-    const matches = cards
-      .filter((c) => {
-        const label = cardLabel(c).toLowerCase();
-        return terms.every((t) => label.includes(t));
-      })
-      .map(toMarketCard);
-    if (matches.length) out.push({ username: row.username, display: row.display, matches });
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 // --- Direct messages (marketplace chat) ------------------------------------
 export interface ChatMsg { id: number; from: string; mine: boolean; body: string; at: number }
 

@@ -12,9 +12,11 @@ interface Props {
   onGo: (v: "scan" | "search" | "bulk" | "today" | "trade" | "binder" | "wishlist") => void;
   streak: number;
   quests: QuestProgress[];
+  isGuest: boolean;
+  onLogin: () => void;
 }
 
-export default function HomeView({ saved, wishlist, scans, currency, onGo, streak, quests }: Props) {
+export default function HomeView({ saved, wishlist, scans, currency, onGo, streak, quests, isGuest, onLogin }: Props) {
   const t = useT();
   const total = saved.reduce((s, c) => s + (c.result.estimatedValue?.mid || 0), 0);
   const cur = saved[0]?.result.estimatedValue?.currency || currency;
@@ -61,7 +63,17 @@ export default function HomeView({ saved, wishlist, scans, currency, onGo, strea
         </div>
       )}
 
-      {quests.length > 0 && (
+      {isGuest && (
+        <div className="card guest-gate">
+          <div style={{ fontSize: 36 }}>🎯🔒</div>
+          <h2 style={{ margin: "8px 0 6px" }}>
+            <button className="link-inline" onClick={onLogin}>{t("Log in")}</button> {t("to unlock weekly quests")}
+          </h2>
+          <p className="muted" style={{ marginTop: 0 }}>{t("Earn a daily streak and personalized quests as you build your collection.")}</p>
+        </div>
+      )}
+
+      {!isGuest && quests.length > 0 && (
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <h2 style={{ margin: 0 }}>🎯 {t("This week's quests")}</h2>

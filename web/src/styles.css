@@ -74,7 +74,7 @@ button, input, textarea, select {
 /* Sidebar layout */
 .shell { display: flex; min-height: 100vh; align-items: stretch; }
 .sidebar {
-  width: 268px; flex-shrink: 0;
+  width: 300px; flex-shrink: 0;
   background: var(--panel);
   border-right: 1px solid var(--line);
   display: flex; flex-direction: column;
