@@ -61,6 +61,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   const [give, setGive] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
+  const [counteringId, setCounteringId] = useState<string | null>(null); // incoming offer being countered
   const [offers, setOffers] = useState<{ incoming: MarketOfferDTO[]; outgoing: MarketOfferDTO[] } | null>(null);
   const [fairness, setFairness] = useState<Record<string, TradeResult>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -157,12 +158,30 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
     setSending(true);
     try {
       await marketSendOffer(their.username, giveCards, wantCards);
+      // If this was a counter to an incoming offer, decline the original.
+      if (counteringId) { await marketRespond(counteringId, "decline").catch(() => {}); setCounteringId(null); }
       setSent(their.display);
       setWant(new Set()); setGive(new Set());
       loadOffers();
     } catch (e) {
       setLookErr(e instanceof Error ? e.message : "Couldn't send the offer.");
     } finally { setSending(false); }
+  }
+
+  // Counter an incoming offer: jump to the sender's binder to build a reply.
+  // "Modify" prefills the same cards to tweak; "Trade back" starts fresh.
+  // Sending the counter declines the original.
+  async function counter(o: MarketOfferDTO, prefill: boolean) {
+    setCounteringId(o.id);
+    setUname(o.fromUser);
+    setTab("find");
+    await lookup(o.fromUser);
+    if (prefill) {
+      setWant(new Set((o.give as { id: string }[]).map((c) => c.id))); // their cards I'd receive
+      setGive(new Set((o.want as { id: string }[]).map((c) => c.id))); // my cards I'd give
+    } else {
+      setWant(new Set()); setGive(new Set());
+    }
   }
 
   // Check fairness of an INCOMING offer from my perspective: I give `want`, I
@@ -280,7 +299,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                   <div>{wantCards.map((c) => c.label).join(", ") || "—"}</div>
                 </div>
                 <button className="btn" onClick={send} disabled={sending || !giveCards.length || !wantCards.length}>
-                  {sending ? <><span className="spinner" />{t("Sending…")}</> : `📤 ${t("Send offer")}`}
+                  {sending ? <><span className="spinner" />{t("Sending…")}</> : counteringId ? `🔄 ${t("Send counter-offer")}` : `📤 ${t("Send offer")}`}
                 </button>
               </div>
             </>
@@ -313,6 +332,8 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                       <button className="btn small" disabled={busy === `accept-${o.id}`} onClick={() => respond(o, "accept")}>
                         ✅ {t("Accept")}
                       </button>
+                      <button className="btn ghost small" onClick={() => counter(o, true)}>✏️ {t("Modify")}</button>
+                      <button className="btn ghost small" onClick={() => counter(o, false)}>🔄 {t("Trade back")}</button>
                       <button className="btn ghost small" disabled={busy === `decline-${o.id}`} onClick={() => respond(o, "decline")}>
                         ✕ {t("Reject")}
                       </button>

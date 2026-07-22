@@ -168,7 +168,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   useEffect(() => {
     if (isGuest || !cloudActive()) return;
     let cancelled = false;
-    marketOffers()
+    const fetchOffers = () => marketOffers()
       .then((o) => {
         if (cancelled) return;
         setIncomingPending(o.incoming.filter((x) => x.status === "pending").length);
@@ -182,7 +182,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         );
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    fetchOffers();
+    const iv = setInterval(fetchOffers, 45000); // poll so responses pop while idle
+    return () => { cancelled = true; clearInterval(iv); };
   }, [view, isGuest]);
   function ackResponses() {
     setAnsweredOut((cur) => {
@@ -738,29 +740,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         />
       )}
       {view === "today" && (
-        <>
-          {answeredOut.length > 0 && (
-            <div className="card offer-alert" onClick={() => { setView("market"); ackResponses(); }}>
-              {answeredOut.map((r) => (
-                <div key={r.id}>
-                  {r.status === "accepted" ? "🤝" : "✕"} {r.who}{" "}
-                  {r.status === "accepted"
-                    ? t("accepted your trade — the cards have been swapped!")
-                    : t("declined your trade.")}
-                </div>
-              ))}
-              <span className="link-inline">{t("Open Trade")}</span>
-              <button
-                className="btn ghost small"
-                style={{ marginLeft: 8 }}
-                onClick={(e) => { e.stopPropagation(); ackResponses(); }}
-              >
-                {t("Dismiss")}
-              </button>
-            </div>
-          )}
-          <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
-        </>
+        <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
       )}
       {view === "scan" && (
         <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
@@ -871,6 +851,27 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       )}
 
       {needsOnboarding && <Onboarding settings={settings} onDone={finishOnboarding} />}
+
+      {answeredOut.length > 0 && (
+        <div className="backdrop" onClick={ackResponses}>
+          <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
+            <button className="modal-x" aria-label={t("Close")} onClick={ackResponses}>✕</button>
+            <div style={{ fontSize: 44 }}>{answeredOut.some((r) => r.status === "accepted") ? "🤝" : "✕"}</div>
+            <h2 style={{ margin: "8px 0 6px" }}>{t("Trade update")}</h2>
+            {answeredOut.map((r) => (
+              <p key={r.id} style={{ margin: "4px 0" }}>
+                <strong>{r.who}</strong>{" "}
+                {r.status === "accepted"
+                  ? t("accepted your trade — the cards have been swapped into your binder!")
+                  : t("declined your trade.")}
+              </p>
+            ))}
+            <button className="btn" style={{ width: "100%", marginTop: 10 }} onClick={() => { setView("market"); ackResponses(); }}>
+              {t("Open Trade")}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="toasts">
         {toasts.map((t) => <div className="toast" key={t.id}>{t.msg}</div>)}
