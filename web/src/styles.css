@@ -1025,17 +1025,32 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .offer-alert:hover { background: var(--panel-2); }
 .market-tabs { flex-wrap: wrap; }
 
-/* Inter-account chat */
-.chat-layout { display: grid; grid-template-columns: minmax(160px, 240px) 1fr; gap: 12px; align-items: start; }
-@media (max-width: 640px) { .chat-layout { grid-template-columns: 1fr; } }
-.chat-threads { max-height: 60vh; overflow: auto; }
-.thread-row {
-  display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 6px;
-  border-radius: var(--radius); background: var(--panel-2); border: 1px solid var(--line); color: var(--text); cursor: pointer;
+/* Inter-account chat — hideable right-side panel, only while trading */
+.chat-arrow {
+  position: fixed; right: 0; top: 40%; z-index: 55;
+  padding: 12px 10px; border-radius: 10px 0 0 10px; cursor: pointer;
+  background: var(--accent); color: #fff; border: none; font-size: 16px; font-weight: 700;
+  box-shadow: -2px 2px 10px rgba(0,0,0,0.25); display: flex; align-items: center; gap: 4px;
 }
-.thread-row.sel { border-color: var(--accent); }
-.chat-window { display: flex; flex-direction: column; min-height: 320px; }
-.chat-messages { flex: 1; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 52vh; padding: 4px 0; }
+.chat-badge {
+  background: #fff; color: var(--accent); border-radius: 999px; font-size: 11px;
+  padding: 0 6px; min-width: 18px; text-align: center; font-weight: 800;
+}
+.chat-panel {
+  position: fixed; right: 0; top: 0; height: 100vh; width: min(360px, 92vw); z-index: 60;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: -6px 0 24px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column; padding: 16px;
+  transform: translateX(100%); transition: transform 0.25s ease;
+}
+.chat-panel.open { transform: translateX(0); }
+.chat-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.chat-toast {
+  position: fixed; right: 16px; bottom: 16px; z-index: 58; max-width: min(320px, 86vw);
+  padding: 12px 14px; border-radius: var(--radius); cursor: pointer; text-align: left;
+  background: var(--panel); border: 1px solid var(--accent); color: var(--text);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3); font-size: 14px;
+}
+.chat-messages { flex: 1; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding: 4px 0; }
 .chat-bubble {
   max-width: 78%; padding: 8px 12px; border-radius: 14px; font-size: 14px;
   font-family: ui-sans-serif, system-ui, sans-serif; word-break: break-word;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SavedCard, Settings, TradeResult } from "../types";
 import { describeCard, money } from "../utils";
 import { evaluateTrade } from "../api";
@@ -6,7 +6,7 @@ import {
   marketLookup, marketOffers, marketSendOffer, marketRespond,
   cloudPull, cloudUserKey, type MarketCardDTO, type MarketOfferDTO,
   friendsList, friendRequest, friendRespond, friendRemove, type FriendUserDTO,
-  chatThreads, chatThread, chatSend, type ChatMsgDTO, type ThreadDTO,
+  chatThread, chatSend, type ChatMsgDTO,
 } from "../cloud";
 import { useT } from "../translator";
 import GuestGate from "./GuestGate";
@@ -43,16 +43,20 @@ function CardTile({ c, on, onClick }: { c: MarketCardDTO; on: boolean; onClick: 
 
 export default function MarketView({ saved, settings, cloudOn, isGuest, onRequireLogin, prefillUser, onPrefillDone }: Props) {
   const t = useT();
-  const [tab, setTab] = useState<"find" | "offers" | "friends" | "chat">("find");
+  const [tab, setTab] = useState<"find" | "offers" | "friends">("find");
   // Friends
   const [friends, setFriends] = useState<{ friends: FriendUserDTO[]; incoming: FriendUserDTO[]; outgoing: FriendUserDTO[] } | null>(null);
   const [friendName, setFriendName] = useState("");
   const [friendMsg, setFriendMsg] = useState<string | null>(null);
-  // Chat
-  const [threads, setThreads] = useState<ThreadDTO[]>([]);
-  const [chatWith, setChatWith] = useState<{ username: string; display: string } | null>(null);
+  // Chat — only exists during trading: tied to the current trade partner, shown
+  // as a hideable panel on the right with a new-message toast.
+  const [chatPartner, setChatPartner] = useState<{ username: string; display: string } | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const [msgs, setMsgs] = useState<ChatMsgDTO[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [unread, setUnread] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+  const lastMsgId = useRef(0);
   const [uname, setUname] = useState("");
   const [their, setTheir] = useState<{ display: string; username: string; cards: MarketCardDTO[] } | null>(null);
   const [lookErr, setLookErr] = useState<string | null>(null);
@@ -74,10 +78,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   async function loadFriends() {
     try { setFriends(await friendsList()); } catch { /* ignore */ }
   }
-  async function loadThreads() {
-    try { setThreads((await chatThreads()).threads); } catch { /* ignore */ }
-  }
-  useEffect(() => { if (cloudOn && !isGuest) { loadOffers(); loadFriends(); loadThreads(); } }, [cloudOn, isGuest]);
+  useEffect(() => { if (cloudOn && !isGuest) { loadOffers(); loadFriends(); } }, [cloudOn, isGuest]);
 
   // Deep-link from People search: auto-look-up a username on open.
   useEffect(() => {
@@ -89,30 +90,44 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillUser]);
 
-  // Poll the open conversation every 4s so replies show up live.
+  // Poll the current conversation every 4s so replies show up live. When a new
+  // message lands and the panel is closed, badge it and toast bottom-right.
   useEffect(() => {
-    if (!chatWith) return;
+    if (!chatPartner) return;
     let cancelled = false;
-    const pull = () => chatThread(chatWith.username).then((r) => { if (!cancelled) setMsgs(r.messages); }).catch(() => {});
+    const pull = () => chatThread(chatPartner.username).then((r) => {
+      if (cancelled) return;
+      const maxId = r.messages.reduce((m, x) => Math.max(m, x.id), 0);
+      const incoming = r.messages.filter((x) => !x.mine && x.id > lastMsgId.current);
+      setMsgs(r.messages);
+      if (lastMsgId.current > 0 && incoming.length && !chatOpen) {
+        setUnread((u) => u + incoming.length);
+        setToast(`💬 ${chatPartner.display}: ${incoming[incoming.length - 1].body.slice(0, 40)}`);
+        setTimeout(() => setToast(null), 5000);
+      }
+      lastMsgId.current = maxId;
+    }).catch(() => {});
     pull();
     const iv = setInterval(pull, 4000);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [chatWith]);
+  }, [chatPartner, chatOpen]);
 
-  async function openChat(username: string, display: string) {
-    setChatWith({ username, display });
+  function openChatWith(username: string, display: string) {
+    setChatPartner({ username, display });
     setMsgs([]);
-    setTab("chat");
+    lastMsgId.current = 0;
+    setUnread(0);
+    setChatOpen(true);
   }
   async function sendChat() {
-    if (!chatWith || !chatInput.trim()) return;
+    if (!chatPartner || !chatInput.trim()) return;
     const body = chatInput.trim();
     setChatInput("");
     try {
-      await chatSend(chatWith.username, body);
-      const r = await chatThread(chatWith.username);
+      await chatSend(chatPartner.username, body);
+      const r = await chatThread(chatPartner.username);
       setMsgs(r.messages);
-      loadThreads();
+      lastMsgId.current = r.messages.reduce((m, x) => Math.max(m, x.id), 0);
     } catch { /* ignore */ }
   }
   async function addFriend() {
@@ -144,7 +159,13 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
     if (!q) return;
     setLooking(true); setLookErr(null); setTheir(null); setWant(new Set()); setSent(null);
     try {
-      setTheir(await marketLookup(q));
+      const found = await marketLookup(q);
+      setTheir(found);
+      // You're now trading with them — enable chat (panel stays hidden until opened).
+      if (!chatPartner || chatPartner.username !== found.username) {
+        setChatPartner({ username: found.username, display: found.display });
+        setMsgs([]); lastMsgId.current = 0; setUnread(0);
+      }
     } catch (e) {
       setLookErr(e instanceof Error ? e.message : "Couldn't find that collector.");
     } finally { setLooking(false); }
@@ -240,7 +261,6 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
           <button className={tab === "friends" ? "active" : ""} onClick={() => { setTab("friends"); loadFriends(); }}>
             {t("Friends")}{friends?.incoming.length ? ` 🔴` : ""}
           </button>
-          <button className={tab === "chat" ? "active" : ""} onClick={() => { setTab("chat"); loadThreads(); }}>{t("Chat")}</button>
         </div>
       </div>
 
@@ -334,6 +354,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                       </button>
                       <button className="btn ghost small" onClick={() => counter(o, true)}>✏️ {t("Modify")}</button>
                       <button className="btn ghost small" onClick={() => counter(o, false)}>🔄 {t("Trade back")}</button>
+                      <button className="btn ghost small" onClick={() => openChatWith(o.fromUser, o.fromDisplay)}>💬 {t("Chat")}</button>
                       <button className="btn ghost small" disabled={busy === `decline-${o.id}`} onClick={() => respond(o, "decline")}>
                         ✕ {t("Reject")}
                       </button>
@@ -407,7 +428,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                 <div className="name">{u.display}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button className="btn ghost small" onClick={() => { setUname(u.username); setTab("find"); lookup(); }}>🛒 {t("Trade")}</button>
-                  <button className="btn ghost small" onClick={() => openChat(u.username, u.display)}>💬 {t("Message")}</button>
+                  <button className="btn ghost small" onClick={() => openChatWith(u.username, u.display)}>💬 {t("Message")}</button>
                   <button className="btn ghost small" onClick={() => friendRemove(u.username).then(loadFriends)}>{t("Remove")}</button>
                 </div>
               </div>
@@ -421,48 +442,41 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
         </>
       )}
 
-      {tab === "chat" && (
-        <div className="chat-layout">
-          <div className="card chat-threads">
-            <h3 style={{ marginTop: 0 }}>💬 {t("Conversations")}</h3>
-            {!threads.length ? (
-              <p className="muted">{t("No messages yet. Open a friend's card and message them.")}</p>
-            ) : threads.map((th) => (
-              <button
-                key={th.username}
-                className={`thread-row ${chatWith?.username === th.username ? "sel" : ""}`}
-                onClick={() => openChat(th.username, th.display)}
-              >
-                <strong>{th.display}</strong>
-                <span className="muted" style={{ fontSize: 12, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{th.last}</span>
-              </button>
-            ))}
+      {/* Chat only exists while trading with someone: a hideable right-side panel. */}
+      {chatPartner && (
+        <>
+          <button
+            className="chat-arrow"
+            onClick={() => { setChatOpen((o) => !o); setUnread(0); }}
+            title={t("Chat with your trade partner")}
+          >
+            {chatOpen ? "›" : "‹"} 💬{unread > 0 ? <span className="chat-badge">{unread}</span> : null}
+          </button>
+          <div className={`chat-panel ${chatOpen ? "open" : ""}`}>
+            <div className="chat-panel-head">
+              <strong>{chatPartner.display}</strong>
+              <button className="modal-x" style={{ position: "static" }} onClick={() => setChatOpen(false)}>✕</button>
+            </div>
+            <div className="chat-messages">
+              {msgs.map((m) => (
+                <div key={m.id} className={`chat-bubble ${m.mine ? "mine" : "theirs"}`}>{m.body}</div>
+              ))}
+              {!msgs.length && <p className="muted">{t("Say hi 👋 — chat about the trade.")}</p>}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <input
+                type="text" value={chatInput} placeholder={t("Type a message…")}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
+                style={{ flex: 1 }}
+              />
+              <button className="btn" onClick={sendChat} disabled={!chatInput.trim()}>{t("Send")}</button>
+            </div>
           </div>
-          <div className="card chat-window">
-            {!chatWith ? (
-              <p className="muted">{t("Pick a conversation, or message a friend from the Friends tab.")}</p>
-            ) : (
-              <>
-                <h3 style={{ marginTop: 0 }}>{chatWith.display}</h3>
-                <div className="chat-messages">
-                  {msgs.map((m) => (
-                    <div key={m.id} className={`chat-bubble ${m.mine ? "mine" : "theirs"}`}>{m.body}</div>
-                  ))}
-                  {!msgs.length && <p className="muted">{t("Say hi 👋")}</p>}
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <input
-                    type="text" value={chatInput} placeholder={t("Type a message…")}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
-                    style={{ flex: 1 }}
-                  />
-                  <button className="btn" onClick={sendChat} disabled={!chatInput.trim()}>{t("Send")}</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        </>
+      )}
+      {toast && !chatOpen && (
+        <button className="chat-toast" onClick={() => { setChatOpen(true); setUnread(0); setToast(null); }}>{toast}</button>
       )}
     </div>
   );
