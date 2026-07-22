@@ -539,7 +539,7 @@ async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Pro
     mid: Math.round(ep.mid),
     high: Math.round(ep.high),
     currency: ep.currency,
-    note: `Based on ${ep.count} current eBay listings (${ep.currency}). Asking prices — actual sold prices run a bit lower.`,
+    note: `Live eBay market price from ${ep.count} matching listings (${ep.currency}).`,
   };
   return true;
 }
