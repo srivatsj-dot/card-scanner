@@ -11,11 +11,12 @@ interface Props {
   bestSetPct: number;
   streakDays: number;
   questMaster: boolean;
+  tradeCounters: { made: number; accepted: number; rejected: number; cards: number };
 }
 
-export default function AwardsView({ saved, wishlist, scans, trades, lang, bestSetPct, streakDays, questMaster }: Props) {
+export default function AwardsView({ saved, wishlist, scans, trades, lang, bestSetPct, streakDays, questMaster, tradeCounters }: Props) {
   const t = useT();
-  const stats = computeStats(saved, wishlist, scans, trades, lang, bestSetPct, streakDays, questMaster);
+  const stats = computeStats(saved, wishlist, scans, trades, lang, bestSetPct, streakDays, questMaster, tradeCounters);
   const earnedCount = ACHIEVEMENTS.filter((a) => a.earned(stats)).length;
 
   return (

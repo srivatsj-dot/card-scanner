@@ -17,6 +17,10 @@ export interface AchStats {
   bestSetPct: number; // best set-completion %, 0..1 (from checklist checks)
   streakDays: number; // consecutive days checking the morning briefing
   questMaster: boolean; // completed all of a week's quests at least once
+  offersMade: number; // trade offers sent in the marketplace
+  offersAccepted: number; // trades accepted
+  offersRejected: number; // offers rejected
+  cardsTraded: number; // cards moved through completed trades
   hasDupe: boolean;
   hasVintage: boolean;
   hasModern: boolean;
@@ -113,6 +117,12 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "streak_7", emoji: "📆", title: "Daily Ritual", desc: "Check the morning briefing 7 days in a row.", earned: (s) => s.streakDays >= 7 },
   { id: "streak_30", emoji: "🧠", title: "Hobby Scholar", desc: "Check the morning briefing 30 days in a row.", earned: (s) => s.streakDays >= 30 },
   { id: "quest_master", emoji: "🎖️", title: "Quest Master", desc: "Complete all of a week's quests.", earned: (s) => s.questMaster },
+  // Marketplace trading
+  { id: "trade_offer_1", emoji: "📨", title: "Making Moves", desc: "Send a trade offer to another collector.", earned: (s) => s.offersMade >= 1 },
+  { id: "trade_deal_1", emoji: "🫱", title: "Dealmaker", desc: "Complete a trade with another collector.", earned: (s) => s.offersAccepted >= 1 },
+  { id: "trade_reject_1", emoji: "🙅", title: "Hard Pass", desc: "Reject a trade offer.", earned: (s) => s.offersRejected >= 1 },
+  { id: "trade_cards_5", emoji: "🔁", title: "Wheeler", desc: "Trade 5 cards with other collectors.", earned: (s) => s.cardsTraded >= 5 },
+  { id: "trade_cards_20", emoji: "🏪", title: "Trade Machine", desc: "Trade 20 cards with other collectors.", earned: (s) => s.cardsTraded >= 20 },
 ];
 
 const decade = (year: string | null) => {
@@ -138,7 +148,8 @@ export function computeStats(
   language: string,
   bestSetPct = 0,
   streakDays = 0,
-  questMaster = false
+  questMaster = false,
+  tc: { made?: number; accepted?: number; rejected?: number; cards?: number } = {}
 ): AchStats {
   // Largest single set held (by year|manufacturer|setName), for set-building badges.
   const setCounts = new Map<string, number>();
@@ -191,6 +202,10 @@ export function computeStats(
     bestSetPct: Math.max(0, Math.min(1, bestSetPct || 0)),
     streakDays: Math.max(0, streakDays || 0),
     questMaster: !!questMaster,
+    offersMade: tc.made || 0,
+    offersAccepted: tc.accepted || 0,
+    offersRejected: tc.rejected || 0,
+    cardsTraded: tc.cards || 0,
     hasDupe: players.length > new Set(players).size,
     hasVintage: decades.some((d) => d <= 198),
     hasModern: decades.some((d) => d >= 202),

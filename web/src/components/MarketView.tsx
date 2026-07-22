@@ -19,6 +19,7 @@ interface Props {
   onRequireLogin: () => void;
   prefillUser?: string | null; // auto-look-up this username on open (from People search)
   onPrefillDone?: () => void;
+  onTradeEvent?: (evt: { type: "made" | "accepted" | "rejected"; cards?: number }) => void;
 }
 
 // Turn one of my SavedCards into the lightweight shape the server stores/moves.
@@ -41,7 +42,7 @@ function CardTile({ c, on, onClick }: { c: MarketCardDTO; on: boolean; onClick: 
   );
 }
 
-export default function MarketView({ saved, settings, cloudOn, isGuest, onRequireLogin, prefillUser, onPrefillDone }: Props) {
+export default function MarketView({ saved, settings, cloudOn, isGuest, onRequireLogin, prefillUser, onPrefillDone, onTradeEvent }: Props) {
   const t = useT();
   const [tab, setTab] = useState<"find" | "offers" | "friends">("find");
   // Friends
@@ -179,6 +180,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
     setSending(true);
     try {
       await marketSendOffer(their.username, giveCards, wantCards);
+      onTradeEvent?.({ type: "made" });
       // If this was a counter to an incoming offer, decline the original.
       if (counteringId) { await marketRespond(counteringId, "decline").catch(() => {}); setCounteringId(null); }
       setSent(their.display);
@@ -220,6 +222,8 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
     setBusy(`${action}-${o.id}`);
     try {
       await marketRespond(o.id, action);
+      if (action === "accept") onTradeEvent?.({ type: "accepted", cards: (o.give?.length || 0) + (o.want?.length || 0) });
+      else if (action === "decline") onTradeEvent?.({ type: "rejected" });
       if (action === "accept") {
         // Binders changed server-side — pull the fresh copy and remount.
         await cloudPull(cloudUserKey()).catch(() => {});

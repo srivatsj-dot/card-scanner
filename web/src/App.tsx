@@ -75,6 +75,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const STREAK_KEY = `card-scanner-streak:${ns}`;
   const QUESTS_KEY = `card-scanner-quests:${ns}`;
   const QUEST_MASTER_KEY = `card-scanner-quest-master:${ns}`;
+  const TRADE_COUNTERS_KEY = `card-scanner-trade-counters:${ns}`;
 
   const [view, setView] = useState<View>("home");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -101,6 +102,18 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const [streak, setStreak] = useState<Streak | null>(() => loadJSON<Streak | null>(STREAK_KEY, null));
   const [questState, setQuestState] = useState<QuestState | null>(() => loadJSON<QuestState | null>(QUESTS_KEY, null));
   const [questMaster, setQuestMaster] = useState<boolean>(() => loadJSON<boolean>(QUEST_MASTER_KEY, false));
+  type TradeCounters = { made: number; accepted: number; rejected: number; cards: number };
+  const [tradeCounters, setTradeCounters] = useState<TradeCounters>(() => loadJSON<TradeCounters>(TRADE_COUNTERS_KEY, { made: 0, accepted: 0, rejected: 0, cards: 0 }));
+  function recordTrade(evt: { type: "made" | "accepted" | "rejected"; cards?: number }) {
+    setTradeCounters((prev) => {
+      const next = { ...prev };
+      if (evt.type === "made") next.made += 1;
+      else if (evt.type === "rejected") next.rejected += 1;
+      else if (evt.type === "accepted") { next.accepted += 1; next.cards += evt.cards || 0; }
+      localStorage.setItem(TRADE_COUNTERS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // New accounts get a 3-question setup (language, style, cards) once.
@@ -301,7 +314,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   }, [settings, saved, wishlist, later, scans, trades, theme, user]);
   // Unlock-achievement toasts.
   useEffect(() => {
-    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language, bestSetPct, streak?.best || 0, questMaster));
+    const ids = earnedIds(computeStats(saved, wishlist, scans, trades, settings.language, bestSetPct, streak?.best || 0, questMaster, tradeCounters));
     const newly = ids.filter((id) => !earnedRef.current.has(id));
     if (newly.length) {
       // Don't fire a wall of banners on the very first computation (e.g. importing
@@ -316,7 +329,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved, wishlist, scans, trades, settings.language, bestSetPct, streak, questMaster]);
+  }, [saved, wishlist, scans, trades, settings.language, bestSetPct, streak, questMaster, tradeCounters]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, JSON.stringify(theme));
@@ -779,6 +792,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           cloudOn={cloudActive()}
           isGuest={isGuest}
           onRequireLogin={onRequestLogin}
+          onTradeEvent={recordTrade}
         />
       )}
       {view === "later" && (isGuest ? (
@@ -822,7 +836,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {view === "awards" && (isGuest ? (
         <GuestGate feature="Earn achievements as your collection grows." onLogin={onRequestLogin} />
       ) : (
-        <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} questMaster={questMaster} />
+        <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} questMaster={questMaster} tradeCounters={tradeCounters} />
       ))}
       {view === "settings" && (
         <SettingsView
