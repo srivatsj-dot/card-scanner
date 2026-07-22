@@ -20,6 +20,7 @@ export interface Settings {
   emailOffers?: boolean; // email me when a trade offer arrives / is answered
   tradeRequestsFrom?: "anyone" | "friends" | "list"; // who may send me offers
   tradeAllowList?: string[]; // usernames allowed when tradeRequestsFrom = "list"
+  binderMode?: "list" | "grid" | "pages"; // how the binder is laid out
 }
 
 /** A card as shown in the marketplace (someone else's binder, or your picks). */
@@ -105,6 +106,7 @@ export const defaultSettings: Settings = {
   emailOffers: false,
   tradeRequestsFrom: "anyone",
   tradeAllowList: [],
+  binderMode: "list",
 };
 
 export interface ScanResult {

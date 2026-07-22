@@ -112,14 +112,18 @@ export function makeQuests(week: string, now: QuestCounters, profile?: QuestProf
   const tradeN = p.collectorType === "money" ? choose([2, 3, 4], seed, 4) : choose([1, 2, 3], seed, 4);
   const briefN = choose([3, 4, 5], seed, 5);
   const wishN = choose([2, 3], seed, 6);
-  const valBump = choose([25, 50, 100], seed, 7); // grow binder value by this much
+  const valBump = choose([25, 50, 100, 250], seed, 7); // grow binder value by this much
+  const bigPull = choose([25, 50, 100], seed, 11); // "beat your best" threshold step
+  // A varied pool of quests with punchy, collector-flavored copy. 3 are picked
+  // and rotated each week so it never feels like the same checklist.
   const pool: Quest[] = [
-    { id: "trade", emoji: "🤝", title: `Evaluate ${tradeN} trades in Check trade`, metric: "trades", target: now.trades + tradeN },
-    { id: "briefing", emoji: "☀️", title: `Check the morning briefing on ${briefN} days`, metric: "briefingDays", target: briefN },
-    { id: "wish", emoji: "♡", title: cat ? `Wishlist ${wishN} ${cat} cards` : `Add ${wishN} cards to your wishlist`, metric: "wishlist", target: now.wishlist + wishN },
-    { id: "value_up", emoji: "📈", title: `Grow your binder value by ${valBump}`, metric: "binderValue", target: Math.round(now.binderValue + valBump) },
-    { id: "market_trade", emoji: "🔁", title: "Complete a trade with another collector", metric: "marketTrades", target: now.marketTrades + 1 },
-    { id: "new_set", emoji: "🗂️", title: "Add a card from a set you don't own yet", metric: "distinctSets", target: now.distinctSets + 1 },
+    { id: "trade", emoji: "⚖️", title: `Run ${tradeN} trades through Check trade`, metric: "trades", target: now.trades + tradeN },
+    { id: "briefing", emoji: "🗞️", title: `Read the morning briefing on ${briefN} days`, metric: "briefingDays", target: briefN },
+    { id: "wish", emoji: "🎯", title: cat ? `Add ${wishN} ${cat} cards to your chase list` : `Add ${wishN} cards to your wishlist`, metric: "wishlist", target: now.wishlist + wishN },
+    { id: "value_up", emoji: "📈", title: `Level up: grow your binder value by ${valBump}`, metric: "binderValue", target: Math.round(now.binderValue + valBump) },
+    { id: "market_trade", emoji: "🤝", title: "Pull off a trade with another collector", metric: "marketTrades", target: now.marketTrades + 1 },
+    { id: "new_set", emoji: "🗂️", title: cat ? `Start a new ${cat} set — add a card from a set you don't own` : "Break into a new set you don't own yet", metric: "distinctSets", target: now.distinctSets + 1 },
+    { id: "big_pull", emoji: "💎", title: `Hit a new personal best — land a card worth ${Math.max(bigPull, Math.ceil((now.maxCardValue + 1) / 25) * 25)}+`, metric: "maxCardValue", target: Math.max(bigPull, Math.ceil((now.maxCardValue + 1) / 25) * 25) },
   ];
   if (p.inProgressSet) {
     pool.push({ id: "set_up", emoji: "🎴", title: "Raise your best set completion by 5%", metric: "bestSetPct", target: Math.min(1, now.bestSetPct + 0.05) });
@@ -158,6 +162,8 @@ export function questProgress(state: QuestState, now: QuestCounters): QuestProgr
         ? `${Math.round(cur * 100)}%/${Math.round(q.target * 100)}%`
         : q.metric === "binderValue"
         ? `+${Math.round(Math.min(gained, goal))}/${Math.round(goal)}`
+        : q.metric === "maxCardValue"
+        ? `${Math.round(cur)}/${Math.round(q.target)}`
         : `${Math.min(gained, goal)}/${goal}`;
     return { ...q, progress, done: progress >= 1, label };
   });

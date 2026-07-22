@@ -851,6 +851,8 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onConditionCheck={checkCondition}
           onSetPhoto={setCardPhoto}
           onToggleFlag={toggleFlag}
+          mode={settings.binderMode || "list"}
+          onModeChange={(m) => setSettings((s) => ({ ...s, binderMode: m }))}
         />
       ))}
       {view === "wishlist" && (isGuest ? (

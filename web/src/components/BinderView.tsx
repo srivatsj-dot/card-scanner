@@ -15,6 +15,8 @@ interface Props {
   onConditionCheck: (id: string, dataUrl: string) => Promise<void>;
   onSetPhoto: (id: string, dataUrl: string) => void;
   onToggleFlag: (id: string, flag: "favorite" | "notNeeded") => void;
+  mode: "list" | "grid" | "pages";
+  onModeChange: (m: "list" | "grid" | "pages") => void;
 }
 
 /** Condition history, newest first, flagging flaws new since the prior check. */
@@ -61,9 +63,11 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, mode, onModeChange }: Props) {
   const t = useT();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null); // grid/pages card detail modal
+  const [page, setPage] = useState(0); // current spread in "pages" (real binder) mode
   const [sort, setSort] = useState<Sort>("recent");
   const [sportFilter, setSportFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -157,12 +161,75 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
             {refreshing ? <><span className="spinner" />Updating…</> : `↻ ${t("Refresh prices")}`}
           </button>
         </div>
+        <div className="auth-tabs" style={{ marginTop: 10 }}>
+          <button className={mode === "list" ? "active" : ""} onClick={() => onModeChange("list")}>☰ {t("List")}</button>
+          <button className={mode === "grid" ? "active" : ""} onClick={() => onModeChange("grid")}>▦ {t("Grid")}</button>
+          <button className={mode === "pages" ? "active" : ""} onClick={() => { onModeChange("pages"); setPage(0); }}>📖 {t("Binder")}</button>
+        </div>
         <p className="muted" style={{ fontSize: 12, margin: "8px 2px 0" }}>
           Prices auto-update once a day. ▲/▼ shows the change since the last update.
         </p>
       </div>
 
-      {view.map((s) => {
+      {mode === "grid" && (
+        <div className="card">
+          <div className="binder-gallery">
+            {view.map((s) => (
+              <button key={s.id} className="gallery-card" onClick={() => setDetailId(s.id)} title={s.result.player || "card"}>
+                {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
+                {s.favorite && <span className="gallery-star">⭐</span>}
+                <div className="gallery-name">{s.result.player || "—"}</div>
+                <div className="gallery-val">{money(s.result.estimatedValue.mid, s.result.estimatedValue.currency)}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode === "pages" && (() => {
+        const PER = 9;
+        const pages = Math.max(1, Math.ceil(view.length / PER));
+        const p = Math.min(page, pages - 1);
+        const slice = view.slice(p * PER, p * PER + PER);
+        return (
+          <div className="card binder-book">
+            <div className="binder-page" onClick={(e) => { if (e.target === e.currentTarget && p < pages - 1) setPage(p + 1); }}>
+              {slice.map((s) => (
+                <button key={s.id} className="pocket" onClick={() => setDetailId(s.id)}>
+                  {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
+                  {s.favorite && <span className="gallery-star">⭐</span>}
+                </button>
+              ))}
+              {Array.from({ length: PER - slice.length }).map((_, i) => <div key={`e${i}`} className="pocket empty" />)}
+            </div>
+            <div className="binder-book-nav">
+              <button className="btn ghost small" disabled={p === 0} onClick={() => setPage(p - 1)}>‹ {t("Previous page")}</button>
+              <span className="muted" style={{ fontSize: 13 }}>{t("Page")} {p + 1} / {pages} · {t("tap the page to flip")}</span>
+              <button className="btn ghost small" disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>{t("Next page")} ›</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {detailId && (() => {
+        const s = view.find((x) => x.id === detailId);
+        if (!s) return null;
+        return (
+          <div className="backdrop" onClick={() => setDetailId(null)}>
+            <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(560px, 94vw)", maxHeight: "90vh" }}>
+              <button className="modal-x" onClick={() => setDetailId(null)}>✕</button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <button className={`btn ghost small ${s.favorite ? "flag-on" : ""}`} onClick={() => onToggleFlag(s.id, "favorite")}>{s.favorite ? "⭐" : "☆"} {t("Favorite")}</button>
+                <button className={`btn ghost small ${s.notNeeded ? "flag-on" : ""}`} onClick={() => onToggleFlag(s.id, "notNeeded")}>🔁 {t("For trade")}</button>
+                <button className="btn ghost small" onClick={() => { onRemove(s.id); setDetailId(null); }}>{t("Remove")}</button>
+              </div>
+              <ResultCard result={s.result} />
+            </div>
+          </div>
+        );
+      })()}
+
+      {mode === "list" && view.map((s) => {
         const r = s.result;
         const open = openId === s.id;
         return (

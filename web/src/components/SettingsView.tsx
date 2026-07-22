@@ -111,6 +111,18 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
       </div>
 
       <label className="field">
+        <span>{t("Binder layout")}</span>
+        <select
+          value={settings.binderMode || "list"}
+          onChange={(e) => set("binderMode", e.target.value as Settings["binderMode"])}
+        >
+          <option value="list">{t("List — detailed rows")}</option>
+          <option value="grid">{t("Grid — card gallery")}</option>
+          <option value="pages">{t("Binder — flip real pages like a binder")}</option>
+        </select>
+      </label>
+
+      <label className="field">
         <span>{t("Market / location (for regional pricing)")}</span>
         <select value={settings.region} onChange={(e) => set("region", e.target.value)}>
           <option value="">{t("Global / auto")}</option>
