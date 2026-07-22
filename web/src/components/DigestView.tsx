@@ -187,6 +187,11 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
               <button className="iconbtn" disabled={isToday} onClick={() => goTo(addDays(date, 1))} aria-label="Next day">›</button>
             </div>
             {digest && <h2 style={{ margin: "8px 0 0", fontSize: 22 }}>{digest.overview}</h2>}
+            {collected.length === 0 && (
+              <p className="muted" style={{ fontSize: 12, margin: "8px 0 0" }}>
+                {t("Scan cards into your binder to tailor this, or choose categories in Settings → Morning update.")}
+              </p>
+            )}
           </div>
         </div>
 
