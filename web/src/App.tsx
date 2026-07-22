@@ -718,7 +718,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           <div className="side-group">{t("Identify")}</div>
           {navBtn("scan", t("Scan"))}
           {navBtn("search", t("Search"))}
-          {navBtn("bulk", t("Bulk"))}
+          {isMobile() && navBtn("bulk", t("Bulk"))}
           <div className="side-group">{t("Trade")}</div>
           {navBtn("trade", t("Check trade"))}
           {navBtn("tradeup", <>📈 {t("Trade-Up")}</>)}
@@ -1028,6 +1028,7 @@ export default function App() {
         onLogout={() => {
           logout();
           setUser(null);
+          setShowAuth(true); // land on the login screen after logging out
         }}
         onDeleteAccount={() => {
           if (user) deleteAccount(user);
