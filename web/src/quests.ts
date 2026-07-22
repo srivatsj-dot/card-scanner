@@ -15,6 +15,10 @@ export interface QuestCounters {
   wishlist: number;
   briefingDays: number; // days the briefing was checked THIS week
   bestSetPct: number; // 0..1
+  binderValue: number; // total binder value (in the user's currency)
+  marketTrades: number; // completed trades with other collectors
+  distinctSets: number; // number of different sets owned
+  maxCardValue: number; // value of the most valuable card owned
 }
 
 export interface Quest {
@@ -108,17 +112,21 @@ export function makeQuests(week: string, now: QuestCounters, profile?: QuestProf
   const tradeN = p.collectorType === "money" ? choose([2, 3, 4], seed, 4) : choose([1, 2, 3], seed, 4);
   const briefN = choose([3, 4, 5], seed, 5);
   const wishN = choose([2, 3], seed, 6);
+  const valBump = choose([25, 50, 100], seed, 7); // grow binder value by this much
   const pool: Quest[] = [
-    { id: "trade", emoji: "🤝", title: `Evaluate ${tradeN} trades`, metric: "trades", target: now.trades + tradeN },
+    { id: "trade", emoji: "🤝", title: `Evaluate ${tradeN} trades in Check trade`, metric: "trades", target: now.trades + tradeN },
     { id: "briefing", emoji: "☀️", title: `Check the morning briefing on ${briefN} days`, metric: "briefingDays", target: briefN },
     { id: "wish", emoji: "♡", title: cat ? `Wishlist ${wishN} ${cat} cards` : `Add ${wishN} cards to your wishlist`, metric: "wishlist", target: now.wishlist + wishN },
+    { id: "value_up", emoji: "📈", title: `Grow your binder value by ${valBump}`, metric: "binderValue", target: Math.round(now.binderValue + valBump) },
+    { id: "market_trade", emoji: "🔁", title: "Complete a trade with another collector", metric: "marketTrades", target: now.marketTrades + 1 },
+    { id: "new_set", emoji: "🗂️", title: "Add a card from a set you don't own yet", metric: "distinctSets", target: now.distinctSets + 1 },
   ];
   if (p.inProgressSet) {
     pool.push({ id: "set_up", emoji: "🎴", title: "Raise your best set completion by 5%", metric: "bestSetPct", target: Math.min(1, now.bestSetPct + 0.05) });
   }
   // Deterministically rotate the pool order by week, then take 3.
   const ordered = pool
-    .map((q, i) => ({ q, k: roll(seed, 10 + i, 997) }))
+    .map((q, i) => ({ q, k: roll(seed, 20 + i, 997) }))
     .sort((a, b) => a.k - b.k)
     .map((x) => x.q);
   const chosen = ordered.slice(0, 3);
@@ -148,6 +156,8 @@ export function questProgress(state: QuestState, now: QuestCounters): QuestProgr
     const label =
       q.metric === "bestSetPct"
         ? `${Math.round(cur * 100)}%/${Math.round(q.target * 100)}%`
+        : q.metric === "binderValue"
+        ? `+${Math.round(Math.min(gained, goal))}/${Math.round(goal)}`
         : `${Math.min(gained, goal)}/${goal}`;
     return { ...q, progress, done: progress >= 1, label };
   });

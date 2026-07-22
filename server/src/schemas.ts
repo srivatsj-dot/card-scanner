@@ -21,7 +21,7 @@ export const scanSchema = {
     manufacturer: { ...nullableStr, description: "e.g. Topps, Panini, Bowman, Upper Deck." },
     setName: { ...nullableStr, description: "Set / product name." },
     cardNumber: nullableStr,
-    parallel: { ...nullableStr, description: "Parallel, refractor, or color variant if visible (e.g. 'Gold /50')." },
+    parallel: { ...nullableStr, description: "The parallel/variant name ONLY if the card is clearly a parallel — a printed parallel name, serial numbering, or an unmistakable refractor/colored-foil finish that differs from the base product (e.g. 'Gold /50'). A plain chrome/foil/shiny base card is NOT a parallel. Default to null when not clearly a parallel." },
     specialEdition: { ...nullableStr, description: "Rookie, autograph, relic/patch, serial-numbered, short print, etc." },
     serialNumber: { ...nullableStr, description: "Serial numbering printed on the card, e.g. '12/99'." },
     estimatedCondition: { ...nullableStr, description: "Rough condition guess from a single photo." },

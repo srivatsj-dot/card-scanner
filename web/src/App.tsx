@@ -47,6 +47,12 @@ function loadJSON<T>(key: string, fallback: T): T {
   return fallback;
 }
 
+// Phone vs desktop — bulk scan is a phone-only feature (a phone camera is far
+// better for snapping a tray of cards). Coarse pointer OR a mobile UA + narrow.
+const isMobile = () =>
+  (typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) ||
+  (typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches && window.innerWidth < 900);
+
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const isRateLimit = (e: unknown) =>
   (e as { status?: number })?.status === 429 ||
@@ -148,6 +154,10 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const questCounters: QuestCounters = {
     scans, trades, cards: saved.length, wishlist: wishlist.length,
     briefingDays: questState?.briefingDays || 0, bestSetPct,
+    binderValue: saved.reduce((s, c) => s + (c.result.estimatedValue?.mid || 0), 0),
+    marketTrades: tradeCounters.accepted,
+    distinctSets: new Set(saved.map((s) => (s.result.setName || "").trim().toLowerCase()).filter(Boolean)).size,
+    maxCardValue: saved.reduce((m, c) => Math.max(m, c.result.estimatedValue?.mid || 0), 0),
   };
 
   // Keep quests on the current week — regenerate from this week's baseline when
@@ -155,9 +165,11 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   useEffect(() => {
     const week = weekOf(dayISO());
     if (!questState || questState.week !== week) {
-      // Personalize from the collector's categories, style, wishlist, and sets.
+      // Personalize from what they ACTUALLY collect: cards in the binder first,
+      // then their preferred category. Do NOT fall back to the all-sports digest
+      // list — that wrongly assumed Pokémon for people who don't collect it.
       const owned = Array.from(new Set(saved.map((s) => (s.result.sport || "").trim()).filter(Boolean)));
-      const cats = owned.length ? owned : (settings.sport ? [settings.sport] : settings.digestSports || []);
+      const cats = owned.length ? owned : (settings.sport ? [settings.sport] : []);
       const fresh = makeQuests(week, questCounters, {
         categories: cats.slice(0, 5),
         collectorType: settings.collectorType,
@@ -761,7 +773,18 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {view === "search" && (
         <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
       )}
-      {view === "bulk" && <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />}
+      {view === "bulk" && (isMobile() ? (
+        <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />
+      ) : (
+        <div className="card" style={{ textAlign: "center", padding: "36px 22px" }}>
+          <div style={{ fontSize: 40 }}>📱</div>
+          <h2 style={{ margin: "8px 0 6px" }}>{t("Bulk scan is a phone feature")}</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            {t("Snapping a tray of cards works far better with your phone's camera. Open Card-O-Rama on your phone to bulk scan — or use single Scan here.")}
+          </p>
+          <button className="btn" style={{ marginTop: 6 }} onClick={() => setView("scan")}>📷 {t("Go to Scan")}</button>
+        </div>
+      ))}
       {view === "trade" && (
         <TradeView
           settings={aiSettings}
