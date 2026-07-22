@@ -8,7 +8,11 @@ interface Props {
   players: string[];
   wishlist: string[];
   cacheKey: string;
+  collected: string[]; // categories the user actually collects (from their binder)
 }
+
+// Keep each bucket short so the briefing is a quick read, not a wall of text.
+const MAX_PER_BUCKET = 4;
 
 // The archive (and the digest's news) officially begins here.
 const LAUNCH = "2026-06-19";
@@ -30,10 +34,11 @@ type Archive = Record<string, DigestResult>;
 
 function Bucket({ icon, title, tone, items }: { icon: string; title: string; tone: string; items: string[] }) {
   if (!items || items.length === 0) return null;
+  const shown = items.slice(0, MAX_PER_BUCKET);
   return (
     <div className={`digest-bucket tone-${tone}`}>
       <div className="digest-bucket-head">{icon} {title}</div>
-      <ul>{items.map((it, i) => <li key={i}>{it}</li>)}</ul>
+      <ul>{shown.map((it, i) => <li key={i}>{it}</li>)}</ul>
     </div>
   );
 }
@@ -87,7 +92,12 @@ function newestCached(arc: Archive, today: string): string {
   return keys.length ? keys[keys.length - 1] : today;
 }
 
-export default function DigestView({ settings, players, wishlist, cacheKey }: Props) {
+export default function DigestView({ settings, players, wishlist, cacheKey, collected }: Props) {
+  // Personalize the briefing to what the collector actually owns: when their
+  // binder has cards, only cover those categories (so a no-Pokémon collector
+  // never gets an all-Pokémon briefing). Fall back to their chosen digest
+  // categories only when the binder is empty.
+  const sportsFollowed = collected.length ? collected : settings.digestSports;
   const t = useT();
   const today = todayStr();
   // Start from what's already cached so there's no loading state to see.
@@ -110,8 +120,8 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
     setBusy(true);
     setError(null);
     const got = force
-      ? await regenerateDigest(cacheKey, target, settings.digestSports, players, wishlist, settings)
-      : await ensureDigest(cacheKey, target, settings.digestSports, players, wishlist, settings);
+      ? await regenerateDigest(cacheKey, target, sportsFollowed, players, wishlist, settings)
+      : await ensureDigest(cacheKey, target, sportsFollowed, players, wishlist, settings);
     setBusy(false);
     if (got) {
       refresh();
@@ -128,7 +138,7 @@ export default function DigestView({ settings, players, wishlist, cacheKey }: Pr
     let alive = true;
     const nothingToShow = !readDigestArchive(cacheKey)[date]; // first-ever open
     if (nothingToShow) setBusy(true);
-    ensureDigest(cacheKey, today, settings.digestSports, players, wishlist, settings).then((got) => {
+    ensureDigest(cacheKey, today, sportsFollowed, players, wishlist, settings).then((got) => {
       if (!alive) return;
       if (nothingToShow) setBusy(false);
       if (got) {

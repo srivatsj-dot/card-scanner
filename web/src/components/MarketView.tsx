@@ -289,6 +289,12 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
 
           {their && (
             <>
+              {counteringId && (
+                <div className="card" style={{ borderColor: "var(--accent)" }}>
+                  🔄 {t("Countering")} {their.display}{t("'s offer — adjust the cards below (swap a card, add one, or remove one) and send it back.")}
+                  <button className="btn ghost small" style={{ marginLeft: 8 }} onClick={() => { setCounteringId(null); setWant(new Set()); setGive(new Set()); }}>{t("Start over")}</button>
+                </div>
+              )}
               <div className="card">
                 <h3 style={{ marginTop: 0 }}>{their.display}{t("'s binder — pick what you WANT")}</h3>
                 {their.cards.length === 0 ? (

@@ -290,6 +290,22 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       ),
     [saved]
   );
+  // The digest categories the collector actually owns — so their briefing covers
+  // only what they collect (a no-Pokémon binder never yields an all-Pokémon feed).
+  const collectedCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const s of saved) {
+      const sp = (s.result.sport || "").toLowerCase();
+      if (sp.includes("pok")) cats.add("Pokémon");
+      else if (sp.includes("base")) cats.add("Baseball");
+      else if (sp.includes("basket")) cats.add("Basketball");
+      else if (sp.includes("hockey")) cats.add("Hockey");
+      else if (sp.includes("cricket")) cats.add("Cricket");
+      else if (sp.includes("soccer") || sp.includes("futbol") || sp.includes("fútbol")) cats.add("Soccer");
+      else if (sp.includes("football") || sp.includes("nfl")) cats.add("Football");
+    }
+    return Array.from(cats);
+  }, [saved]);
   // Wishlist cards, for the digest's "from your wishlist" section.
   const digestWishlist = useMemo(
     () => Array.from(new Set(wishlist.map((w) => (w.result ? describeCard(w.result) : w.text)).filter(Boolean))),
@@ -765,7 +781,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         />
       )}
       {view === "today" && (
-        <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} />
+        <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} collected={collectedCategories} />
       )}
       {view === "scan" && (
         <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
