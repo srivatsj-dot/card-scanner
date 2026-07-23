@@ -224,7 +224,7 @@ export default function ResultCard({
               )}
             </div>
             <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
-              {tr("Upgrades worth chasing, and fair same-value swaps you could ask for if you traded this card.")}
+              {tr("Upgrades worth chasing, and comparable-caliber players you could fairly swap for — judged on the player, not just the price.")}
             </p>
             {merged.map((x, i) => (
               <div className="trade-rec" key={i}>
