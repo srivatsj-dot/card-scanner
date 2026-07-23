@@ -147,7 +147,7 @@ async function authGet<T>(path: string): Promise<T> {
   if (!res.ok) throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
   return data as T;
 }
-export interface MarketCardDTO { id: string; label: string; sport: string; value: number; currency: string; thumb: string; favorite: boolean }
+export interface MarketCardDTO { id: string; label: string; sport: string; value: number; currency: string; thumb: string; favorite: boolean; detail?: import("./types").ScanResult | null }
 export interface MarketOfferDTO {
   id: string; fromUser: string; fromDisplay: string; toUser: string; toDisplay: string;
   give: unknown[]; want: unknown[]; status: string; createdAt: number; respondedAt: number | null;

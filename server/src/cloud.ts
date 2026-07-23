@@ -156,7 +156,7 @@ const cardLabel = (c: BinderCard): string => {
   return [r.year, r.manufacturer, r.setName, r.player].map((x) => (x || "").toString().trim()).filter(Boolean).join(" ") || "Card";
 };
 
-export interface MarketCard { id: string; label: string; sport: string; value: number; currency: string; thumb: string; favorite: boolean }
+export interface MarketCard { id: string; label: string; sport: string; value: number; currency: string; thumb: string; favorite: boolean; detail: unknown }
 export function toMarketCard(c: BinderCard): MarketCard {
   const r = c.result || {};
   return {
@@ -167,6 +167,8 @@ export function toMarketCard(c: BinderCard): MarketCard {
     currency: (r.estimatedValue?.currency || "USD").toString(),
     thumb: typeof c.thumbnail === "string" ? c.thumbnail : "",
     favorite: (c as { favorite?: boolean }).favorite === true,
+    // The full scan result, so a trade partner can view ALL of a card's info.
+    detail: c.result || null,
   };
 }
 

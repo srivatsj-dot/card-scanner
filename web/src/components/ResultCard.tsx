@@ -47,8 +47,10 @@ export default function ResultCard({
     );
   }
 
-  const v = result.estimatedValue;
-  const score = Math.max(0, Math.min(100, Math.round(result.rating.score)));
+  const v = result.estimatedValue || { low: 0, mid: 0, high: 0, currency: "USD", note: "" };
+  const rating = result.rating || { score: 0, label: "", summary: "" };
+  const outlook = result.playerOutlook || { trend: "unknown", summary: "" };
+  const score = Math.max(0, Math.min(100, Math.round(rating.score || 0)));
 
   return (
     <>
@@ -98,7 +100,7 @@ export default function ResultCard({
               <div className="inner">{score}</div>
             </div>
             <div className="muted" style={{ fontSize: 12, marginTop: 6, fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
-              {result.rating.label}
+              {rating.label}
             </div>
           </div>
         </div>
@@ -130,14 +132,14 @@ export default function ResultCard({
 
         <div className="card">
           <h3>{tr("Player outlook")}</h3>
-          <div style={{ marginBottom: 8 }}>{trendPill(result.playerOutlook.trend, tr)}</div>
-          <p style={{ marginTop: 0, fontSize: 15 }}>{result.playerOutlook.summary}</p>
+          <div style={{ marginBottom: 8 }}>{trendPill(outlook.trend || "unknown", tr)}</div>
+          <p style={{ marginTop: 0, fontSize: 15 }}>{outlook.summary}</p>
         </div>
       </div>
 
       <div className="card">
         <h3>{tr("Overall take")}</h3>
-        <p style={{ marginTop: 0 }}>{result.rating.summary}</p>
+        <p style={{ marginTop: 0 }}>{rating.summary}</p>
         <p style={{ marginBottom: 0 }} className="muted">{result.generalAssessment}</p>
       </div>
 
@@ -164,9 +166,9 @@ export default function ResultCard({
           <div style={{ marginBottom: 8 }}>
             <span className="pill">{result.conditionReport.grade}</span>
           </div>
-          {result.conditionReport.flaws.length > 0 ? (
+          {(result.conditionReport.flaws?.length ?? 0) > 0 ? (
             <ul style={{ marginTop: 0 }}>
-              {result.conditionReport.flaws.map((f, i) => (
+              {(result.conditionReport.flaws || []).map((f, i) => (
                 <li key={i} className="warn">{f}</li>
               ))}
             </ul>
@@ -177,7 +179,7 @@ export default function ResultCard({
         </div>
       )}
 
-      {result.hiddenInsights.length > 0 && (
+      {(result.hiddenInsights?.length ?? 0) > 0 && (
         <div className="card">
           <h3>{tr("Stats you might not notice")}</h3>
           {result.hiddenInsights.map((ins, i) => (
@@ -194,7 +196,7 @@ export default function ResultCard({
         // value asks were two near-identical lists; merge them, tag each by kind,
         // and drop duplicate players so there's one clear list.
         const ideas = [
-          ...result.recommendedTrades.map((t) => ({
+          ...(result.recommendedTrades || []).map((t) => ({
             player: t.player, card: t.cardSuggestion, value: t.comparableValue,
             reason: t.reason, kind: "upgrade" as const,
           })),
@@ -243,7 +245,7 @@ export default function ResultCard({
         );
       })()}
 
-      {result.warnings.length > 0 && (
+      {(result.warnings?.length ?? 0) > 0 && (
         <div className="card">
           <h3>{tr("Heads up")}</h3>
           <ul style={{ margin: 0, paddingLeft: 18 }}>

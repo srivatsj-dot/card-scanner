@@ -10,6 +10,7 @@ import {
 } from "../cloud";
 import { useT } from "../translator";
 import GuestGate from "./GuestGate";
+import ResultCard from "./ResultCard";
 
 interface Props {
   saved: SavedCard[];
@@ -607,19 +608,28 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
         </>
       )}
 
-      {/* Tap ⓘ on one of their cards to see its info without selecting it. */}
+      {/* Tap ⓘ on one of their cards to see ALL of its info without selecting it. */}
       {infoCard && (
         <div className="backdrop" onClick={() => setInfoCard(null)}>
-          <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(420px, 92vw)", textAlign: "center" }}>
+          <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(600px, 96vw)", maxHeight: "90vh", overflowY: "auto" }}>
             <button className="modal-x" onClick={() => setInfoCard(null)}>✕</button>
-            {infoCard.thumb
-              ? <img src={infoCard.thumb} alt="" style={{ width: "70%", maxWidth: 240, borderRadius: 10, margin: "6px auto 10px", display: "block" }} />
-              : <div style={{ fontSize: 60, margin: "10px 0" }}>🃏</div>}
-            <h3 style={{ margin: "0 0 6px" }}>{infoCard.label}</h3>
-            {infoCard.sport && <span className="pill">{infoCard.sport}</span>}
-            {infoCard.favorite && <span className="pill gold">⭐ {t("Their favorite")}</span>}
-            <div className="value-big" style={{ marginTop: 10 }}>{money(infoCard.value, infoCard.currency)}</div>
-            <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>{t("Estimated value")}</p>
+            {infoCard.detail ? (
+              <>
+                {infoCard.favorite && <div style={{ marginBottom: 8 }}><span className="pill gold">⭐ {t("Their favorite")}</span></div>}
+                <ResultCard result={infoCard.detail} />
+              </>
+            ) : (
+              <div style={{ textAlign: "center" }}>
+                {infoCard.thumb
+                  ? <img src={infoCard.thumb} alt="" style={{ width: "70%", maxWidth: 240, borderRadius: 10, margin: "6px auto 10px", display: "block" }} />
+                  : <div style={{ fontSize: 60, margin: "10px 0" }}>🃏</div>}
+                <h3 style={{ margin: "0 0 6px" }}>{infoCard.label}</h3>
+                {infoCard.sport && <span className="pill">{infoCard.sport}</span>}
+                {infoCard.favorite && <span className="pill gold">⭐ {t("Their favorite")}</span>}
+                <div className="value-big" style={{ marginTop: 10 }}>{money(infoCard.value, infoCard.currency)}</div>
+                <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>{t("Estimated value")}</p>
+              </div>
+            )}
           </div>
         </div>
       )}

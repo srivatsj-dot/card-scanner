@@ -394,14 +394,18 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     },
   ];
 
+  // A real web photo of the scanned card (from eBay image-search), used to fill
+  // the binder frame when we can't derive one from the priced listings.
+  let scanWebImage = "";
   try {
     // Photo-based identification boosters (run together): both feed the model a
     // strong hint of what the card is, from matching the EXACT photo online.
     if (images.length > 0) {
       const [guess, ebayMatch] = await Promise.all([
         hasVision ? webDetect(images[0].imageBase64).catch(() => null) : Promise.resolve(null),
-        hasEbay ? ebayImageSearch(images[0].imageBase64, settings?.region).catch(() => ({ titles: [], price: null })) : Promise.resolve({ titles: [] as string[], price: null }),
+        hasEbay ? ebayImageSearch(images[0].imageBase64, settings?.region).catch(() => ({ titles: [], price: null, image: "" })) : Promise.resolve({ titles: [] as string[], price: null, image: "" }),
       ]);
+      scanWebImage = ebayMatch.image || "";
       // eBay image search: matching listing TITLES already carry the right
       // player/set/year/number — the strongest single ID signal we have.
       if (ebayMatch.titles.length) {
@@ -437,6 +441,9 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     } else {
       const ebayApplied = await applyEbayPrice(result, settings);
       if (!ebayApplied && isPokemon(result)) await applyPokemonPrice(result); // free real Pokémon prices
+      // Camera/upload scans: if pricing didn't yield a photo, fall back to the
+      // eBay image-search match so the binder still fills with a real card photo.
+      if (!result.imageUrl && scanWebImage && result.identified) result.imageUrl = scanWebImage;
     }
     res.json(result);
   } catch (err) {

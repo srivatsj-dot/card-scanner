@@ -124,8 +124,8 @@ export async function ebayPrice(query: string, region?: string): Promise<EbayPri
 export async function ebayImageSearch(
   imageBase64: string,
   region?: string
-): Promise<{ titles: string[]; price: EbayPrice | null }> {
-  if (!hasEbay || !imageBase64) return { titles: [], price: null };
+): Promise<{ titles: string[]; price: EbayPrice | null; image: string }> {
+  if (!hasEbay || !imageBase64) return { titles: [], price: null, image: "" };
   try {
     const tok = await getToken();
     const market = (region && MARKETPLACE[region]) || "EBAY_US";
@@ -139,12 +139,16 @@ export async function ebayImageSearch(
       },
       body: JSON.stringify({ image }),
     });
-    if (!res.ok) return { titles: [], price: null };
+    if (!res.ok) return { titles: [], price: null, image: "" };
     const data = (await res.json()) as { itemSummaries?: Item[] };
     const items = data.itemSummaries || [];
     const titles = items.map((it) => it.title || "").filter(Boolean).slice(0, 8);
-    return { titles, price: summarize(items) };
+    const price = summarize(items);
+    // A real web photo of the matched card: the median-priced listing's image
+    // (from summarize), else the first real listing that has one.
+    const photo = price?.image || itemImage(items.filter(isRealCard).find((it) => itemImage(it)));
+    return { titles, price, image: photo || "" };
   } catch {
-    return { titles: [], price: null };
+    return { titles: [], price: null, image: "" };
   }
 }

@@ -10,6 +10,7 @@ import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
 import ScanView from "./components/ScanView";
 import SearchView from "./components/SearchView";
+import ErrorBoundary from "./components/ErrorBoundary";
 import BulkView from "./components/BulkView";
 import TradeView from "./components/TradeView";
 import SettingsView from "./components/SettingsView";
@@ -822,10 +823,14 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} collected={collectedCategories} />
       )}
       {view === "scan" && (
-        <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
+        <ErrorBoundary>
+          <ScanView settings={aiSettings} result={scan} onResult={(r) => { setScan(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
+        </ErrorBoundary>
       )}
       {view === "search" && (
-        <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
+        <ErrorBoundary>
+          <SearchView settings={aiSettings} result={search} onResult={(r) => { setSearch(r); if (r) { setLastResult(r); if (r.identified) setScans((n) => n + 1); } }} onSave={saveCard} onWishAll={addWishMany} onWishResult={(r) => addWishResults([r])} />
+        </ErrorBoundary>
       )}
       {view === "bulk" && (isMobile() ? (
         <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />
@@ -863,15 +868,17 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         />
       ))}
       {view === "market" && (
-        <MarketView
-          saved={saved}
-          settings={aiSettings}
-          cloudOn={cloudActive()}
-          isGuest={isGuest}
-          onRequireLogin={onRequestLogin}
-          onTradeEvent={recordTrade}
-          myWishlist={digestWishlist}
-        />
+        <ErrorBoundary>
+          <MarketView
+            saved={saved}
+            settings={aiSettings}
+            cloudOn={cloudActive()}
+            isGuest={isGuest}
+            onRequireLogin={onRequestLogin}
+            onTradeEvent={recordTrade}
+            myWishlist={digestWishlist}
+          />
+        </ErrorBoundary>
       )}
       {view === "later" && (isGuest ? (
         <GuestGate feature="Save trades and cards to come back to later." onLogin={onRequestLogin} />
