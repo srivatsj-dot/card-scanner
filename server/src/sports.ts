@@ -287,11 +287,15 @@ export async function pokemonFacts(date: string): Promise<SportFacts | null> {
   const tournaments = Array.isArray(list) ? list : list?.tournaments || [];
   if (!Array.isArray(tournaments) || tournaments.length === 0) return null;
 
-  // Tournaments that finished on the window day, biggest first.
+  // Tournaments that finished on the window day, biggest first. Only SIGNIFICANT
+  // events — small online locals (a handful of players) are noise, not news, so
+  // require a real field size and keep just the top few.
+  const MIN_PLAYERS = 32;
   const onDay = tournaments
     .filter((t: any) => String(t?.date || t?.endDate || t?.startDate || "").slice(0, 10) === date)
+    .filter((t: any) => (Number(t?.players) || 0) >= MIN_PLAYERS)
     .sort((a: any, b: any) => (Number(b?.players) || 0) - (Number(a?.players) || 0))
-    .slice(0, 8);
+    .slice(0, 3);
   if (onDay.length === 0) return null;
 
   const lines: string[] = [];
