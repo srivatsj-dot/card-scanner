@@ -52,9 +52,17 @@ const MARKETPLACE: Record<string, string> = {
 
 type Item = { title?: string; price?: { value?: string; currency?: string } };
 
-// Robust price range from a set of listings; trims outliers / graded lots.
+// Reprints, novelty/custom cards, stickers, lots, and "read description" junk
+// pollute a search with cheap listings that aren't the real card — this is how a
+// genuine grail (e.g. a T206 Wagner) shows up as "$20". Drop them.
+const JUNK = /\b(reprint|re-print|\brp\b|repro|reproduction|novelty|aceo|sticker|decal|custom|fantasy|facsimile|proxy|art card|fridge magnet|magnet|poster|mini|read desc|not real|replica|homage|fan art)\b/i;
+const isRealCard = (it: Item) => !JUNK.test(it.title || "");
+
+// Robust price range from a set of listings; trims outliers / graded lots and
+// excludes obvious reprints/novelty items.
 function summarize(items: Item[]): EbayPrice | null {
-  const prices = items
+  const real = items.filter(isRealCard);
+  const prices = real
     .map((it) => Number(it.price?.value))
     .filter((n) => Number.isFinite(n) && n > 0)
     .sort((a, b) => a - b);

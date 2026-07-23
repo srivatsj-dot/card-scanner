@@ -220,7 +220,6 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               <button className="modal-x" onClick={() => setDetailId(null)}>✕</button>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                 <button className={`btn ghost small ${s.favorite ? "flag-on" : ""}`} onClick={() => onToggleFlag(s.id, "favorite")}>{s.favorite ? "⭐" : "☆"} {t("Favorite")}</button>
-                <button className={`btn ghost small ${s.notNeeded ? "flag-on" : ""}`} onClick={() => onToggleFlag(s.id, "notNeeded")}>🔁 {t("For trade")}</button>
                 <button className="btn ghost small" onClick={() => { onRemove(s.id); setDetailId(null); }}>{t("Remove")}</button>
               </div>
               <ResultCard result={s.result} />
@@ -249,7 +248,6 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                   {r.sport && <span className="pill">{r.sport}</span>}
                   {r.parallel && <span className="pill gold">{r.parallel}</span>}
                   {s.favorite && <span className="pill gold">⭐ {t("Favorite")}</span>}
-                  {s.notNeeded && <span className="pill blue">🔁 {t("For trade")}</span>}
                   <ChangeBadge card={s} />
                 </div>
               </div>
@@ -275,13 +273,6 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                     title={t("Favorite — protect from trade suggestions")}
                   >
                     {s.favorite ? "⭐" : "☆"}
-                  </button>
-                  <button
-                    className={`btn ghost small ${s.notNeeded ? "flag-on" : ""}`}
-                    onClick={() => onToggleFlag(s.id, "notNeeded")}
-                    title={t("Mark not needed — offer this up in trades")}
-                  >
-                    🔁
                   </button>
                   <button className="btn ghost small" onClick={() => setCamFor(s.id)} disabled={checking === s.id} title={t("Re-scan to log condition")}>
                     {checking === s.id ? <><span className="spinner" />{t("Checking…")}</> : `🩺 ${t("Condition")}`}

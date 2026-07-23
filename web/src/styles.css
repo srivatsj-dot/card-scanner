@@ -1037,6 +1037,9 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
 }
 .market-tile.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.market-tile.outline-green { border-color: #3ad29f; box-shadow: 0 0 0 2px #3ad29f inset; }
+.market-tile.outline-yellow { border-color: #e8c24a; box-shadow: 0 0 0 2px #e8c24a inset; }
+.market-tile.sel.outline-green, .market-tile.sel.outline-yellow { box-shadow: 0 0 0 2px var(--accent) inset; }
 .market-tile img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 6px; }
 .market-tile-ph { width: 100%; aspect-ratio: 3/4; display: grid; place-items: center; font-size: 28px; background: var(--panel); border-radius: 6px; }
 .market-tile-label { font-size: 11px; line-height: 1.25; max-height: 2.5em; overflow: hidden; font-family: ui-sans-serif, system-ui, sans-serif; }

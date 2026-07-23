@@ -832,6 +832,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           isGuest={isGuest}
           onRequireLogin={onRequestLogin}
           onTradeEvent={recordTrade}
+          myWishlist={digestWishlist}
         />
       )}
       {view === "later" && (isGuest ? (

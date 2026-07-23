@@ -147,13 +147,13 @@ async function authGet<T>(path: string): Promise<T> {
   if (!res.ok) throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
   return data as T;
 }
-export interface MarketCardDTO { id: string; label: string; sport: string; value: number; currency: string; thumb: string }
+export interface MarketCardDTO { id: string; label: string; sport: string; value: number; currency: string; thumb: string; favorite: boolean }
 export interface MarketOfferDTO {
   id: string; fromUser: string; fromDisplay: string; toUser: string; toDisplay: string;
   give: unknown[]; want: unknown[]; status: string; createdAt: number; respondedAt: number | null;
 }
 export function marketLookup(username: string) {
-  return authGet<{ username: string; display: string; cards: MarketCardDTO[] }>(`/api/market/binder/${encodeURIComponent(username)}`);
+  return authGet<{ username: string; display: string; cards: MarketCardDTO[]; wishlist: string[]; avatar: string }>(`/api/market/binder/${encodeURIComponent(username)}`);
 }
 export function marketOffers() {
   return authGet<{ incoming: MarketOfferDTO[]; outgoing: MarketOfferDTO[] }>(`/api/market/offers`);

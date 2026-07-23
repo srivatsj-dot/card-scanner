@@ -156,7 +156,7 @@ const cardLabel = (c: BinderCard): string => {
   return [r.year, r.manufacturer, r.setName, r.player].map((x) => (x || "").toString().trim()).filter(Boolean).join(" ") || "Card";
 };
 
-export interface MarketCard { id: string; label: string; sport: string; value: number; currency: string; thumb: string }
+export interface MarketCard { id: string; label: string; sport: string; value: number; currency: string; thumb: string; favorite: boolean }
 export function toMarketCard(c: BinderCard): MarketCard {
   const r = c.result || {};
   return {
@@ -166,16 +166,34 @@ export function toMarketCard(c: BinderCard): MarketCard {
     value: Number(r.estimatedValue?.mid) || 0,
     currency: (r.estimatedValue?.currency || "USD").toString(),
     thumb: typeof c.thumbnail === "string" ? c.thumbnail : "",
+    favorite: (c as { favorite?: boolean }).favorite === true,
   };
 }
 
-/** Public binder view for the marketplace: look someone up by username/display. */
-export async function lookupBinder(username: string): Promise<{ username: string; display: string; cards: MarketCard[] } | null> {
+// A user's wishlist labels (for green "they want this" outlines in trades).
+async function wishlistOf(userId: number): Promise<string[]> {
+  const r = await db().query(`SELECT blob FROM user_data WHERE user_id=$1`, [userId]);
+  const raw = r.rows[0]?.blob?.wishlist;
+  if (typeof raw !== "string") return [];
+  try {
+    const a = JSON.parse(raw);
+    if (!Array.isArray(a)) return [];
+    return a.map((w: { text?: string; result?: { player?: string; setName?: string; year?: string } }) =>
+      (w?.result ? [w.result.year, w.result.setName, w.result.player].filter(Boolean).join(" ") : w?.text || "")
+    ).map((s: string) => s.trim()).filter(Boolean);
+  } catch { return []; }
+}
+
+/** Public binder view for the marketplace: look someone up by username/display,
+ * plus their wishlist and avatar so the client can show wants/favorites. */
+export async function lookupBinder(username: string): Promise<{ username: string; display: string; cards: MarketCard[]; wishlist: string[]; avatar: string } | null> {
   if (!hasCloud) return null;
   const u = await findUserByName(username);
   if (!u) return null;
   const cards = (await binderOf(u.id)).filter((c) => c.id != null).map(toMarketCard);
-  return { username: u.username, display: u.display, cards };
+  const wishlist = await wishlistOf(u.id);
+  const avatar = String((await settingOf(u.id, "avatar")) || "");
+  return { username: u.username, display: u.display, cards, wishlist, avatar };
 }
 
 export interface MarketOffer {
@@ -207,6 +225,10 @@ export async function createMarketOffer(
   if (!to) throw new CloudError(404, "No collector found with that username.");
   if (to.id === fromUserId) throw new CloudError(400, "You can't trade with yourself.");
   if (!give.length || !want.length) throw new CloudError(400, "Pick at least one card on each side.");
+  // You can only trade with friends.
+  if (!(await areFriends(fromUserId, to.id))) {
+    throw new CloudError(403, `You can only trade with friends. Add ${to.display} as a friend first.`);
+  }
   if (!(await canSendOfferTo(fromUserId, to.id))) {
     throw new CloudError(403, `${to.display} only accepts trade requests from certain collectors.`);
   }

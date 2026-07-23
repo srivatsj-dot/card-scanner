@@ -20,6 +20,7 @@ interface Props {
   prefillUser?: string | null; // auto-look-up this username on open (from People search)
   onPrefillDone?: () => void;
   onTradeEvent?: (evt: { type: "made" | "accepted" | "rejected"; cards?: number }) => void;
+  myWishlist: string[]; // my wishlist labels, to green-outline their cards I want
 }
 
 // Turn one of my SavedCards into the lightweight shape the server stores/moves.
@@ -30,11 +31,22 @@ const toDTO = (c: SavedCard): MarketCardDTO => ({
   value: c.result.estimatedValue?.mid || 0,
   currency: c.result.estimatedValue?.currency || "USD",
   thumb: c.thumbnail || "",
+  favorite: c.favorite === true,
 });
 
-function CardTile({ c, on, onClick }: { c: MarketCardDTO; on: boolean; onClick: () => void }) {
+// Fuzzy: does a card label match anything on a wishlist (≥2 shared key tokens)?
+function matchesAny(label: string, list: string[]): boolean {
+  const tokens = label.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 2);
+  if (tokens.length < 2 || !list.length) return false;
+  return list.some((w) => {
+    const wl = w.toLowerCase();
+    return tokens.filter((tok) => wl.includes(tok)).length >= 2;
+  });
+}
+
+function CardTile({ c, on, outline, onClick }: { c: MarketCardDTO; on: boolean; outline?: "green" | "yellow"; onClick: () => void }) {
   return (
-    <button className={`market-tile ${on ? "sel" : ""}`} onClick={onClick} title={c.label}>
+    <button className={`market-tile ${on ? "sel" : ""} ${outline ? `outline-${outline}` : ""}`} onClick={onClick} title={c.label}>
       {c.thumb ? <img src={c.thumb} alt="" /> : <div className="market-tile-ph">🃏</div>}
       <div className="market-tile-label">{c.label}</div>
       <div className="market-tile-val">{money(c.value, c.currency)}</div>
@@ -42,7 +54,7 @@ function CardTile({ c, on, onClick }: { c: MarketCardDTO; on: boolean; onClick: 
   );
 }
 
-export default function MarketView({ saved, settings, cloudOn, isGuest, onRequireLogin, prefillUser, onPrefillDone, onTradeEvent }: Props) {
+export default function MarketView({ saved, settings, cloudOn, isGuest, onRequireLogin, prefillUser, onPrefillDone, onTradeEvent, myWishlist }: Props) {
   const t = useT();
   const [tab, setTab] = useState<"find" | "offers" | "friends">("find");
   // Friends
@@ -59,7 +71,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   const [toast, setToast] = useState<string | null>(null);
   const lastMsgId = useRef(0);
   const [uname, setUname] = useState("");
-  const [their, setTheir] = useState<{ display: string; username: string; cards: MarketCardDTO[] } | null>(null);
+  const [their, setTheir] = useState<{ display: string; username: string; cards: MarketCardDTO[]; wishlist: string[] } | null>(null);
   const [lookErr, setLookErr] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
   const [want, setWant] = useState<Set<string>>(new Set());
@@ -67,6 +79,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   const [counteringId, setCounteringId] = useState<string | null>(null); // incoming offer being countered
+  const [buildFair, setBuildFair] = useState<TradeResult | null>(null); // fairness of the offer you're building
   const [offers, setOffers] = useState<{ incoming: MarketOfferDTO[]; outgoing: MarketOfferDTO[] } | null>(null);
   const [fairness, setFairness] = useState<Record<string, TradeResult>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -207,6 +220,19 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
     }
   }
 
+  // Check fairness of the offer you're BUILDING (before sending): you give the
+  // selected give-cards, you receive the selected want-cards.
+  async function checkBuildFairness() {
+    const giveList = mine.filter((c) => give.has(c.id));
+    const wantList = their?.cards.filter((c) => want.has(c.id)) || [];
+    if (!giveList.length || !wantList.length) return;
+    setBusy("buildfair");
+    try {
+      const mk = (arr: { label: string }[]) => arr.map((c, i) => ({ id: i + 1, text: c.label }));
+      setBuildFair(await evaluateTrade(mk(giveList), mk(wantList), settings));
+    } catch { /* ignore */ } finally { setBusy(null); }
+  }
+
   // Check fairness of an INCOMING offer from my perspective: I give `want`, I
   // receive `give`.
   async function checkFair(o: MarketOfferDTO) {
@@ -297,12 +323,19 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
               )}
               <div className="card">
                 <h3 style={{ marginTop: 0 }}>{their.display}{t("'s binder — pick what you WANT")}</h3>
+                <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
+                  🟩 {t("outlined = on your wishlist")} · 🟨 {t("= one of their favorites")}
+                </p>
                 {their.cards.length === 0 ? (
                   <p className="muted">{t("This collector's binder is empty.")}</p>
                 ) : (
                   <div className="market-grid">
                     {their.cards.map((c) => (
-                      <CardTile key={c.id} c={c} on={want.has(c.id)} onClick={() => toggle(want, setWant, c.id)} />
+                      <CardTile
+                        key={c.id} c={c} on={want.has(c.id)}
+                        outline={matchesAny(c.label, myWishlist) ? "green" : c.favorite ? "yellow" : undefined}
+                        onClick={() => toggle(want, setWant, c.id)}
+                      />
                     ))}
                   </div>
                 )}
@@ -310,40 +343,63 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
 
               <div className="card">
                 <h3 style={{ marginTop: 0 }}>{t("Your binder — pick what you'll GIVE")}</h3>
+                <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>🟩 {t("outlined = on their wishlist")}</p>
                 {mine.length === 0 ? (
                   <p className="muted">{t("Your binder is empty — scan and save some cards first.")}</p>
                 ) : (
                   <div className="market-grid">
                     {mine.map((c) => (
-                      <CardTile key={c.id} c={c} on={give.has(c.id)} onClick={() => toggle(give, setGive, c.id)} />
+                      <CardTile
+                        key={c.id} c={c} on={give.has(c.id)}
+                        outline={matchesAny(c.label, their.wishlist) ? "green" : undefined}
+                        onClick={() => toggle(give, setGive, c.id)}
+                      />
                     ))}
                   </div>
                 )}
               </div>
 
-              <div className="card market-summary">
-                <div>
-                  <div className="muted" style={{ fontSize: 13 }}>{t("You give")} · {money(giveTotal, settings.currency)}</div>
-                  <div>{giveCards.map((c) => c.label).join(", ") || "—"}</div>
-                  <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>{t("You get")} · {money(wantTotal, settings.currency)}</div>
-                  <div>{wantCards.map((c) => c.label).join(", ") || "—"}</div>
+              <div className="card">
+                <div className="market-summary">
+                  <div>
+                    <div className="muted" style={{ fontSize: 13 }}>{t("You give")} · {money(giveTotal, settings.currency)}</div>
+                    <div>{giveCards.map((c) => c.label).join(", ") || "—"}</div>
+                    <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>{t("You get")} · {money(wantTotal, settings.currency)}</div>
+                    <div>{wantCards.map((c) => c.label).join(", ") || "—"}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn secondary" disabled={busy === "buildfair" || !giveCards.length || !wantCards.length} onClick={checkBuildFairness}>
+                      {busy === "buildfair" ? <><span className="spinner" />{t("Checking…")}</> : `⚖️ ${t("Check fairness")}`}
+                    </button>
+                    <button className="btn" onClick={send} disabled={sending || !giveCards.length || !wantCards.length}>
+                      {sending ? <><span className="spinner" />{t("Sending…")}</> : counteringId ? `🔄 ${t("Send counter-offer")}` : `📤 ${t("Send offer")}`}
+                    </button>
+                  </div>
                 </div>
-                <button className="btn" onClick={send} disabled={sending || !giveCards.length || !wantCards.length}>
-                  {sending ? <><span className="spinner" />{t("Sending…")}</> : counteringId ? `🔄 ${t("Send counter-offer")}` : `📤 ${t("Send offer")}`}
-                </button>
+                {buildFair && (
+                  <div style={{ marginTop: 10 }}>
+                    {fairPill(buildFair.fairness)}{" "}
+                    <span className="muted" style={{ fontSize: 14 }}>{buildFair.valueGapNote}</span>
+                  </div>
+                )}
               </div>
             </>
           )}
         </>
       )}
 
-      {tab === "offers" && (
+      {tab === "offers" && (() => {
+        // Only PENDING offers park here — once accepted/declined they leave the
+        // list (the cards swap + a center popup is the record).
+        const incoming = (offers?.incoming || []).filter((o) => o.status === "pending");
+        const outgoing = (offers?.outgoing || []).filter((o) => o.status === "pending");
+        return (
         <>
           <div className="card">
             <h3 style={{ marginTop: 0 }}>📥 {t("Incoming requests")}</h3>
-            {!offers?.incoming.length ? (
+            {!incoming.length ? (
               <p className="muted">{t("No incoming offers yet.")}</p>
-            ) : offers.incoming.map((o) => {
+            ) : incoming.map((o) => {
               const f = fairness[o.id];
               const pending = o.status === "pending";
               const lbl = (arr: unknown[]) => (arr as { label?: string }[]).map((c) => c.label).join(", ");
@@ -376,27 +432,26 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>📤 {t("Offers you sent")}</h3>
-            {!offers?.outgoing.length ? (
-              <p className="muted">{t("You haven't sent any offers.")}</p>
-            ) : offers.outgoing.map((o) => {
+            <h3 style={{ marginTop: 0 }}>📤 {t("Waiting on a reply")}</h3>
+            {!outgoing.length ? (
+              <p className="muted">{t("No offers waiting for a reply.")}</p>
+            ) : outgoing.map((o) => {
               const lbl = (arr: unknown[]) => (arr as { label?: string }[]).map((c) => c.label).join(", ");
               return (
                 <div className="trade-rec" key={o.id}>
-                  <div className="name">{t("To")} {o.toDisplay} — <span className="muted">{o.status}</span></div>
+                  <div className="name">{t("To")} {o.toDisplay} — <span className="muted">{t("waiting")}</span></div>
                   <div className="sub">📤 {t("You give")}: {lbl(o.give)}</div>
                   <div className="sub">📥 {t("You get")}: {lbl(o.want)}</div>
-                  {o.status === "pending" && (
-                    <button className="btn ghost small" style={{ marginTop: 8 }} disabled={busy === `cancel-${o.id}`} onClick={() => respond(o, "cancel")}>
-                      🗑 {t("Cancel")}
-                    </button>
-                  )}
+                  <button className="btn ghost small" style={{ marginTop: 8 }} disabled={busy === `cancel-${o.id}`} onClick={() => respond(o, "cancel")}>
+                    🗑 {t("Cancel")}
+                  </button>
                 </div>
               );
             })}
           </div>
         </>
-      )}
+        );
+      })()}
 
       {tab === "friends" && (
         <>
