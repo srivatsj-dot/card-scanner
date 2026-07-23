@@ -12,7 +12,14 @@ export const hasVision = Boolean(VISION_KEY);
 export interface WebGuess {
   bestGuess?: string;
   entities: string[];
+  images: string[]; // candidate clean card-image URLs (best/cleanest first)
 }
+
+// Card databases that host clean, full-bleed scans (white/transparent background,
+// card fills the frame) — the kind of image we WANT for the binder. Seller photos
+// (backgrounds, angles, glare) get deprioritized below these.
+const CLEAN_HOST = /(comc\.com|tcdb\.com|psacard|sgccard|130point|cardboardconnection|beckett\.com|trollandtoad|justcollect|pwccmarketplace|cardmarket|pokemontcg\.io|serebii|bulbagarden|tcgplayer)/i;
+const isImageUrl = (u: string) => /^https:\/\//i.test(u) && /\.(jpg|jpeg|png|webp)(\?|$)/i.test(u);
 
 export async function webDetect(imageBase64: string, ms = 7000): Promise<WebGuess | null> {
   if (!hasVision || !imageBase64) return null;
@@ -33,6 +40,9 @@ export async function webDetect(imageBase64: string, ms = 7000): Promise<WebGues
       responses?: { webDetection?: {
         bestGuessLabels?: { label?: string }[];
         webEntities?: { description?: string; score?: number }[];
+        fullMatchingImages?: { url?: string }[];
+        partialMatchingImages?: { url?: string }[];
+        visuallySimilarImages?: { url?: string }[];
       } }[];
     };
     const wd = data?.responses?.[0]?.webDetection;
@@ -42,7 +52,20 @@ export async function webDetect(imageBase64: string, ms = 7000): Promise<WebGues
       .filter((e) => e.description && (e.score ?? 0) > 0.3)
       .map((e) => e.description as string)
       .slice(0, 8);
-    return bestGuess || entities.length ? { bestGuess, entities } : null;
+    // Rank candidate photos: exact matches (same card) first, then similar, and
+    // within each, clean-scan hosts before anything else.
+    const urls = (arr?: { url?: string }[]) => (arr || []).map((x) => x.url || "").filter(isImageUrl);
+    const full = urls(wd.fullMatchingImages);
+    const partial = urls(wd.partialMatchingImages);
+    const similar = urls(wd.visuallySimilarImages);
+    const ranked = [
+      ...full.filter((u) => CLEAN_HOST.test(u)),
+      ...partial.filter((u) => CLEAN_HOST.test(u)),
+      ...similar.filter((u) => CLEAN_HOST.test(u)),
+      ...full.filter((u) => !CLEAN_HOST.test(u)),
+    ];
+    const images = [...new Set(ranked)].slice(0, 6);
+    return bestGuess || entities.length || images.length ? { bestGuess, entities, images } : null;
   } catch {
     return null;
   }
