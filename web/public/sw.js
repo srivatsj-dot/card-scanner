@@ -4,7 +4,7 @@
 //    when offline.
 //  - Other same-origin GETs (hashed JS/CSS/images) are stale-while-revalidate.
 //  - API calls are POST and pass straight through.
-const CACHE = "card-o-rama-v2";
+const CACHE = "card-o-rama-v3";
 
 self.addEventListener("install", () => self.skipWaiting());
 
