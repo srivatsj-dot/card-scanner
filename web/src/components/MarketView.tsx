@@ -81,7 +81,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   const [cardQuery, setCardQuery] = useState("");
   const [hits, setHits] = useState<CardSearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
-  const [their, setTheir] = useState<{ display: string; username: string; cards: MarketCardDTO[]; wishlist: string[] } | null>(null);
+  const [their, setTheir] = useState<{ display: string; username: string; cards: MarketCardDTO[]; wishlist: string[]; avatar?: string } | null>(null);
   const [infoCard, setInfoCard] = useState<MarketCardDTO | null>(null); // card-detail modal in the trade view
   const [lookErr, setLookErr] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
@@ -395,7 +395,14 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                 </div>
               )}
               <div className="card">
-                <h3 style={{ marginTop: 0 }}>{their.display}{t("'s binder — pick what you WANT")}</h3>
+                <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                  {their.avatar && (
+                    <span className="user-avatar" style={{ width: 26, height: 26, fontSize: 15 }}>
+                      {/^(data:|https?:)/.test(their.avatar) ? <img src={their.avatar} alt="" /> : their.avatar}
+                    </span>
+                  )}
+                  {their.display}{t("'s binder — pick what you WANT")}
+                </h3>
                 <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
                   🟥 {t("outlined = on your wishlist")} · 🟨 {t("= one of their favorites")} · ⓘ {t("tap for card info")}
                 </p>

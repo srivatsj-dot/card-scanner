@@ -21,6 +21,7 @@ export interface Settings {
   tradeRequestsFrom?: "anyone" | "friends" | "list"; // who may send me offers
   tradeAllowList?: string[]; // usernames allowed when tradeRequestsFrom = "list"
   binderMode?: "list" | "grid" | "pages"; // how the binder is laid out
+  avatar?: string; // emoji, a preset icon, or a data/URL photo shown as your avatar
 }
 
 /** A card as shown in the marketplace (someone else's binder, or your picks). */
@@ -107,6 +108,7 @@ export const defaultSettings: Settings = {
   tradeRequestsFrom: "anyone",
   tradeAllowList: [],
   binderMode: "list",
+  avatar: "",
 };
 
 export interface ScanResult {

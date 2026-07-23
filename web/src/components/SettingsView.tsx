@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Settings } from "../types";
 import { CATEGORIES, BLOCKABLE_CATEGORIES, REGIONS } from "../types";
 import { LANGS } from "../i18n";
@@ -18,6 +18,16 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
   const [nameInput, setNameInput] = useState(displayName || "");
   const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingName, setSavingName] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  // Preset avatars: people + sports/hobby icons. Or upload your own photo.
+  const AVATAR_PRESETS = ["😀", "😎", "🧢", "🦸", "🐉", "⚾", "🏀", "🏈", "⚽", "🏒", "🎾", "🃏", "🔥", "⭐", "👑", "🚀"];
+  const isPhoto = (a?: string) => /^(data:|https?:)/.test(a || "");
+  function pickAvatarPhoto(file: File | undefined) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => set("avatar", String(reader.result));
+    reader.readAsDataURL(file);
+  }
 
   async function saveName() {
     if (!onRename || !nameInput.trim() || nameInput.trim() === displayName) return;
@@ -86,6 +96,36 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
           )}
         </label>
       )}
+
+      <div className="field">
+        <span>{t("Your avatar")}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span className="avatar-preview">
+            {isPhoto(settings.avatar) ? <img src={settings.avatar} alt="" />
+              : settings.avatar ? settings.avatar
+              : (displayName || "?").slice(0, 1).toUpperCase()}
+          </span>
+          <div className="avatar-grid">
+            {AVATAR_PRESETS.map((a) => (
+              <button
+                key={a} type="button"
+                className={`avatar-choice ${settings.avatar === a ? "on" : ""}`}
+                onClick={() => set("avatar", a)}
+              >{a}</button>
+            ))}
+          </div>
+          <button type="button" className="btn ghost small" onClick={() => avatarInputRef.current?.click()}>
+            🖼️ {t("Upload photo")}
+          </button>
+          {settings.avatar && (
+            <button type="button" className="btn ghost small" onClick={() => set("avatar", "")}>{t("Clear")}</button>
+          )}
+          <input
+            ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }}
+            onChange={(e) => { pickAvatarPhoto(e.target.files?.[0]); e.target.value = ""; }}
+          />
+        </div>
+      </div>
 
       <div className="grid2">
         <label className="field">

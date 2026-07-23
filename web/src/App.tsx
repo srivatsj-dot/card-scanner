@@ -781,7 +781,13 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
             ) : (
               <>
                 <span className="user-chip" title={userName}>
-                  <span className="user-avatar">{userName.slice(0, 1).toUpperCase()}</span>
+                  <span className="user-avatar">
+                    {/^(data:|https?:)/.test(settings.avatar || "")
+                      ? <img src={settings.avatar} alt="" />
+                      : settings.avatar
+                        ? settings.avatar
+                        : userName.slice(0, 1).toUpperCase()}
+                  </span>
                   <span className="user-name">{userName}</span>
                 </span>
                 <button className="btn ghost small" onClick={() => { setView("home"); onLogout(); }}>{t("Log out")}</button>

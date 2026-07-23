@@ -386,8 +386,24 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
   display: grid;
   place-items: center;
   font-weight: 800;
-  font-size: 14px;
+  font-size: 16px;
+  overflow: hidden;
 }
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* Avatar picker in Settings */
+.avatar-preview {
+  width: 52px; height: 52px; flex: 0 0 auto; border-radius: 999px;
+  background: var(--accent-grad); color: #fff; display: grid; place-items: center;
+  font-weight: 800; font-size: 26px; overflow: hidden;
+}
+.avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.avatar-choice {
+  width: 38px; height: 38px; font-size: 20px; line-height: 1; padding: 0;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2);
+  cursor: pointer;
+}
+.avatar-choice.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 .user-name {
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
