@@ -45,6 +45,7 @@ import type { ScanResult, BulkCard } from "./types";
 export function bulkCardToResult(c: BulkCard): ScanResult {
   return {
     identified: c.identified,
+    imageUrl: c.imageUrl,
     player: c.player,
     sport: c.sport,
     team: c.team,

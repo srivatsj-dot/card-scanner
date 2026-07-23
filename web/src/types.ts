@@ -111,7 +111,9 @@ export const defaultSettings: Settings = {
 
 export interface ScanResult {
   identified: boolean;
-  idConfidence?: number; // 1-10, how sure the identification is
+  idConfidence?: number; // 1-10, how sure the identification is (scans only)
+  ambiguous?: boolean; // bare-name lookup: too little info to pin one card
+  imageUrl?: string; // a real web photo of the card, if we found one
   player: string | null;
   sport: string | null;
   team: string | null;
@@ -188,6 +190,7 @@ export interface BulkCard {
   estimatedValue: { low: number; mid: number; high: number; currency: string; note: string };
   conditionGrade: string | null;
   note: string;
+  imageUrl?: string; // real web photo, attached server-side
 }
 
 export interface AskResult {

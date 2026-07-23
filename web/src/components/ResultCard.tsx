@@ -54,7 +54,10 @@ export default function ResultCard({
     <>
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <div>
+          {result.imageUrl && (
+            <img className="result-photo" src={result.imageUrl} alt={result.player || "card"} loading="lazy" />
+          )}
+          <div style={{ flex: 1, minWidth: 180 }}>
             <h2 style={{ marginBottom: 4 }}>{result.player || tr("Unknown player")}</h2>
             <div className="muted" style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif", fontSize: 14 }}>
               {[result.year, result.manufacturer, result.setName].filter(Boolean).join(" · ")}
@@ -104,13 +107,19 @@ export default function ResultCard({
       <div className="grid2">
         <div className="card">
           <h3>{tr("Estimated value")}</h3>
-          <div className="value-row">
-            <span className="value-big">{money(v.mid, v.currency)}</span>
-            <span className="range">
-              {money(v.low, v.currency)} – {money(v.high, v.currency)}
-            </span>
-          </div>
-          <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>{v.note}</p>
+          {result.ambiguous ? (
+            <p style={{ marginTop: 0, fontSize: 15 }}>{v.note}</p>
+          ) : (
+            <>
+              <div className="value-row">
+                <span className="value-big">{money(v.mid, v.currency)}</span>
+                <span className="range">
+                  {money(v.low, v.currency)} – {money(v.high, v.currency)}
+                </span>
+              </div>
+              <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>{v.note}</p>
+            </>
+          )}
           {result.estimatedCondition && (
             <div className="kv" style={{ marginTop: 10 }}>
               <span className="k">{tr("Condition (est.)")}</span>

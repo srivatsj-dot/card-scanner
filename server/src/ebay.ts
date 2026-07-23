@@ -41,6 +41,7 @@ export interface EbayPrice {
   high: number;
   currency: string;
   count: number;
+  image?: string; // a representative listing image (real photo of the card)
 }
 
 // Map a market region to an eBay marketplace; defaults to the US.
@@ -50,7 +51,13 @@ const MARKETPLACE: Record<string, string> = {
   Spain: "EBAY_ES", Ireland: "EBAY_IE",
 };
 
-type Item = { title?: string; price?: { value?: string; currency?: string } };
+type Item = {
+  title?: string;
+  price?: { value?: string; currency?: string };
+  image?: { imageUrl?: string };
+  thumbnailImages?: { imageUrl?: string }[];
+};
+const itemImage = (it?: Item) => it?.image?.imageUrl || it?.thumbnailImages?.[0]?.imageUrl || "";
 
 // Reprints, novelty/custom cards, stickers, lots, and "read description" junk
 // pollute a search with cheap listings that aren't the real card — this is how a
@@ -62,20 +69,35 @@ const isRealCard = (it: Item) => !JUNK.test(it.title || "");
 // excludes obvious reprints/novelty items.
 function summarize(items: Item[]): EbayPrice | null {
   const real = items.filter(isRealCard);
-  const prices = real
-    .map((it) => Number(it.price?.value))
-    .filter((n) => Number.isFinite(n) && n > 0)
-    .sort((a, b) => a - b);
+  // Keep price+item together so we can pick a representative image near the median.
+  const priced = real
+    .map((it) => ({ it, p: Number(it.price?.value) }))
+    .filter((x) => Number.isFinite(x.p) && x.p > 0)
+    .sort((a, b) => a.p - b.p);
+  const prices = priced.map((x) => x.p);
   if (prices.length < 3) return null;
   const trim = Math.floor(prices.length * 0.1);
   const core = prices.slice(trim, prices.length - trim || prices.length);
   const at = (p: number) => core[Math.min(core.length - 1, Math.max(0, Math.floor(core.length * p)))];
+  const mid = at(0.5);
+  // Representative image: the (real, priced) listing whose price is closest to the
+  // median AND that actually has an image — so the binder shows the right card,
+  // not the cheapest junk lot.
+  let image = "";
+  let best = Infinity;
+  for (const { it, p } of priced) {
+    const img = itemImage(it);
+    if (!img) continue;
+    const d = Math.abs(p - mid);
+    if (d < best) { best = d; image = img; }
+  }
   return {
     low: at(0.2),
-    mid: at(0.5),
+    mid,
     high: at(0.8),
     currency: items.find((it) => it.price?.currency)?.price?.currency || "USD",
     count: prices.length,
+    image: image || undefined,
   };
 }
 

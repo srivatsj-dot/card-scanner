@@ -63,6 +63,7 @@ export interface PokemonMatch {
   setName?: string;  // canonical set name
   number?: string;   // e.g. "4/102"
   rarity?: string;
+  image?: string;    // official card image (fills the frame in the binder)
 }
 
 // Look a Pokémon card up in the official catalog (pokemontcg.io): both its real
@@ -102,5 +103,6 @@ export async function pokemonLookup(name: string, number?: string | null): Promi
     setName: chosen?.set?.name || undefined,
     number: number2,
     rarity: chosen?.rarity || undefined,
+    image: chosen?.images?.large || chosen?.images?.small || undefined,
   };
 }

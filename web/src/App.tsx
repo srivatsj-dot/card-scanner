@@ -375,7 +375,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {
         id: uid(),
         savedAt: now,
-        thumbnail: frontDataUrl || "",
+        // Prefer a real web photo of the card (fills the frame) over the captured/
+        // uploaded shot; fall back to the user's photo when we have no web image.
+        thumbnail: result.imageUrl || frontDataUrl || "",
         result,
         lastRefreshedAt: now,
         previousMid: null,
@@ -451,6 +453,23 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     } catch {
       /* leave text-only; user can retry via refresh */
     }
+  }
+
+  // Correct a saved binder card that was identified wrong: re-look it up from the
+  // fixed description and replace its data (and its web photo) in place.
+  async function editSavedCard(id: string, newText: string) {
+    const text = newText.trim();
+    if (!text) return;
+    try {
+      const r = await searchCardCached(text, aiSettings);
+      setSaved((prev) => prev.map((c) => (c.id === id ? {
+        ...c,
+        result: r,
+        thumbnail: r.imageUrl || c.thumbnail,
+        previousMid: c.result.estimatedValue?.mid ?? null,
+        lastRefreshedAt: Date.now(),
+      } : c)));
+    } catch { /* leave the card as-is on failure */ }
   }
 
   // --- "For later" list (saved trades / cards to acquire) ------------------
@@ -866,6 +885,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onSetPhoto={setCardPhoto}
           onToggleFlag={toggleFlag}
           onReorder={reorderCards}
+          onEdit={editSavedCard}
           mode={settings.binderMode || "list"}
           onModeChange={(m) => setSettings((s) => ({ ...s, binderMode: m }))}
         />

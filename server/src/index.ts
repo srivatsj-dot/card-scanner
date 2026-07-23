@@ -428,8 +428,16 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     // sold-comp double-check off the critical path via /api/price-check.
     const grounded = images.length > 0 ? false : groundedFor(settings);
     const result = await analyze<ScanResultShape>(sys, scanParts, scanSchema, grounded, SCAN_THINKING);
-    const ebayApplied = await applyEbayPrice(result, settings);
-    if (!ebayApplied && isPokemon(result)) await applyPokemonPrice(result); // free real Pokémon prices
+    // A typed SEARCH has no photo to grade the read against, so it carries no
+    // ID-accuracy score (that's a scan-only signal).
+    if (images.length === 0) delete result.idConfidence;
+    if (images.length === 0 && isVagueTextQuery(text)) {
+      // Bare name like "Tom Brady": don't invent a year/price/photo.
+      markAmbiguous(result);
+    } else {
+      const ebayApplied = await applyEbayPrice(result, settings);
+      if (!ebayApplied && isPokemon(result)) await applyPokemonPrice(result); // free real Pokémon prices
+    }
     res.json(result);
   } catch (err) {
     const { status, message } = describeError(err);
@@ -445,7 +453,7 @@ app.post("/api/price-check", async (req: Request, res: Response) => {
   const { card, settings } = req.body as { card?: ScanResultShape; settings?: Settings };
   const result = card || {};
   try {
-    if (result.identified && result.estimatedValue && !isPokemon(result)) {
+    if (result.identified && !result.ambiguous && result.estimatedValue && !isPokemon(result)) {
       // eBay-first: real eBay data always wins. If the scan already set an
       // eBay-based price, keep it untouched — do NOT let the AI sold-comp pass
       // overwrite real listing data with an estimate. Only when there's no eBay
@@ -463,6 +471,9 @@ app.post("/api/price-check", async (req: Request, res: Response) => {
 // Minimal shape we need to read/override on a scan result.
 interface ScanResultShape {
   identified?: boolean;
+  idConfidence?: number;
+  ambiguous?: boolean; // a bare-name lookup: too little info to pin one card
+  imageUrl?: string;   // a real web photo of the card (fills the frame)
   player?: string | null;
   sport?: string | null;
   year?: string | null;
@@ -475,6 +486,40 @@ interface ScanResultShape {
   estimatedCondition?: string | null;
   pokemon?: { setNumber?: string | null; rarity?: string | null } | null;
   estimatedValue?: { low: number; mid: number; high: number; currency: string; note: string };
+}
+
+// A bare typed lookup like "Tom Brady" — a subject with no year AND no
+// manufacturer/brand — can't be pinned to one specific card, so we don't invent a
+// year, price, or web photo for it. Having a 4-digit year OR a known brand token
+// (e.g. "Kyle Schwarber Topps 2026") counts as enough to identify a product.
+const BRAND_RE = /\b(topps|panini|bowman|upper\s*deck|fleer|donruss|prizm|mosaic|select|optic|chronicles|score|leaf|sp\b|sage|futera|pok[eé]mon|ptcg|o-pee-chee|opc|tops|stadium club|gypsy queen|allen\s*&?\s*ginter|heritage|finest|chrome)\b/i;
+const hasYear = (s: string) => /\b(19|20)\d{2}\b/.test(s);
+function isVagueTextQuery(text: string): boolean {
+  const t = (text || "").trim();
+  if (!t) return false;
+  if (hasYear(t) || BRAND_RE.test(t)) return false;
+  // No year and no brand → too little to identify a specific card.
+  return true;
+}
+
+// Turn a result into the "there could be many kinds of this card" ambiguous view:
+// no invented year/price/parallel, no ID-accuracy, no web photo.
+function markAmbiguous(result: ScanResultShape): void {
+  result.ambiguous = true;
+  delete result.idConfidence;
+  delete result.imageUrl;
+  result.year = null;
+  result.manufacturer = null;
+  result.setName = null;
+  result.cardNumber = null;
+  result.parallel = null;
+  result.serialNumber = null;
+  const subject = result.player || "this player";
+  result.estimatedValue = {
+    low: 0, mid: 0, high: 0,
+    currency: (result.estimatedValue?.currency) || "USD",
+    note: `There could be many different ${subject} cards across years, sets, and parallels — the value depends heavily on which exact one you have. Recent base cards from packs are often just a few dollars, while rookies, autographs, and numbered parallels can be worth much more. Add the year, brand (e.g. Topps/Panini), and any parallel for a real price.`,
+  };
 }
 
 const isPokemon = (r: ScanResultShape) => /pok[eé]mon/i.test(r.sport || "");
@@ -541,6 +586,8 @@ async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Pro
     currency: ep.currency,
     note: `Live eBay market price from ${ep.count} matching listings (${ep.currency}).`,
   };
+  // A real photo of the card from a listing — fills the frame in the binder.
+  if (ep.image && !result.imageUrl) result.imageUrl = ep.image;
   return true;
 }
 
@@ -558,6 +605,7 @@ async function applyPokemonPrice(result: ScanResultShape) {
     result.pokemon = { ...(result.pokemon || {}), setNumber: m.number };
   }
   if (m.rarity) result.pokemon = { ...(result.pokemon || {}), rarity: m.rarity };
+  if (m.image && !result.imageUrl) result.imageUrl = m.image;
   // Apply the real market price when available.
   if (m.price && result.estimatedValue) {
     const cp = m.price;

@@ -16,8 +16,16 @@ interface Props {
   onSetPhoto: (id: string, dataUrl: string) => void;
   onToggleFlag: (id: string, flag: "favorite" | "notNeeded") => void;
   onReorder: (aId: string, bId: string) => void;
+  onEdit: (id: string, text: string) => Promise<void> | void;
   mode: "list" | "grid" | "pages";
   onModeChange: (m: "list" | "grid" | "pages") => void;
+}
+
+// Best-guess description of a saved card, to prefill the edit box.
+function cardDesc(s: SavedCard): string {
+  const r = s.result;
+  return [r.year, r.manufacturer, r.setName, r.player, r.parallel, r.cardNumber ? `#${r.cardNumber}` : ""]
+    .map((x) => (x || "").toString().trim()).filter(Boolean).join(" ");
 }
 
 /** Condition history, newest first, flagging flaws new since the prior check. */
@@ -64,8 +72,17 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, mode, onModeChange }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, onEdit, mode, onModeChange }: Props) {
   const t = useT();
+  const [editId, setEditId] = useState<string | null>(null); // card being corrected
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  function startEdit(s: SavedCard) { setEditId(s.id); setEditText(cardDesc(s)); setDetailId(null); }
+  async function commitEdit() {
+    if (!editId || !editText.trim()) return;
+    setSavingEdit(true);
+    try { await onEdit(editId, editText.trim()); setEditId(null); } finally { setSavingEdit(false); }
+  }
   const [openId, setOpenId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null); // grid/pages card detail modal
   const [page, setPage] = useState(0); // current spread in "pages" (real binder) mode
@@ -243,6 +260,31 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
         );
       })()}
 
+      {editId && (
+        <div className="backdrop" onClick={() => !savingEdit && setEditId(null)}>
+          <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(480px, 94vw)" }}>
+            <button className="modal-x" onClick={() => !savingEdit && setEditId(null)}>✕</button>
+            <h3 style={{ marginTop: 0 }}>✏️ {t("Fix this card")}</h3>
+            <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+              {t("Correct the description (year, brand, set, player, parallel) and we'll re-identify and re-price it.")}
+            </p>
+            <input
+              type="text" value={editText} autoFocus
+              placeholder={t("e.g. 2023 Topps Chrome Julio Rodríguez #150")}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); }}
+              style={{ width: "100%" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+              <button className="btn ghost small" onClick={() => setEditId(null)} disabled={savingEdit}>{t("Cancel")}</button>
+              <button className="btn" onClick={commitEdit} disabled={savingEdit || !editText.trim()}>
+                {savingEdit ? <><span className="spinner" />{t("Re-identifying…")}</> : t("Save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailId && (() => {
         const s = view.find((x) => x.id === detailId);
         if (!s) return null;
@@ -252,6 +294,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               <button className="modal-x" onClick={() => setDetailId(null)}>✕</button>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                 <button className={`btn ghost small ${s.favorite ? "flag-on" : ""}`} onClick={() => onToggleFlag(s.id, "favorite")}>{s.favorite ? "⭐" : "☆"} {t("Favorite")}</button>
+                <button className="btn ghost small" onClick={() => startEdit(s)}>✏️ {t("Edit")}</button>
                 <button className="btn ghost small" onClick={() => { onRemove(s.id); setDetailId(null); }}>{t("Remove")}</button>
               </div>
               <ResultCard result={s.result} />
@@ -312,6 +355,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                   <button className="btn ghost small" onClick={() => setOpenId(open ? null : s.id)}>
                     {open ? t("Hide") : t("View")}
                   </button>
+                  <button className="btn ghost small" onClick={() => startEdit(s)} title={t("Fix a wrong identification")}>✏️ {t("Edit")}</button>
                   <button className="btn ghost small" onClick={() => onRemove(s.id)}>{t("Remove")}</button>
                 </div>
               </div>
