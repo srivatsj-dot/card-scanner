@@ -421,6 +421,19 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     );
   }
 
+  // Swap two cards' positions in the binder (click-to-rearrange in the grid /
+  // page views). Order is preserved in `saved`, so it persists across syncs.
+  function reorderCards(aId: string, bId: string) {
+    setSaved((prev) => {
+      const arr = prev.slice();
+      const i = arr.findIndex((c) => c.id === aId);
+      const j = arr.findIndex((c) => c.id === bId);
+      if (i < 0 || j < 0 || i === j) return prev;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      return arr;
+    });
+  }
+
   // Attach (or replace) a photo on a saved binder card.
   async function setCardPhoto(id: string, dataUrl: string) {
     const thumb = await makeThumbnail(dataUrl);
@@ -852,6 +865,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onConditionCheck={checkCondition}
           onSetPhoto={setCardPhoto}
           onToggleFlag={toggleFlag}
+          onReorder={reorderCards}
           mode={settings.binderMode || "list"}
           onModeChange={(m) => setSettings((s) => ({ ...s, binderMode: m }))}
         />

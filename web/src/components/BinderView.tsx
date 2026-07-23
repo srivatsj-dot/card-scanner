@@ -15,6 +15,7 @@ interface Props {
   onConditionCheck: (id: string, dataUrl: string) => Promise<void>;
   onSetPhoto: (id: string, dataUrl: string) => void;
   onToggleFlag: (id: string, flag: "favorite" | "notNeeded") => void;
+  onReorder: (aId: string, bId: string) => void;
   mode: "list" | "grid" | "pages";
   onModeChange: (m: "list" | "grid" | "pages") => void;
 }
@@ -48,7 +49,7 @@ function ConditionHistory({ log }: { log: NonNullable<SavedCard["conditionLog"]>
   );
 }
 
-type Sort = "recent" | "value" | "player" | "year" | "sport";
+type Sort = "recent" | "value" | "player" | "year" | "sport" | "manual";
 
 function ChangeBadge({ card }: { card: SavedCard }) {
   if (card.previousMid == null) return null;
@@ -63,12 +64,14 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, mode, onModeChange }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, mode, onModeChange }: Props) {
   const t = useT();
   const [openId, setOpenId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null); // grid/pages card detail modal
   const [page, setPage] = useState(0); // current spread in "pages" (real binder) mode
   const [sort, setSort] = useState<Sort>("recent");
+  const [rearrange, setRearrange] = useState(false); // click-two-cards-to-swap mode
+  const [swapSel, setSwapSel] = useState<string | null>(null); // first card picked for a swap
   const [sportFilter, setSportFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [camFor, setCamFor] = useState<string | null>(null);
@@ -80,6 +83,18 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
   function uploadPhoto(id: string) {
     uploadTargetRef.current = id;
     photoInputRef.current?.click();
+  }
+
+  // In rearrange mode a tile tap picks/swaps instead of opening detail: tap the
+  // first card, then a second, and the two switch places (order persists as
+  // "My order"). Otherwise a tap opens the card's detail.
+  function tapTile(id: string) {
+    if (!rearrange) { setDetailId(id); return; }
+    if (!swapSel) { setSwapSel(id); return; }
+    if (swapSel === id) { setSwapSel(null); return; }
+    onReorder(swapSel, id);
+    setSort("manual");
+    setSwapSel(null);
   }
 
   const sports = useMemo(() => {
@@ -102,6 +117,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
     }
     const num = (v: string | null) => parseInt((v || "").replace(/\D/g, ""), 10) || 0;
     switch (sort) {
+      case "manual": break; // keep the saved array order (your hand-arranged binder)
       case "value": list.sort((a, b) => b.result.estimatedValue.mid - a.result.estimatedValue.mid); break;
       case "player": list.sort((a, b) => (a.result.player || "").localeCompare(b.result.player || "")); break;
       case "year": list.sort((a, b) => num(b.result.year) - num(a.result.year)); break;
@@ -146,6 +162,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
             <option value="player">Player A–Z</option>
             <option value="year">Year (newest)</option>
             <option value="sport">Type / sport</option>
+            <option value="manual">My order</option>
           </select>
           <select value={sportFilter} onChange={(e) => setSportFilter(e.target.value)}>
             {sports.map((s) => <option key={s} value={s}>{s === "All" ? "All types" : s}</option>)}
@@ -162,10 +179,25 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
           </button>
         </div>
         <div className="auth-tabs" style={{ marginTop: 10 }}>
-          <button className={mode === "list" ? "active" : ""} onClick={() => onModeChange("list")}>☰ {t("List")}</button>
+          <button className={mode === "list" ? "active" : ""} onClick={() => { onModeChange("list"); setRearrange(false); setSwapSel(null); }}>☰ {t("List")}</button>
           <button className={mode === "grid" ? "active" : ""} onClick={() => onModeChange("grid")}>▦ {t("Grid")}</button>
           <button className={mode === "pages" ? "active" : ""} onClick={() => { onModeChange("pages"); setPage(0); }}>📖 {t("Binder")}</button>
         </div>
+        {mode !== "list" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+            <button
+              className={`btn ghost small ${rearrange ? "flag-on" : ""}`}
+              onClick={() => { setRearrange((r) => !r); setSwapSel(null); }}
+            >
+              {rearrange ? `✓ ${t("Rearranging")}` : `⇄ ${t("Rearrange")}`}
+            </button>
+            {rearrange && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                {swapSel ? t("Now tap the card to swap it with.") : t("Tap a card, then tap another — they'll switch places.")}
+              </span>
+            )}
+          </div>
+        )}
         <p className="muted" style={{ fontSize: 12, margin: "8px 2px 0" }}>
           Prices auto-update once a day. ▲/▼ shows the change since the last update.
         </p>
@@ -175,7 +207,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
         <div className="card">
           <div className="binder-gallery">
             {view.map((s) => (
-              <button key={s.id} className="gallery-card" onClick={() => setDetailId(s.id)} title={s.result.player || "card"}>
+              <button key={s.id} className={`gallery-card ${swapSel === s.id ? "swap-sel" : ""}`} onClick={() => tapTile(s.id)} title={s.result.player || "card"}>
                 {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
                 {s.favorite && <span className="gallery-star">⭐</span>}
                 <div className="gallery-name">{s.result.player || "—"}</div>
@@ -195,7 +227,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
           <div className="card binder-book">
             <div className="binder-page" onClick={(e) => { if (e.target === e.currentTarget && p < pages - 1) setPage(p + 1); }}>
               {slice.map((s) => (
-                <button key={s.id} className="pocket" onClick={() => setDetailId(s.id)}>
+                <button key={s.id} className={`pocket ${swapSel === s.id ? "swap-sel" : ""}`} onClick={() => tapTile(s.id)}>
                   {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
                   {s.favorite && <span className="gallery-star">⭐</span>}
                 </button>

@@ -196,6 +196,40 @@ export async function lookupBinder(username: string): Promise<{ username: string
   return { username: u.username, display: u.display, cards, wishlist, avatar };
 }
 
+/** Card search, scoped to the searcher's friends: "which of my friends has a
+ * card matching this text?" Returns each matching friend with only the cards
+ * that matched, so the client can jump straight into a trade with them. */
+export async function searchFriendCards(
+  userId: number,
+  query: string
+): Promise<{ username: string; display: string; avatar: string; cards: MarketCard[] }[]> {
+  if (!hasCloud) return [];
+  const tokens = (query || "").toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 1);
+  if (!tokens.length) return [];
+  const friendIds = (await db().query(
+    `SELECT friend_id FROM friend_edges WHERE user_id=$1 AND status='accepted'`,
+    [userId]
+  )).rows.map((r) => r.friend_id as number);
+  if (!friendIds.length) return [];
+  const info = await usersByIds(friendIds);
+  const out: { username: string; display: string; avatar: string; cards: MarketCard[] }[] = [];
+  for (const fid of friendIds) {
+    const who = info[fid];
+    if (!who) continue;
+    const cards = (await binderOf(fid)).filter((c) => c.id != null).map(toMarketCard);
+    // A card matches when every search token appears somewhere in its label.
+    const matches = cards.filter((c) => {
+      const lbl = c.label.toLowerCase();
+      return tokens.every((tok) => lbl.includes(tok));
+    });
+    if (matches.length) {
+      const avatar = String((await settingOf(fid, "avatar")) || "");
+      out.push({ username: who.username, display: who.display, avatar, cards: matches });
+    }
+  }
+  return out;
+}
+
 export interface MarketOffer {
   id: string;
   fromUser: string; fromDisplay: string;

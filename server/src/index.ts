@@ -1733,6 +1733,17 @@ app.get("/api/market/binder/:username", async (req: Request, res: Response) => {
   } catch (err) { cloudFail(res, err); }
 });
 
+// Card search across the searcher's friends: "who has this card?"
+app.get("/api/market/people", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await marketUser(req, res);
+    if (!userId) return;
+    const q = String(req.query.q || "");
+    res.json({ results: await cloud.searchFriendCards(userId, q) });
+  } catch (err) { cloudFail(res, err); }
+});
+
 app.get("/api/market/offers", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   try {

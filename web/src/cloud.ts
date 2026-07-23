@@ -155,6 +155,11 @@ export interface MarketOfferDTO {
 export function marketLookup(username: string) {
   return authGet<{ username: string; display: string; cards: MarketCardDTO[]; wishlist: string[]; avatar: string }>(`/api/market/binder/${encodeURIComponent(username)}`);
 }
+export interface CardSearchHit { username: string; display: string; avatar: string; cards: MarketCardDTO[] }
+/** Search your friends' binders for a card — "who has this?" */
+export function marketSearchCards(q: string) {
+  return authGet<{ results: CardSearchHit[] }>(`/api/market/people?q=${encodeURIComponent(q)}`);
+}
 export function marketOffers() {
   return authGet<{ incoming: MarketOfferDTO[]; outgoing: MarketOfferDTO[] }>(`/api/market/offers`);
 }

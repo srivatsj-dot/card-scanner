@@ -3,8 +3,8 @@ import type { SavedCard, Settings, TradeResult } from "../types";
 import { describeCard, money } from "../utils";
 import { evaluateTrade } from "../api";
 import {
-  marketLookup, marketOffers, marketSendOffer, marketRespond,
-  cloudPull, cloudUserKey, type MarketCardDTO, type MarketOfferDTO,
+  marketLookup, marketOffers, marketSendOffer, marketRespond, marketSearchCards,
+  cloudPull, cloudUserKey, type MarketCardDTO, type MarketOfferDTO, type CardSearchHit,
   friendsList, friendRequest, friendRespond, friendRemove, type FriendUserDTO,
   chatThread, chatSend, type ChatMsgDTO,
 } from "../cloud";
@@ -44,7 +44,7 @@ function matchesAny(label: string, list: string[]): boolean {
   });
 }
 
-function CardTile({ c, on, outline, onClick }: { c: MarketCardDTO; on: boolean; outline?: "green" | "yellow"; onClick: () => void }) {
+function CardTile({ c, on, outline, onClick }: { c: MarketCardDTO; on: boolean; outline?: "red" | "yellow"; onClick: () => void }) {
   return (
     <button className={`market-tile ${on ? "sel" : ""} ${outline ? `outline-${outline}` : ""}`} onClick={onClick} title={c.label}>
       {c.thumb ? <img src={c.thumb} alt="" /> : <div className="market-tile-ph">🃏</div>}
@@ -61,6 +61,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   const [friends, setFriends] = useState<{ friends: FriendUserDTO[]; incoming: FriendUserDTO[]; outgoing: FriendUserDTO[] } | null>(null);
   const [friendName, setFriendName] = useState("");
   const [friendMsg, setFriendMsg] = useState<string | null>(null);
+  const [friendFilter, setFriendFilter] = useState(""); // search within your friends list
   // Chat — only exists during trading: tied to the current trade partner, shown
   // as a hideable panel on the right with a new-message toast.
   const [chatPartner, setChatPartner] = useState<{ username: string; display: string } | null>(null);
@@ -71,6 +72,10 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   const [toast, setToast] = useState<string | null>(null);
   const lastMsgId = useRef(0);
   const [uname, setUname] = useState("");
+  // Find = card search across your friends' binders ("who has this card?").
+  const [cardQuery, setCardQuery] = useState("");
+  const [hits, setHits] = useState<CardSearchHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const [their, setTheir] = useState<{ display: string; username: string; cards: MarketCardDTO[]; wishlist: string[] } | null>(null);
   const [lookErr, setLookErr] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
@@ -166,6 +171,18 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
         <p className="muted">{t("Trading with other collectors needs cloud accounts, which aren't enabled on this server. Set DATABASE_URL to turn it on.")}</p>
       </div>
     );
+  }
+
+  async function searchCards(q?: string) {
+    const query = (q ?? cardQuery).trim();
+    if (query.length < 2) return;
+    setSearching(true); setHits(null); setTheir(null); setLookErr(null);
+    try {
+      const r = await marketSearchCards(query);
+      setHits(r.results);
+    } catch (e) {
+      setLookErr(e instanceof Error ? e.message : "Couldn't search cards.");
+    } finally { setSearching(false); }
   }
 
   async function lookup(name?: string) {
@@ -297,24 +314,73 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
       {tab === "find" && (
         <>
           <div className="card">
+            <h3 style={{ marginTop: 0 }}>🔍 {t("Search for a card")}</h3>
+            <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
+              {t("Find which of your friends has a card — e.g. \"Charizard\" or \"Jordan rookie\". To trade, tap a friend below.")}
+            </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input
-                type="text" value={uname} placeholder={t("Enter a collector's username")}
-                autoCapitalize="none" autoCorrect="off"
-                onChange={(e) => setUname(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") lookup(); }}
+                type="text" value={cardQuery} placeholder={t("Card name, player, or set")}
+                onChange={(e) => setCardQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") searchCards(); }}
                 style={{ flex: 1, minWidth: 180 }}
               />
-              <button className="btn" onClick={() => lookup()} disabled={looking || !uname.trim()}>
-                {looking ? <><span className="spinner" />{t("Looking…")}</> : t("Look up")}
+              <button className="btn" onClick={() => searchCards()} disabled={searching || cardQuery.trim().length < 2}>
+                {searching ? <><span className="spinner" />{t("Searching…")}</> : t("Search")}
               </button>
             </div>
-            {lookErr && <div className="error-box" style={{ marginTop: 10 }}>{lookErr}</div>}
+            {lookErr && !their && <div className="error-box" style={{ marginTop: 10 }}>{lookErr}</div>}
             {sent && <div className="ok-box" style={{ marginTop: 10 }}>✅ {t("Offer sent to")} {sent}!</div>}
           </div>
 
+          {/* Card-search results: friends who have a matching card. */}
+          {hits && !their && (
+            <div className="card">
+              {hits.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  {t("None of your friends have a card matching that. Add more friends, or try different words.")}
+                </p>
+              ) : (
+                <>
+                  <h3 style={{ marginTop: 0 }}>{t("Friends who have it")}</h3>
+                  {hits.map((h) => (
+                    <div className="trade-rec" key={h.username}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <div className="name">{h.avatar ? `${h.avatar} ` : ""}{h.display} <span className="muted" style={{ fontWeight: 400 }}>· {h.cards.length} {h.cards.length === 1 ? t("match") : t("matches")}</span></div>
+                        <button className="btn small" onClick={() => lookup(h.username)}>🛒 {t("Trade")}</button>
+                      </div>
+                      <div className="sub" style={{ marginTop: 4 }}>{h.cards.map((c) => c.label).join(" · ")}</div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Trade with any friend directly (the full interactive trade lives here). */}
+          {!their && !hits && !!friends?.friends.length && (
+            <div className="card">
+              <h3 style={{ marginTop: 0 }}>{t("Trade with a friend")}</h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {friends.friends.map((u) => (
+                  <button key={u.username} className="btn ghost small" onClick={() => lookup(u.username)}>🛒 {u.display}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {!their && !hits && !friends?.friends.length && (
+            <div className="card">
+              <p className="muted" style={{ margin: 0 }}>
+                {t("Add friends in the Friends tab first — you can search their cards and trade with them here.")}
+              </p>
+            </div>
+          )}
+
           {their && (
             <>
+              <div className="card" style={{ paddingTop: 10, paddingBottom: 10 }}>
+                <button className="btn ghost small" onClick={() => { setTheir(null); setWant(new Set()); setGive(new Set()); setCounteringId(null); }}>‹ {t("Back to search")}</button>
+              </div>
               {counteringId && (
                 <div className="card" style={{ borderColor: "var(--accent)" }}>
                   🔄 {t("Countering")} {their.display}{t("'s offer — adjust the cards below (swap a card, add one, or remove one) and send it back.")}
@@ -324,7 +390,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
               <div className="card">
                 <h3 style={{ marginTop: 0 }}>{their.display}{t("'s binder — pick what you WANT")}</h3>
                 <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
-                  🟩 {t("outlined = on your wishlist")} · 🟨 {t("= one of their favorites")}
+                  🟥 {t("outlined = on your wishlist")} · 🟨 {t("= one of their favorites")}
                 </p>
                 {their.cards.length === 0 ? (
                   <p className="muted">{t("This collector's binder is empty.")}</p>
@@ -333,7 +399,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                     {their.cards.map((c) => (
                       <CardTile
                         key={c.id} c={c} on={want.has(c.id)}
-                        outline={matchesAny(c.label, myWishlist) ? "green" : c.favorite ? "yellow" : undefined}
+                        outline={matchesAny(c.label, myWishlist) ? "red" : c.favorite ? "yellow" : undefined}
                         onClick={() => toggle(want, setWant, c.id)}
                       />
                     ))}
@@ -343,7 +409,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
 
               <div className="card">
                 <h3 style={{ marginTop: 0 }}>{t("Your binder — pick what you'll GIVE")}</h3>
-                <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>🟩 {t("outlined = on their wishlist")}</p>
+                <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>🟥 {t("outlined = on their wishlist")}</p>
                 {mine.length === 0 ? (
                   <p className="muted">{t("Your binder is empty — scan and save some cards first.")}</p>
                 ) : (
@@ -351,7 +417,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                     {mine.map((c) => (
                       <CardTile
                         key={c.id} c={c} on={give.has(c.id)}
-                        outline={matchesAny(c.label, their.wishlist) ? "green" : undefined}
+                        outline={matchesAny(c.label, their.wishlist) ? "red" : undefined}
                         onClick={() => toggle(give, setGive, c.id)}
                       />
                     ))}
@@ -382,6 +448,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                     <span className="muted" style={{ fontSize: 14 }}>{buildFair.valueGapNote}</span>
                   </div>
                 )}
+                {lookErr && their && <div className="error-box" style={{ marginTop: 10 }}>{lookErr}</div>}
               </div>
             </>
           )}
@@ -486,18 +553,35 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
 
           <div className="card">
             <h3 style={{ marginTop: 0 }}>{t("Your friends")}</h3>
+            <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>{t("To trade with a friend, go to the Find tab.")}</p>
             {!friends?.friends.length ? (
               <p className="muted">{t("No friends yet — add someone by username above.")}</p>
-            ) : friends.friends.map((u) => (
-              <div className="trade-rec" key={u.username} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <div className="name">{u.display}</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button className="btn ghost small" onClick={() => { setUname(u.username); setTab("find"); lookup(); }}>🛒 {t("Trade")}</button>
-                  <button className="btn ghost small" onClick={() => openChatWith(u.username, u.display)}>💬 {t("Message")}</button>
-                  <button className="btn ghost small" onClick={() => friendRemove(u.username).then(loadFriends)}>{t("Remove")}</button>
-                </div>
-              </div>
-            ))}
+            ) : (() => {
+              const q = friendFilter.trim().toLowerCase();
+              const list = q ? friends.friends.filter((u) => u.display.toLowerCase().includes(q) || u.username.toLowerCase().includes(q)) : friends.friends;
+              return (
+                <>
+                  {friends.friends.length > 4 && (
+                    <input
+                      type="text" value={friendFilter} placeholder={t("Search your friends…")}
+                      onChange={(e) => setFriendFilter(e.target.value)}
+                      style={{ width: "100%", marginBottom: 10 }}
+                    />
+                  )}
+                  {!list.length ? (
+                    <p className="muted">{t("No friends match that search.")}</p>
+                  ) : list.map((u) => (
+                    <div className="trade-rec" key={u.username} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <div className="name">{u.display}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button className="btn ghost small" onClick={() => { setTab("find"); setHits(null); lookup(u.username); }}>🛒 {t("Trade")}</button>
+                        <button className="btn ghost small" onClick={() => friendRemove(u.username).then(loadFriends)}>{t("Remove")}</button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
             {!!friends?.outgoing.length && (
               <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
                 {t("Pending")}: {friends.outgoing.map((u) => u.display).join(", ")}
