@@ -394,11 +394,9 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     },
   ];
 
-  // Real web photos of the scanned card, used to fill the binder frame. We prefer
-  // a CLEAN full-bleed catalog scan (cleanWebImage) over an eBay seller photo
-  // (which often has a background / the card floating in the middle).
+  // A real photo of the scanned card (from eBay image-search), used to fill the
+  // binder frame when the priced-listings path doesn't yield one.
   let scanWebImage = "";
-  let cleanWebImage = "";
   try {
     // Photo-based identification boosters (run together): both feed the model a
     // strong hint of what the card is, from matching the EXACT photo online.
@@ -408,7 +406,6 @@ app.post("/api/scan", async (req: Request, res: Response) => {
         hasEbay ? ebayImageSearch(images[0].imageBase64, settings?.region).catch(() => ({ titles: [], price: null, image: "" })) : Promise.resolve({ titles: [] as string[], price: null, image: "" }),
       ]);
       scanWebImage = ebayMatch.image || "";
-      cleanWebImage = guess?.images?.[0] || "";
       // eBay image search: matching listing TITLES already carry the right
       // player/set/year/number — the strongest single ID signal we have.
       if (ebayMatch.titles.length) {
@@ -444,17 +441,12 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     } else {
       const ebayApplied = await applyEbayPrice(result, settings);
       if (!ebayApplied && isPokemon(result)) await applyPokemonPrice(result); // free real Pokémon prices
-      // Pick the cleanest full-frame photo for the binder. Priority:
-      //   1) Pokémon catalog scan (clean, exact) — already set for Pokémon.
-      //   2) A clean full-bleed catalog scan matched by reverse-image search.
-      //   3) The eBay priced-listing photo (may have a background).
-      //   4) The eBay image-search match.
-      if (result.identified && cleanWebImage) {
-        // For Pokémon keep the catalog image if we already have one; otherwise
-        // the clean web scan beats an eBay seller photo with a background.
-        if (!isPokemon(result) || !result.imageUrl) result.imageUrl = cleanWebImage;
-      }
-      if (!result.imageUrl && scanWebImage && result.identified) result.imageUrl = scanWebImage;
+      // Fill the binder frame with a real photo of THIS card. For a photo scan,
+      // prefer the eBay listing matched to the user's ACTUAL photo (scanWebImage)
+      // — it's the closest to their exact card and always loads — over the text-
+      // query listing image. (Reverse-image "similar" matches were dropped: they
+      // returned the wrong card / broken links.)
+      if (result.identified && scanWebImage) result.imageUrl = scanWebImage;
     }
     res.json(result);
   } catch (err) {
