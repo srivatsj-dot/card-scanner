@@ -294,36 +294,28 @@ export async function pokemonFacts(date: string): Promise<SportFacts | null> {
   const onDay = tournaments
     .filter((t: any) => String(t?.date || t?.endDate || t?.startDate || "").slice(0, 10) === date)
     .filter((t: any) => (Number(t?.players) || 0) >= MIN_PLAYERS)
-    .sort((a: any, b: any) => (Number(b?.players) || 0) - (Number(a?.players) || 0))
-    .slice(0, 3);
+    .sort((a: any, b: any) => (Number(b?.players) || 0) - (Number(a?.players) || 0));
   if (onDay.length === 0) return null;
 
-  const lines: string[] = [];
-  await Promise.all(
-    onDay.map(async (t: any) => {
-      const id = t?.id || t?.tournamentId || t?.slug;
-      const name = t?.name || "Tournament";
-      const players = Number(t?.players) || 0;
-      let winnerLine = "";
-      if (id) {
-        const standings = await getJson(
-          `https://play.limitlesstcg.com/api/tournaments/${id}/standings`,
-          8000,
-          auth
-        );
-        const rows = Array.isArray(standings) ? standings : standings?.standings || [];
-        const top = rows.find((r: any) => Number(r?.placing ?? r?.placement) === 1) || rows[0];
-        if (top) {
-          const rawPlayer = top?.player?.name || top?.name || top?.player || "";
-          const player = typeof rawPlayer === "string" ? rawPlayer.trim() : "";
-          const deck = deckName(top);
-          winnerLine = [player && `won by ${player}`, deck && `with ${deck}`].filter(Boolean).join(" ");
-        }
-      }
-      lines.push(`  • ${name}${players ? ` (${players} players)` : ""}${winnerLine ? ` — ${winnerLine}` : ""}`);
-    })
-  );
-  return lines.length ? { sport: "Pokémon TCG", lines: ["Tournament results:", ...lines] } : null;
+  // Collectors don't care about a wall of tournament winners — they care about
+  // cards, sets, and prices. So the verified feed contributes only ONE compact
+  // line about the day's single biggest event (winning deck = a meta signal),
+  // and the AI briefing carries the real Pokémon content (new sets, product
+  // drops, rising cards, market moves) via search.
+  const t: any = onDay[0];
+  const players = Number(t?.players) || 0;
+  const id = t?.id || t?.tournamentId || t?.slug;
+  let deck = "";
+  if (id) {
+    const standings = await getJson(`https://play.limitlesstcg.com/api/tournaments/${id}/standings`, 8000, auth);
+    const rows = Array.isArray(standings) ? standings : standings?.standings || [];
+    const top = rows.find((r: any) => Number(r?.placing ?? r?.placement) === 1) || rows[0];
+    if (top) deck = deckName(top);
+  }
+  const line = deck
+    ? `${deck} took the biggest event of the day (${t?.name || "a major tournament"}, ${players} players) — a signal of what's strong in the meta.`
+    : `${t?.name || "A major tournament"} (${players} players) was the day's biggest event.`;
+  return { sport: "Pokémon TCG", lines: [`Meta signal: ${line}`] };
 }
 
 // Assemble a verified-facts block for the requested categories on a date.

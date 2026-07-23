@@ -954,7 +954,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
 const OFFER_PATH_ID = /^\/offer\/([A-Za-z0-9_-]{6,})$/.exec(window.location.pathname)?.[1] || null;
 
 export default function App() {
-  const [user, setUser] = useState<string | null>(null);
+  // Resume the saved session on load so a reload / reopen on the same device
+  // stays signed in (no forced re-login).
+  const [user, setUser] = useState<string | null>(() => currentUser());
   const [showAuth, setShowAuth] = useState(false);
   // Entry welcome modal: shown once per browser session for guests.
   const [showLoginModal, setShowLoginModal] = useState(() => {
@@ -968,10 +970,8 @@ export default function App() {
   // so it re-reads the freshly-synced collection from storage.
   const [syncTick, setSyncTick] = useState(0);
 
-  // Don't auto-resume a saved session: everyone starts as a guest (main
-  // screens open, saving prompts login) and signs in deliberately.
+  // Keep the saved session (resumed above) — a reload shouldn't log you out.
   useEffect(() => {
-    logout();
     if (!document.documentElement.dataset.theme) {
       document.documentElement.dataset.theme = "dark";
     }
