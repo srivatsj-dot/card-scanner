@@ -187,7 +187,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
       )}
 
       {mode === "pages" && (() => {
-        const PER = 9;
+        const PER = 4;
         const pages = Math.max(1, Math.ceil(view.length / PER));
         const p = Math.min(page, pages - 1);
         const slice = view.slice(p * PER, p * PER + PER);

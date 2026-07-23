@@ -1020,7 +1020,8 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .gallery-star { position: absolute; top: 4px; right: 4px; font-size: 13px; }
 .binder-book { background: linear-gradient(180deg, var(--panel), var(--panel-2)); }
 .binder-page {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 12px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; padding: 14px;
+  max-width: 460px; margin: 0 auto;
   border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
   cursor: pointer;
 }
