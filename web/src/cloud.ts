@@ -151,6 +151,7 @@ export interface MarketCardDTO { id: string; label: string; sport: string; value
 export interface MarketOfferDTO {
   id: string; fromUser: string; fromDisplay: string; toUser: string; toDisplay: string;
   give: unknown[]; want: unknown[]; status: string; createdAt: number; respondedAt: number | null;
+  counter?: boolean;
 }
 export function marketLookup(username: string) {
   return authGet<{ username: string; display: string; cards: MarketCardDTO[]; wishlist: string[]; avatar: string }>(`/api/market/binder/${encodeURIComponent(username)}`);
@@ -163,8 +164,8 @@ export function marketSearchCards(q: string) {
 export function marketOffers() {
   return authGet<{ incoming: MarketOfferDTO[]; outgoing: MarketOfferDTO[] }>(`/api/market/offers`);
 }
-export function marketSendOffer(to: string, give: unknown[], want: unknown[]) {
-  return call<{ id: string }>("/api/market/offer", { to, give, want }, true);
+export function marketSendOffer(to: string, give: unknown[], want: unknown[], counterOf?: string) {
+  return call<{ id: string; counter?: boolean }>("/api/market/offer", { to, give, want, counterOf }, true);
 }
 export function marketRespond(id: string, action: "accept" | "decline" | "cancel") {
   return call<{ offer: MarketOfferDTO }>(`/api/market/offer/${encodeURIComponent(id)}/respond`, { action }, true);

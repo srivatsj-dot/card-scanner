@@ -44,13 +44,18 @@ function matchesAny(label: string, list: string[]): boolean {
   });
 }
 
-function CardTile({ c, on, outline, onClick }: { c: MarketCardDTO; on: boolean; outline?: "red" | "yellow"; onClick: () => void }) {
+function CardTile({ c, on, outline, onClick, onInfo }: { c: MarketCardDTO; on: boolean; outline?: "red" | "yellow"; onClick: () => void; onInfo?: () => void }) {
   return (
-    <button className={`market-tile ${on ? "sel" : ""} ${outline ? `outline-${outline}` : ""}`} onClick={onClick} title={c.label}>
-      {c.thumb ? <img src={c.thumb} alt="" /> : <div className="market-tile-ph">🃏</div>}
-      <div className="market-tile-label">{c.label}</div>
-      <div className="market-tile-val">{money(c.value, c.currency)}</div>
-    </button>
+    <div className="market-tile-wrap">
+      <button className={`market-tile ${on ? "sel" : ""} ${outline ? `outline-${outline}` : ""}`} onClick={onClick} title={c.label}>
+        {c.thumb ? <img src={c.thumb} alt="" /> : <div className="market-tile-ph">🃏</div>}
+        <div className="market-tile-label">{c.label}</div>
+        <div className="market-tile-val">{money(c.value, c.currency)}</div>
+      </button>
+      {onInfo && (
+        <button className="tile-info" title="Card info" onClick={(e) => { e.stopPropagation(); onInfo(); }}>ⓘ</button>
+      )}
+    </div>
   );
 }
 
@@ -77,6 +82,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   const [hits, setHits] = useState<CardSearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [their, setTheir] = useState<{ display: string; username: string; cards: MarketCardDTO[]; wishlist: string[] } | null>(null);
+  const [infoCard, setInfoCard] = useState<MarketCardDTO | null>(null); // card-detail modal in the trade view
   const [lookErr, setLookErr] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
   const [want, setWant] = useState<Set<string>>(new Set());
@@ -209,10 +215,11 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
     if (!giveCards.length || !wantCards.length) return;
     setSending(true);
     try {
-      await marketSendOffer(their.username, giveCards, wantCards);
+      // A counter passes the original id so the server retires it as "countered"
+      // (never "declined") and flags the new offer as a counter-offer.
+      await marketSendOffer(their.username, giveCards, wantCards, counteringId || undefined);
       onTradeEvent?.({ type: "made" });
-      // If this was a counter to an incoming offer, decline the original.
-      if (counteringId) { await marketRespond(counteringId, "decline").catch(() => {}); setCounteringId(null); }
+      if (counteringId) setCounteringId(null);
       setSent(their.display);
       setWant(new Set()); setGive(new Set());
       loadOffers();
@@ -223,7 +230,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
 
   // Counter an incoming offer: jump to the sender's binder to build a reply.
   // "Modify" prefills the same cards to tweak; "Trade back" starts fresh.
-  // Sending the counter declines the original.
+  // Sending the counter retires the original as "countered" (not declined).
   async function counter(o: MarketOfferDTO, prefill: boolean) {
     setCounteringId(o.id);
     setUname(o.fromUser);
@@ -390,7 +397,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
               <div className="card">
                 <h3 style={{ marginTop: 0 }}>{their.display}{t("'s binder — pick what you WANT")}</h3>
                 <p className="muted" style={{ marginTop: 0, fontSize: 12 }}>
-                  🟥 {t("outlined = on your wishlist")} · 🟨 {t("= one of their favorites")}
+                  🟥 {t("outlined = on your wishlist")} · 🟨 {t("= one of their favorites")} · ⓘ {t("tap for card info")}
                 </p>
                 {their.cards.length === 0 ? (
                   <p className="muted">{t("This collector's binder is empty.")}</p>
@@ -401,6 +408,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                         key={c.id} c={c} on={want.has(c.id)}
                         outline={matchesAny(c.label, myWishlist) ? "red" : c.favorite ? "yellow" : undefined}
                         onClick={() => toggle(want, setWant, c.id)}
+                        onInfo={() => setInfoCard(c)}
                       />
                     ))}
                   </div>
@@ -472,7 +480,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
               const lbl = (arr: unknown[]) => (arr as { label?: string }[]).map((c) => c.label).join(", ");
               return (
                 <div className="trade-rec" key={o.id}>
-                  <div className="name">{o.fromDisplay} {t("wants to trade")}</div>
+                  <div className="name">{o.counter ? `🔄 ${o.fromDisplay} ${t("sent a counter-offer")}` : `${o.fromDisplay} ${t("wants to trade")}`}</div>
                   <div className="sub">📥 {t("You receive")}: {lbl(o.give)}</div>
                   <div className="sub">📤 {t("You give")}: {lbl(o.want)}</div>
                   {f && <div style={{ margin: "6px 0" }}>{fairPill(f.fairness)} <span className="muted" style={{ fontSize: 13 }}>{f.valueGapNote}</span></div>}
@@ -575,6 +583,7 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
                       <div className="name">{u.display}</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <button className="btn ghost small" onClick={() => { setTab("find"); setHits(null); lookup(u.username); }}>🛒 {t("Trade")}</button>
+                        <button className="btn ghost small" onClick={() => openChatWith(u.username, u.display)}>💬 {t("Message")}</button>
                         <button className="btn ghost small" onClick={() => friendRemove(u.username).then(loadFriends)}>{t("Remove")}</button>
                       </div>
                     </div>
@@ -589,6 +598,23 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
             )}
           </div>
         </>
+      )}
+
+      {/* Tap ⓘ on one of their cards to see its info without selecting it. */}
+      {infoCard && (
+        <div className="backdrop" onClick={() => setInfoCard(null)}>
+          <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(420px, 92vw)", textAlign: "center" }}>
+            <button className="modal-x" onClick={() => setInfoCard(null)}>✕</button>
+            {infoCard.thumb
+              ? <img src={infoCard.thumb} alt="" style={{ width: "70%", maxWidth: 240, borderRadius: 10, margin: "6px auto 10px", display: "block" }} />
+              : <div style={{ fontSize: 60, margin: "10px 0" }}>🃏</div>}
+            <h3 style={{ margin: "0 0 6px" }}>{infoCard.label}</h3>
+            {infoCard.sport && <span className="pill">{infoCard.sport}</span>}
+            {infoCard.favorite && <span className="pill gold">⭐ {t("Their favorite")}</span>}
+            <div className="value-big" style={{ marginTop: 10 }}>{money(infoCard.value, infoCard.currency)}</div>
+            <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>{t("Estimated value")}</p>
+          </div>
+        </div>
       )}
 
       {/* Chat only exists while trading with someone: a hideable right-side panel. */}

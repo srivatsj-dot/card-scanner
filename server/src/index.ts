@@ -1758,15 +1758,15 @@ app.post("/api/market/offer", async (req: Request, res: Response) => {
   try {
     const userId = await marketUser(req, res);
     if (!userId) return;
-    const { to, give, want } = req.body as { to?: string; give?: unknown[]; want?: unknown[] };
-    const r = await cloud.createMarketOffer(userId, String(to || ""), (give as never[]) || [], (want as never[]) || []);
-    res.json({ id: r.id });
+    const { to, give, want, counterOf } = req.body as { to?: string; give?: unknown[]; want?: unknown[]; counterOf?: string };
+    const r = await cloud.createMarketOffer(userId, String(to || ""), (give as never[]) || [], (want as never[]) || [], counterOf ? String(counterOf) : undefined);
+    res.json({ id: r.id, counter: r.counter });
     // Best-effort email to the recipient if they opted in.
     if (r.notify && r.toEmail) {
       sendEmail(
         r.toEmail,
-        "New trade offer on Card-O-Rama",
-        `<p>You have a new trade offer waiting in Card-O-Rama. Open the app's Trade section to review it.</p>`,
+        r.counter ? "New counter-offer on Card-O-Rama" : "New trade offer on Card-O-Rama",
+        `<p>You have a new ${r.counter ? "counter-offer" : "trade offer"} waiting in Card-O-Rama. Open the app's Trade section to review it.</p>`,
         "market-offer"
       ).catch(() => {});
     }

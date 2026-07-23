@@ -202,7 +202,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         const seenSet = new Set(seen);
         setAnsweredOut(
           o.outgoing
-            .filter((x) => (x.status === "accepted" || x.status === "declined") && !seenSet.has(x.id))
+            .filter((x) => (x.status === "accepted" || x.status === "declined" || x.status === "countered") && !seenSet.has(x.id))
             .map((x) => ({ id: x.id, who: x.toDisplay, status: x.status }))
         );
       })
@@ -926,18 +926,20 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         <div className="backdrop" onClick={ackResponses}>
           <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
             <button className="modal-x" aria-label={t("Close")} onClick={ackResponses}>✕</button>
-            <div style={{ fontSize: 44 }}>{answeredOut.some((r) => r.status === "accepted") ? "🤝" : "✕"}</div>
+            <div style={{ fontSize: 44 }}>{answeredOut.some((r) => r.status === "accepted") ? "🤝" : answeredOut.some((r) => r.status === "countered") ? "🔄" : "✕"}</div>
             <h2 style={{ margin: "8px 0 6px" }}>{t("Trade update")}</h2>
             {answeredOut.map((r) => (
               <p key={r.id} style={{ margin: "4px 0" }}>
                 <strong>{r.who}</strong>{" "}
                 {r.status === "accepted"
                   ? t("accepted your trade — the cards have been swapped into your binder!")
-                  : t("declined your trade.")}
+                  : r.status === "countered"
+                    ? t("sent a counter-offer — open Trades to see their new offer.")
+                    : t("declined your trade.")}
               </p>
             ))}
             <button className="btn" style={{ width: "100%", marginTop: 10 }} onClick={() => { setView("market"); ackResponses(); }}>
-              {t("Open Trade")}
+              {t("Go to Trades")}
             </button>
           </div>
         </div>

@@ -236,8 +236,9 @@ export interface MarketOffer {
   toUser: string; toDisplay: string;
   give: BinderCard[]; // cards the sender gives (full snapshots, to move on accept)
   want: BinderCard[]; // cards the sender wants from the recipient
-  status: "pending" | "accepted" | "declined" | "cancelled";
+  status: "pending" | "accepted" | "declined" | "cancelled" | "countered";
   createdAt: number; respondedAt: number | null;
+  counter?: boolean; // this offer is a counter to a previous one
 }
 
 const reid = (c: BinderCard, now: number): BinderCard => ({
@@ -252,8 +253,9 @@ export async function createMarketOffer(
   fromUserId: number,
   toUsername: string,
   give: BinderCard[],
-  want: BinderCard[]
-): Promise<{ id: string; toDisplay: string; toEmail: string | null; notify: boolean }> {
+  want: BinderCard[],
+  counterOf?: string // id of an offer this one counters (I received it, I'm replying)
+): Promise<{ id: string; toDisplay: string; toEmail: string | null; notify: boolean; counter: boolean }> {
   const from = (await db().query(`SELECT id, username, display FROM users WHERE id=$1`, [fromUserId])).rows[0];
   const to = await findUserByName(toUsername);
   if (!to) throw new CloudError(404, "No collector found with that username.");
@@ -266,19 +268,35 @@ export async function createMarketOffer(
   if (!(await canSendOfferTo(fromUserId, to.id))) {
     throw new CloudError(403, `${to.display} only accepts trade requests from certain collectors.`);
   }
+  // If this is a counter, retire the original as "countered" (not "declined") so
+  // the original sender sees a counter-offer, never a rejection.
+  let isCounter = false;
+  if (counterOf) {
+    const orig = await loadMarketRow(counterOf);
+    if (orig && orig.toId === fromUserId && orig.fromId === to.id && orig.offer.status === "pending") {
+      orig.offer.status = "countered";
+      orig.offer.respondedAt = Date.now();
+      await db().query(
+        `UPDATE offers SET data = jsonb_set(data, '{offer}', $2::jsonb), updated_at=$3 WHERE id=$1`,
+        [`m_${counterOf}`, JSON.stringify(orig.offer), Date.now()]
+      );
+      isCounter = true;
+    }
+  }
   const id = newToken().slice(0, 16);
   const offer: MarketOffer = {
     id,
     fromUser: from.username, fromDisplay: from.display,
     toUser: to.username, toDisplay: to.display,
     give, want, status: "pending", createdAt: Date.now(), respondedAt: null,
+    ...(isCounter ? { counter: true } : {}),
   };
   await db().query(
     `INSERT INTO offers (id, data, updated_at) VALUES ($1,$2,$3)`,
     [`m_${id}`, JSON.stringify({ market: true, fromId: fromUserId, toId: to.id, offer }), Date.now()]
   );
   const notify = (await settingOf(to.id, "emailOffers")) === true;
-  return { id, toDisplay: to.display, toEmail: to.email, notify };
+  return { id, toDisplay: to.display, toEmail: to.email, notify, counter: isCounter };
 }
 
 async function loadMarketRow(id: string): Promise<{ fromId: number; toId: number; offer: MarketOffer } | null> {
