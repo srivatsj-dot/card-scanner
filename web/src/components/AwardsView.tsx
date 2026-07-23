@@ -12,12 +12,17 @@ interface Props {
   streakDays: number;
   questMaster: boolean;
   tradeCounters: { made: number; accepted: number; rejected: number; cards: number };
+  unlocked: string[]; // ids ever earned — stay unlocked even if no longer applicable
 }
 
-export default function AwardsView({ saved, wishlist, scans, trades, lang, bestSetPct, streakDays, questMaster, tradeCounters }: Props) {
+export default function AwardsView({ saved, wishlist, scans, trades, lang, bestSetPct, streakDays, questMaster, tradeCounters, unlocked }: Props) {
   const t = useT();
   const stats = computeStats(saved, wishlist, scans, trades, lang, bestSetPct, streakDays, questMaster, tradeCounters);
-  const earnedCount = ACHIEVEMENTS.filter((a) => a.earned(stats)).length;
+  // Once earned, always earned — an achievement never disappears (e.g. after
+  // clearing your binder). Show it if it's earned now OR was ever earned.
+  const everUnlocked = new Set(unlocked);
+  const isGot = (a: typeof ACHIEVEMENTS[number]) => a.earned(stats) || everUnlocked.has(a.id);
+  const earnedCount = ACHIEVEMENTS.filter(isGot).length;
 
   return (
     <div>
@@ -34,7 +39,7 @@ export default function AwardsView({ saved, wishlist, scans, trades, lang, bestS
       <div className="card">
         <div className="award-grid">
           {ACHIEVEMENTS.map((a) => {
-            const got = a.earned(stats);
+            const got = isGot(a);
             return (
               <div key={a.id} className={`award ${got ? "earned" : "locked"}`}>
                 <div className="award-emoji">{got ? a.emoji : "🔒"}</div>

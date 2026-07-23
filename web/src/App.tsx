@@ -150,6 +150,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         )
     )
   );
+  // Reactive mirror of the ever-earned set, so the Awards view re-renders and
+  // badges stay unlocked forever (even after clearing the binder).
+  const [unlockedIds, setUnlockedIds] = useState<string[]>(() => [...earnedRef.current]);
 
   // Live counters the quests measure against (briefingDays lives in questState).
   const questCounters: QuestCounters = {
@@ -354,8 +357,12 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           if (a) showUnlock(a.emoji, a.title, a.desc);
         });
       }
-      earnedRef.current = new Set(ids);
-      localStorage.setItem(EARNED_KEY, JSON.stringify(ids));
+      // UNION, never replace — an earned badge is kept forever, so clearing the
+      // binder or dropping below a threshold can't take it away.
+      const union = [...new Set([...earnedRef.current, ...ids])];
+      earnedRef.current = new Set(union);
+      setUnlockedIds(union);
+      localStorage.setItem(EARNED_KEY, JSON.stringify(union));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saved, wishlist, scans, trades, settings.language, bestSetPct, streak, questMaster, tradeCounters]);
@@ -925,7 +932,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {view === "awards" && (isGuest ? (
         <GuestGate feature="Earn achievements as your collection grows." onLogin={onRequestLogin} />
       ) : (
-        <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} questMaster={questMaster} tradeCounters={tradeCounters} />
+        <AwardsView saved={saved} wishlist={wishlist} scans={scans} trades={trades} lang={settings.language} bestSetPct={bestSetPct} streakDays={streak?.best || 0} questMaster={questMaster} tradeCounters={tradeCounters} unlocked={unlockedIds} />
       ))}
       {view === "settings" && (
         <SettingsView
