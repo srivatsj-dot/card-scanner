@@ -57,7 +57,10 @@ type Item = {
   image?: { imageUrl?: string };
   thumbnailImages?: { imageUrl?: string }[];
 };
-const itemImage = (it?: Item) => it?.image?.imageUrl || it?.thumbnailImages?.[0]?.imageUrl || "";
+// eBay serves images at a size baked into the URL (…/s-l140.jpg). Bump it to the
+// largest so the card fills the binder frame sharply instead of a tiny padded thumb.
+const upsize = (url: string) => url ? url.replace(/\/s-l\d+\.(jpg|jpeg|png|webp)/i, "/s-l1600.$1") : url;
+const itemImage = (it?: Item) => upsize(it?.image?.imageUrl || it?.thumbnailImages?.[0]?.imageUrl || "");
 
 // Reprints, novelty/custom cards, stickers, lots, and "read description" junk
 // pollute a search with cheap listings that aren't the real card — this is how a

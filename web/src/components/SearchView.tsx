@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ScanResult, Settings } from "../types";
 import { searchCardCached, getCachedSearch } from "../cache";
 import { verifyPrice } from "../api";
@@ -24,13 +24,21 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
   const t = useT();
 
   const [pending, setPending] = useState<string | null>(null);
+  const [lastQuery, setLastQuery] = useState(""); // the query behind the current result
+  // Clarify popup for a too-vague search: collect year/brand/parallel and retry.
+  const [clarify, setClarify] = useState(false);
+  const [clarYear, setClarYear] = useState("");
+  const [clarBrand, setClarBrand] = useState("");
+  const [clarParallel, setClarParallel] = useState("");
 
-  async function run() {
-    const q = text.trim();
+  async function run(query?: string) {
+    const q = (query ?? text).trim();
     if (!q) return;
+    setText(q);
     setError(null);
     setSaved(false);
     setWished(false);
+    setLastQuery(q);
     // Instant if we've looked this card up recently.
     const cached = getCachedSearch(q, settings);
     if (cached) {
@@ -58,6 +66,21 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
     }
   }
 
+  function submitClarify() {
+    const extra = [clarYear, clarBrand, clarParallel].map((s) => s.trim()).filter(Boolean).join(" ");
+    setClarify(false);
+    if (extra) run(`${lastQuery} ${extra}`.trim());
+  }
+
+  // When a search comes back too vague to price, pop up to ask for the details
+  // that would pin the exact card.
+  useEffect(() => {
+    if (result?.ambiguous) {
+      setClarYear(""); setClarBrand(""); setClarParallel("");
+      setClarify(true);
+    }
+  }, [result?.ambiguous]);
+
   return (
     <div>
       <div className="card">
@@ -75,7 +98,7 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
             onKeyDown={(e) => { if (e.key === "Enter") run(); }}
           />
         </label>
-        <button className="btn" onClick={run} disabled={loading || !text.trim()}>
+        <button className="btn" onClick={() => run()} disabled={loading || !text.trim()}>
           {loading ? <><span className="spinner" />{t("Searching…")}</> : t("Search")}
         </button>
         {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
@@ -109,6 +132,39 @@ export default function SearchView({ settings, result, onResult, onSave, onWishA
             </div>
           )}
           <ResultCard result={result} onWishAll={onWishAll} />
+        </div>
+      )}
+
+      {clarify && (
+        <div className="backdrop" onClick={() => setClarify(false)}>
+          <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(440px, 94vw)" }}>
+            <button className="modal-x" onClick={() => setClarify(false)}>✕</button>
+            <h3 style={{ marginTop: 0 }}>🔎 {t("Which one is it?")}</h3>
+            <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+              {t("There are many")} <strong>{lastQuery}</strong> {t("cards. Add a few details and we'll price the exact one — leave blank what you don't know.")}
+            </p>
+            <label className="field">
+              <span>{t("Year")}</span>
+              <input type="text" value={clarYear} placeholder="e.g. 2024" onChange={(e) => setClarYear(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitClarify(); }} />
+            </label>
+            <label className="field">
+              <span>{t("Brand / set")}</span>
+              <input type="text" value={clarBrand} placeholder="e.g. Topps Chrome" onChange={(e) => setClarBrand(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitClarify(); }} />
+            </label>
+            <label className="field">
+              <span>{t("Parallel / serial / card #")} ({t("optional")})</span>
+              <input type="text" value={clarParallel} placeholder="e.g. Gold /50, #150" onChange={(e) => setClarParallel(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitClarify(); }} />
+            </label>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+              <button className="btn ghost small" onClick={() => setClarify(false)}>{t("Skip")}</button>
+              <button className="btn" onClick={submitClarify} disabled={![clarYear, clarBrand, clarParallel].some((s) => s.trim())}>
+                {t("Look it up")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
