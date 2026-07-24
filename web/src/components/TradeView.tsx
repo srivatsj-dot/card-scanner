@@ -12,10 +12,11 @@ const newEntry = (): CardEntry => ({ id: nextId++, text: "" });
 function fairnessPill(f: string, t: (s: string) => string) {
   switch (f) {
     case "fair": return <span className="pill blue">{t("Fair — roughly even")}</span>;
-    case "favors_you": return <span className="pill green">{t("Good for you — you gain")}</span>;
-    case "favors_them": return <span className="pill red">{t("Bad for you — you give more")}</span>;
-    case "lopsided": return <span className="pill red">{t("Lopsided")}</span>;
-    default: return <span className="pill">{f}</span>;
+    case "favors_you": return <span className="pill green">{t("Better for you")}</span>;
+    case "favors_them": return <span className="pill red">{t("Better for them")}</span>;
+    // "lopsided" is no longer produced, but map any stray value to a direction.
+    case "lopsided": return <span className="pill red">{t("Better for them")}</span>;
+    default: return <span className="pill blue">{t("Fair — roughly even")}</span>;
   }
 }
 

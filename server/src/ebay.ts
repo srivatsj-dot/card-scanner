@@ -71,14 +71,24 @@ const isRealCard = (it: Item) => !JUNK.test(it.title || "");
 // against slabs badly overstates it. Detect them so we can exclude when raw.
 const GRADED = /\b(psa|bgs|beckett|sgc|cgc|graded|gem\s?mint|slab(bed)?)\b/i;
 const isGradedListing = (it: Item) => GRADED.test(it.title || "");
+// Parallels / refractors / autos / relics / numbered hits sell for far more than a
+// base card — pricing a BASE card against them badly overstates it. Detect them so
+// we can exclude when the scanned card is a plain base card.
+const PARALLEL = /\b(refractor|x-?fractor|superfractor|autograph|auto|signed|on[- ]card|patch|relic|jersey|memorabilia|one[- ]of[- ]one|1\s?\/\s?1|mojo|shimmer|disco|cracked\s?ice|die-?cut|ssp|numbered)\b|\/\s?\d{1,2}\b/i;
+const isParallelListing = (it: Item) => PARALLEL.test(it.title || "");
 
 // Robust price range from a set of listings; trims outliers, excludes obvious
 // reprints/novelty items, and (for a raw card) drops graded slabs.
-function summarize(items: Item[], opts?: { excludeGraded?: boolean }): EbayPrice | null {
+function summarize(items: Item[], opts?: { excludeGraded?: boolean; excludeParallels?: boolean }): EbayPrice | null {
   let real = items.filter(isRealCard);
   if (opts?.excludeGraded) {
     const raw = real.filter((it) => !isGradedListing(it));
     if (raw.length >= 3) real = raw; // only if enough raw comps remain
+  }
+  if (opts?.excludeParallels) {
+    // Price a base card against base copies only — drop refractors/autos/numbered.
+    const base = real.filter((it) => !isParallelListing(it));
+    if (base.length >= 3) real = base;
   }
   // Keep price+item together so we can pick a representative image near the median.
   const priced = real
@@ -106,7 +116,11 @@ function summarize(items: Item[], opts?: { excludeGraded?: boolean }): EbayPrice
   };
 }
 
-export async function ebayPrice(query: string, region?: string, excludeGraded = false): Promise<EbayPrice | null> {
+export async function ebayPrice(
+  query: string,
+  region?: string,
+  opts: { excludeGraded?: boolean; excludeParallels?: boolean } = {}
+): Promise<EbayPrice | null> {
   if (!hasEbay || !query.trim()) return null;
   try {
     const tok = await getToken();
@@ -117,7 +131,7 @@ export async function ebayPrice(query: string, region?: string, excludeGraded = 
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { itemSummaries?: Item[] };
-    return summarize(data.itemSummaries || [], { excludeGraded });
+    return summarize(data.itemSummaries || [], opts);
   } catch {
     return null;
   }

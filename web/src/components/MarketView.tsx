@@ -298,10 +298,9 @@ export default function MarketView({ saved, settings, cloudOn, isGuest, onRequir
   };
 
   const fairPill = (f: string) => {
-    if (f === "fair") return <span className="pill blue">{t("Fair")}</span>;
-    if (f === "favors_you") return <span className="pill green">{t("Good for you")}</span>;
-    if (f === "favors_them") return <span className="pill red">{t("They gain more")}</span>;
-    return null;
+    if (f === "favors_you") return <span className="pill green">{t("Better for you")}</span>;
+    if (f === "favors_them") return <span className="pill red">{t("Better for them")}</span>;
+    return <span className="pill blue">{t("Fair")}</span>;
   };
 
   return (

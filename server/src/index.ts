@@ -593,11 +593,24 @@ const looksGraded = (r: ScanResultShape) =>
     `${r.estimatedCondition || ""} ${r.specialEdition || ""}`
   );
 
+// Is this a plain BASE card (no parallel, not an auto/relic/numbered hit)? If so,
+// price it against base copies only — not refractors/parallels that cost far more.
+const looksBase = (r: ScanResultShape) =>
+  !r.parallel &&
+  !r.serialNumber &&
+  !/\b(refractor|auto|signed|patch|relic|numbered|1\s?\/\s?1|one of one|superfractor|insert)\b/i.test(
+    `${r.specialEdition || ""}`
+  );
+
 // Replace the model's value with a real eBay-listings range when available.
 async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Promise<boolean> {
   if (!hasEbay || !result?.identified || !result.estimatedValue) return false;
-  // For a raw card, exclude graded slabs so the price reflects a raw copy.
-  const ep = await ebayPrice(cardQuery(result), settings?.region, !looksGraded(result));
+  // Price against comps that MATCH this card: raw (not slabs) for a raw card, and
+  // base copies (not parallels/refractors) for a base card — so it's exact.
+  const ep = await ebayPrice(cardQuery(result), settings?.region, {
+    excludeGraded: !looksGraded(result),
+    excludeParallels: looksBase(result),
+  });
   if (!ep) return false;
   result.estimatedValue = {
     low: Math.round(ep.low),

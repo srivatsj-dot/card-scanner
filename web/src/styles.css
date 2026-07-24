@@ -1094,14 +1094,14 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 /* A clipping frame for a card photo. eBay seller photos frame the card with a
    background margin, so we zoom them in until the CARD fills the frame; clean
    catalog scans (Pokémon etc.) are already full-bleed and stay as-is. */
-.cardframe { position: relative; overflow: hidden; display: block; }
+.cardframe { position: relative; overflow: hidden; display: block; background: var(--panel-2); }
 .cardframe > img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* eBay seller photos frame the card with a background margin — zoom in so the
-   card fills the frame. (Clean full-bleed scans, e.g. Pokémon, are left as-is.) */
+/* eBay photos vary in aspect and often show the whole card — CONTAIN them so the
+   full card is visible and never cut off (a little letterbox is fine). */
 .cardframe > img[src*="ebayimg"],
 .cardframe > img[src*="ebaystatic"],
 .pocket > img[src*="ebayimg"],
-.pocket > img[src*="ebaystatic"] { transform: scale(1.45); transform-origin: center; }
+.pocket > img[src*="ebaystatic"] { object-fit: contain; }
 .gallery-photo { width: 100%; aspect-ratio: 3/4; }
 .market-pic { width: 100%; aspect-ratio: 3/4; border-radius: 6px; }
 .market-summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
