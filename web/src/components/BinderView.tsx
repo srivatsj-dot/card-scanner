@@ -225,7 +225,9 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
           <div className="binder-gallery">
             {view.map((s) => (
               <button key={s.id} className={`gallery-card ${swapSel === s.id ? "swap-sel" : ""}`} onClick={() => tapTile(s.id)} title={s.result.player || "card"}>
-                {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
+                <span className="cardframe gallery-photo">
+                  {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
+                </span>
                 {s.favorite && <span className="gallery-star">⭐</span>}
                 <div className="gallery-name">{s.result.player || "—"}</div>
                 <div className="gallery-val">{money(s.result.estimatedValue.mid, s.result.estimatedValue.currency)}</div>
@@ -310,7 +312,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
           <div className="card" key={s.id}>
             <div className="binder-row">
               {s.thumbnail ? (
-                <img className="thumb" src={s.thumbnail} alt={r.player || "card"} />
+                <span className="thumb cardframe"><img src={s.thumbnail} alt={r.player || "card"} /></span>
               ) : (
                 <div className="thumb placeholder">🖼️</div>
               )}

@@ -49,7 +49,7 @@ function CardTile({ c, on, outline, onClick, onInfo }: { c: MarketCardDTO; on: b
   return (
     <div className="market-tile-wrap">
       <button className={`market-tile ${on ? "sel" : ""} ${outline ? `outline-${outline}` : ""}`} onClick={onClick} title={c.label}>
-        {c.thumb ? <img src={c.thumb} alt="" /> : <div className="market-tile-ph">🃏</div>}
+        {c.thumb ? <span className="cardframe market-pic"><img src={c.thumb} alt="" /></span> : <div className="market-tile-ph">🃏</div>}
         <div className="market-tile-label">{c.label}</div>
         <div className="market-tile-val">{money(c.value, c.currency)}</div>
       </button>

@@ -1076,13 +1076,22 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 /* Real web photo of the identified card, shown beside the header. Prominent, and
    always fills its frame (cover) so there's no dead space around the card. */
 .result-photo {
-  width: 180px; max-width: 40vw; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px;
+  width: 180px; max-width: 40vw; aspect-ratio: 3/4; border-radius: 10px;
   border: 1px solid var(--line); background: var(--panel-2); flex: 0 0 auto;
 }
 @media (max-width: 560px) {
   /* On phones, let the card photo span the full width of the card frame. */
-  .result-photo { width: 100%; max-width: 100%; aspect-ratio: auto; max-height: 60vh; }
+  .result-photo { width: 100%; max-width: 100%; }
 }
+/* A clipping frame for a card photo. eBay seller photos frame the card with a
+   background margin, so we zoom them in until the CARD fills the frame; clean
+   catalog scans (Pokémon etc.) are already full-bleed and stay as-is. */
+.cardframe { position: relative; overflow: hidden; display: block; }
+.cardframe > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cardframe > img[src*="ebayimg"],
+.pocket > img[src*="ebayimg"] { transform: scale(1.34); }
+.gallery-photo { width: 100%; aspect-ratio: 3/4; }
+.market-pic { width: 100%; aspect-ratio: 3/4; border-radius: 6px; }
 .market-summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ok-box { background: rgba(58,210,159,0.12); border: 1px solid var(--good, #3ad29f); color: var(--text); padding: 10px 12px; border-radius: var(--radius); }
 .offer-alert { cursor: pointer; border-color: var(--accent); font-weight: 600; }

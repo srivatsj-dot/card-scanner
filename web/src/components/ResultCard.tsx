@@ -57,7 +57,9 @@ export default function ResultCard({
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           {result.imageUrl && (
-            <img className="result-photo" src={result.imageUrl} alt={result.player || "card"} loading="lazy" />
+            <span className="result-photo cardframe">
+              <img src={result.imageUrl} alt={result.player || "card"} loading="lazy" />
+            </span>
           )}
           <div style={{ flex: 1, minWidth: 180 }}>
             <h2 style={{ marginBottom: 4 }}>{result.player || tr("Unknown player")}</h2>
