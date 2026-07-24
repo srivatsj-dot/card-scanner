@@ -226,7 +226,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
             {view.map((s) => (
               <button key={s.id} className={`gallery-card ${swapSel === s.id ? "swap-sel" : ""}`} onClick={() => tapTile(s.id)} title={s.result.player || "card"}>
                 <span className="cardframe gallery-photo">
-                  {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
+                  {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph"><span className="ph-name">{s.result.player || t("Card")}</span></div>}
                 </span>
                 {s.favorite && <span className="gallery-star">⭐</span>}
                 <div className="gallery-name">{s.result.player || "—"}</div>
@@ -247,7 +247,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
             <div className="binder-page" onClick={(e) => { if (e.target === e.currentTarget && p < pages - 1) setPage(p + 1); }}>
               {slice.map((s) => (
                 <button key={s.id} className={`pocket ${swapSel === s.id ? "swap-sel" : ""}`} onClick={() => tapTile(s.id)}>
-                  {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph">🃏</div>}
+                  {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph"><span className="ph-name">{s.result.player || t("Card")}</span></div>}
                   {s.favorite && <span className="gallery-star">⭐</span>}
                 </button>
               ))}
@@ -314,7 +314,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               {s.thumbnail ? (
                 <span className="thumb cardframe"><img src={s.thumbnail} alt={r.player || "card"} /></span>
               ) : (
-                <div className="thumb placeholder">🖼️</div>
+                <div className="thumb placeholder"><span className="ph-name">{r.player || t("Card")}</span></div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="name" style={{ fontWeight: 700, fontSize: 16 }}>{r.player || "Unknown card"}</div>

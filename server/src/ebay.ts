@@ -67,11 +67,19 @@ const itemImage = (it?: Item) => upsize(it?.image?.imageUrl || it?.thumbnailImag
 // genuine grail (e.g. a T206 Wagner) shows up as "$20". Drop them.
 const JUNK = /\b(reprint|re-print|\brp\b|repro|reproduction|novelty|aceo|sticker|decal|custom|fantasy|facsimile|proxy|art card|fridge magnet|magnet|poster|mini|read desc|not real|replica|homage|fan art)\b/i;
 const isRealCard = (it: Item) => !JUNK.test(it.title || "");
+// Graded slabs (PSA/BGS/etc.) sell for many times a raw copy — pricing a RAW card
+// against slabs badly overstates it. Detect them so we can exclude when raw.
+const GRADED = /\b(psa|bgs|beckett|sgc|cgc|graded|gem\s?mint|slab(bed)?)\b/i;
+const isGradedListing = (it: Item) => GRADED.test(it.title || "");
 
-// Robust price range from a set of listings; trims outliers / graded lots and
-// excludes obvious reprints/novelty items.
-function summarize(items: Item[]): EbayPrice | null {
-  const real = items.filter(isRealCard);
+// Robust price range from a set of listings; trims outliers, excludes obvious
+// reprints/novelty items, and (for a raw card) drops graded slabs.
+function summarize(items: Item[], opts?: { excludeGraded?: boolean }): EbayPrice | null {
+  let real = items.filter(isRealCard);
+  if (opts?.excludeGraded) {
+    const raw = real.filter((it) => !isGradedListing(it));
+    if (raw.length >= 3) real = raw; // only if enough raw comps remain
+  }
   // Keep price+item together so we can pick a representative image near the median.
   const priced = real
     .map((it) => ({ it, p: Number(it.price?.value) }))
@@ -104,7 +112,7 @@ function summarize(items: Item[]): EbayPrice | null {
   };
 }
 
-export async function ebayPrice(query: string, region?: string): Promise<EbayPrice | null> {
+export async function ebayPrice(query: string, region?: string, excludeGraded = false): Promise<EbayPrice | null> {
   if (!hasEbay || !query.trim()) return null;
   try {
     const tok = await getToken();
@@ -115,9 +123,32 @@ export async function ebayPrice(query: string, region?: string): Promise<EbayPri
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { itemSummaries?: Item[] };
-    return summarize(data.itemSummaries || []);
+    return summarize(data.itemSummaries || [], { excludeGraded });
   } catch {
     return null;
+  }
+}
+
+// A representative eBay photo for a text query — works even when there aren't
+// enough listings to PRICE the card, so search results still get a card image.
+// Prefers a plain listing photo (many eBay card photos are clean scans).
+export async function ebayImageFor(query: string, region?: string): Promise<string> {
+  if (!hasEbay || !query.trim()) return "";
+  try {
+    const tok = await getToken();
+    const market = (region && MARKETPLACE[region]) || "EBAY_US";
+    const url = `${SEARCH_URL}?q=${encodeURIComponent(query.trim())}&filter=buyingOptions:%7BFIXED_PRICE%7D&limit=40`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${tok}`, "X-EBAY-C-MARKETPLACE-ID": market },
+    });
+    if (!res.ok) return "";
+    const data = (await res.json()) as { itemSummaries?: Item[] };
+    const items = (data.itemSummaries || []).filter(isRealCard);
+    // Prefer a raw (non-slab) listing's photo — those are usually the plain card.
+    const raw = items.filter((it) => !isGradedListing(it) && itemImage(it));
+    return itemImage((raw[0] || items.find((it) => itemImage(it)))) || "";
+  } catch {
+    return "";
   }
 }
 

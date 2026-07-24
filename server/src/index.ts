@@ -8,7 +8,7 @@ import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
-import { ebayPrice, ebayImageSearch, hasEbay } from "./ebay.js";
+import { ebayPrice, ebayImageSearch, ebayImageFor, hasEbay } from "./ebay.js";
 import { pokemonLookup } from "./prices.js";
 import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
@@ -443,10 +443,13 @@ app.post("/api/scan", async (req: Request, res: Response) => {
       if (!ebayApplied && isPokemon(result)) await applyPokemonPrice(result); // free real Pokémon prices
       // Fill the binder frame with a real photo of THIS card. For a photo scan,
       // prefer the eBay listing matched to the user's ACTUAL photo (scanWebImage)
-      // — it's the closest to their exact card and always loads — over the text-
-      // query listing image. (Reverse-image "similar" matches were dropped: they
-      // returned the wrong card / broken links.)
+      // — it's the closest to their exact card and always loads.
       if (result.identified && scanWebImage) result.imageUrl = scanWebImage;
+      // Text searches (and scans with no match) still deserve a picture: fetch a
+      // representative eBay photo even when there were too few comps to price.
+      if (!result.imageUrl && result.identified) {
+        result.imageUrl = await ebayImageFor(cardQuery(result), settings?.region).catch(() => "");
+      }
     }
     res.json(result);
   } catch (err) {
@@ -584,10 +587,17 @@ function cardQuery(r: ScanResultShape): string {
     .join(" ");
 }
 
+// Does the card look graded (a slab)? If not, we price it against RAW comps only.
+const looksGraded = (r: ScanResultShape) =>
+  /\b(psa|bgs|beckett|sgc|cgc|graded|gem\s?mint|slab)\b/i.test(
+    `${r.estimatedCondition || ""} ${r.specialEdition || ""}`
+  );
+
 // Replace the model's value with a real eBay-listings range when available.
 async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Promise<boolean> {
   if (!hasEbay || !result?.identified || !result.estimatedValue) return false;
-  const ep = await ebayPrice(cardQuery(result), settings?.region);
+  // For a raw card, exclude graded slabs so the price reflects a raw copy.
+  const ep = await ebayPrice(cardQuery(result), settings?.region, !looksGraded(result));
   if (!ep) return false;
   result.estimatedValue = {
     low: Math.round(ep.low),
