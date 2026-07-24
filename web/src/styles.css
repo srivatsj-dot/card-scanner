@@ -570,7 +570,8 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .img-slot { position: relative; }
 .img-slot img {
   width: 96px; height: 132px;
-  object-fit: cover;
+  /* contain, not cover — a sideways (landscape) photo shows whole, not wrong-cropped. */
+  object-fit: contain;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: #000;
@@ -1095,8 +1096,12 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
    catalog scans (Pokémon etc.) are already full-bleed and stay as-is. */
 .cardframe { position: relative; overflow: hidden; display: block; }
 .cardframe > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* eBay seller photos frame the card with a background margin — zoom in so the
+   card fills the frame. (Clean full-bleed scans, e.g. Pokémon, are left as-is.) */
 .cardframe > img[src*="ebayimg"],
-.pocket > img[src*="ebayimg"] { transform: scale(1.34); }
+.cardframe > img[src*="ebaystatic"],
+.pocket > img[src*="ebayimg"],
+.pocket > img[src*="ebaystatic"] { transform: scale(1.45); transform-origin: center; }
 .gallery-photo { width: 100%; aspect-ratio: 3/4; }
 .market-pic { width: 100%; aspect-ratio: 3/4; border-radius: 6px; }
 .market-summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }

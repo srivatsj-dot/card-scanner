@@ -25,7 +25,6 @@ const BLUR_THRESHOLD = 55;
  */
 export default function CameraModal({ onCapture, onClose, fullFrame = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const guideRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -144,8 +143,9 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
     }
   }
 
-  // Map the on-screen guide rectangle to source pixels (accounting for the
-  // object-fit: contain letterboxing) and crop the captured frame to it.
+  // Capture the FULL camera frame (no crop-to-box — that just shrank the usable
+  // camera space and cropped sideways cards wrong). The AI reads the card from
+  // the whole photo, and the binder shows a matched web photo anyway.
   async function capture() {
     const video = videoRef.current;
     if (!video || !video.videoWidth || capturing) return;
@@ -157,30 +157,14 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
     setCapturing(false);
     if (!video.videoWidth) return;
 
-    const guide = guideRef.current;
     const nW = video.videoWidth, nH = video.videoHeight;
-    let sx = 0, sy = 0, sw = nW, sh = nH;
-    if (guide) {
-      const vr = video.getBoundingClientRect();
-      const gr = guide.getBoundingClientRect();
-      // object-fit: cover — the video fills the box and overflows; use max scale.
-      const scale = Math.max(vr.width / nW, vr.height / nH);
-      const contentLeft = vr.left + (vr.width - nW * scale) / 2;
-      const contentTop = vr.top + (vr.height - nH * scale) / 2;
-      sx = Math.max(0, (gr.left - contentLeft) / scale);
-      sy = Math.max(0, (gr.top - contentTop) / scale);
-      sw = Math.min(nW - sx, gr.width / scale);
-      sh = Math.min(nH - sy, gr.height / scale);
-      if (sw < 8 || sh < 8) { sx = 0; sy = 0; sw = nW; sh = nH; }
-    }
-
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(sw);
-    canvas.height = Math.round(sh);
+    canvas.width = nW;
+    canvas.height = nH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-    setBlurry(sharpness(ctx, canvas.width, canvas.height) < BLUR_THRESHOLD);
+    ctx.drawImage(video, 0, 0, nW, nH);
+    setBlurry(sharpness(ctx, nW, nH) < BLUR_THRESHOLD);
     setPreview(canvas.toDataURL("image/jpeg", 0.95));
   }
 
@@ -208,12 +192,14 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
               ref={videoRef}
               autoPlay playsInline muted
               className="cam-video"
-              // Mirror the front-camera PREVIEW so it behaves like a normal
-              // selfie mirror ("points the right way"). The capture reads the raw
-              // frame, so the saved card image stays un-mirrored and readable.
-              style={{ transform: facing === "user" ? "scaleX(-1)" : undefined }}
+              style={{
+                objectFit: "contain",
+                // Mirror the front-camera PREVIEW so it behaves like a normal
+                // selfie mirror. Capture reads the raw frame, so the saved image
+                // stays un-mirrored and readable.
+                transform: facing === "user" ? "scaleX(-1)" : undefined,
+              }}
             />
-            {!fullFrame && <div ref={guideRef} className="cam-guide" aria-hidden />}
             {!ready && <div className="cam-hint muted">{t("Starting camera… (tap if it stays black)")}</div>}
           </div>
         )}
@@ -254,7 +240,7 @@ export default function CameraModal({ onCapture, onClose, fullFrame = false }: P
           <p className="muted" style={{ fontSize: 12, margin: "8px 2px 0", textAlign: "center" }}>
             {fullFrame
               ? t("Fit all the cards in the frame, well-lit and in focus. Hold steady; tap to refocus.")
-              : t("Line the card up inside the frame — it doesn't have to fill the whole screen. Hold steady; we crop to the box. Tap to refocus.")}
+              : t("Fill the frame with the card, well-lit and in focus. Use the Landscape button for a sideways card. Hold steady; tap to refocus.")}
           </p>
         )}
       </div>

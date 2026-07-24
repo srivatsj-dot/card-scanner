@@ -91,17 +91,11 @@ function summarize(items: Item[], opts?: { excludeGraded?: boolean }): EbayPrice
   const core = prices.slice(trim, prices.length - trim || prices.length);
   const at = (p: number) => core[Math.min(core.length - 1, Math.max(0, Math.floor(core.length * p)))];
   const mid = at(0.5);
-  // Representative image: the (real, priced) listing whose price is closest to the
-  // median AND that actually has an image — so the binder shows the right card,
-  // not the cheapest junk lot.
+  // Representative image: the TOP (most-relevant, Best-Match) real listing that
+  // has a photo — eBay orders by relevance, so the first is the best match for
+  // the card, not a random mid-priced lot.
   let image = "";
-  let best = Infinity;
-  for (const { it, p } of priced) {
-    const img = itemImage(it);
-    if (!img) continue;
-    const d = Math.abs(p - mid);
-    if (d < best) { best = d; image = img; }
-  }
+  for (const it of real) { const img = itemImage(it); if (img) { image = img; break; } }
   return {
     low: at(0.2),
     mid,
