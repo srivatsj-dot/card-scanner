@@ -50,6 +50,14 @@ export async function initCloud(): Promise<void> {
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at BIGINT NOT NULL
   )`);
+  // Sessions expire: keep a last-used stamp so idle tokens can be swept.
+  await p.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_used BIGINT`).catch(() => {});
+  // The email UNIQUE constraint is case-SENSITIVE, so "A@x.com" and "a@x.com"
+  // could both register — that's how one person ended up with two accounts on the
+  // same email. Enforce uniqueness on the lowercased email instead. (Best-effort:
+  // fails if a DB already contains case-duplicate emails, which we then log.)
+  await p.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON users (LOWER(email))`)
+    .catch((e) => console.warn("[cloud] couldn't add case-insensitive email index:", (e as Error).message));
   await p.query(`CREATE TABLE IF NOT EXISTS reset_codes (
     email TEXT PRIMARY KEY,
     code TEXT NOT NULL,
@@ -188,10 +196,17 @@ async function wishlistOf(userId: number): Promise<string[]> {
 
 /** Public binder view for the marketplace: look someone up by username/display,
  * plus their wishlist and avatar so the client can show wants/favorites. */
-export async function lookupBinder(username: string): Promise<{ username: string; display: string; cards: MarketCard[]; wishlist: string[]; avatar: string } | null> {
+export async function lookupBinder(username: string, viewerId?: number): Promise<{ username: string; display: string; cards: MarketCard[]; wishlist: string[]; avatar: string } | null> {
   if (!hasCloud) return null;
   const u = await findUserByName(username);
   if (!u) return null;
+  // Privacy: by default a binder is visible only to friends (and yourself).
+  if (viewerId && viewerId !== u.id) {
+    const vis = (await settingOf(u.id, "binderPrivacy")) || "friends";
+    if (vis !== "anyone" && !(await areFriends(viewerId, u.id))) {
+      throw new CloudError(403, `${u.display} only shares their binder with friends. Send them a friend request first.`);
+    }
+  }
   const cards = (await binderOf(u.id)).filter((c) => c.id != null).map(toMarketCard);
   const wishlist = await wishlistOf(u.id);
   const avatar = String((await settingOf(u.id, "avatar")) || "");
@@ -609,11 +624,24 @@ export async function register(username: string, email: string, password: string
   const salt = newSalt();
   const hash = hashPw(password, salt);
   const now = Date.now();
-  const id = (await p.query(
-    `INSERT INTO users (username, display, email, provider, salt, hash, created_at)
-     VALUES ($1,$2,$3,'local',$4,$5,$6) RETURNING id`,
-    [uname, display, email.trim(), salt, hash, now]
-  )).rows[0].id as number;
+  // The checks above can race (two signups at once), so rely on the DB's unique
+  // constraints as the real guard and translate a violation into a clear message.
+  let id: number;
+  try {
+    id = (await p.query(
+      `INSERT INTO users (username, display, email, provider, salt, hash, created_at)
+       VALUES ($1,$2,$3,'local',$4,$5,$6) RETURNING id`,
+      [uname, display, email.trim(), salt, hash, now]
+    )).rows[0].id as number;
+  } catch (e) {
+    const err = e as { code?: string; constraint?: string };
+    if (err?.code === "23505") {
+      throw new CloudError(409, /email/i.test(err.constraint || "")
+        ? "An account with that email already exists. Try logging in instead."
+        : "That username is already taken.");
+    }
+    throw e;
+  }
   await p.query(`INSERT INTO user_data (user_id, blob, version, updated_at) VALUES ($1,'{}'::jsonb,0,$2)`, [id, now]);
   const token = newToken();
   await p.query(`INSERT INTO sessions (token, user_id, created_at) VALUES ($1,$2,$3)`, [token, id, now]);
@@ -622,19 +650,51 @@ export async function register(username: string, email: string, password: string
 
 export async function login(username: string, password: string): Promise<AuthResult> {
   const p = db();
-  const u = (await p.query(`SELECT id, salt, hash, provider FROM users WHERE username=$1`, [key(username)])).rows[0];
-  if (!u) throw new CloudError(401, "No account with that username.");
-  if (u.provider !== "local" || !u.salt || !u.hash) throw new CloudError(401, "This account uses a different sign-in method.");
+  const id = key(username);
+  // Accept EITHER the username or the account's email — people routinely type
+  // their email at the login box and were being told "no account with that name".
+  const u = (await p.query(
+    `SELECT id, salt, hash, provider FROM users WHERE username=$1 OR LOWER(email)=$1 LIMIT 1`,
+    [id]
+  )).rows[0];
+  if (!u) throw new CloudError(401, "No account with that username or email.");
+  if (u.provider !== "local" || !u.salt || !u.hash) {
+    throw new CloudError(401, "This account signs in with Google — use “Continue with Google”.");
+  }
   if (!sameHash(hashPw(password, u.salt), u.hash)) throw new CloudError(401, "Incorrect password.");
   const token = newToken();
-  await p.query(`INSERT INTO sessions (token, user_id, created_at) VALUES ($1,$2,$3)`, [token, u.id, Date.now()]);
+  const now = Date.now();
+  await p.query(`INSERT INTO sessions (token, user_id, created_at, last_used) VALUES ($1,$2,$3,$3)`, [token, u.id, now]);
   return loadAuth(u.id, token);
 }
 
+// Sessions don't live forever: a token unused for this long stops working, so a
+// leaked or forgotten token on an old device can't be used indefinitely. Any use
+// slides the window forward, so active users are never logged out.
+const SESSION_MAX_IDLE_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
 export async function userForToken(token: string): Promise<number | null> {
   if (!token) return null;
-  const r = await db().query(`SELECT user_id FROM sessions WHERE token=$1`, [token]);
-  return r.rows[0]?.user_id ?? null;
+  const p = db();
+  const r = await p.query(`SELECT user_id, created_at, last_used FROM sessions WHERE token=$1`, [token]);
+  const row = r.rows[0];
+  if (!row) return null;
+  const now = Date.now();
+  const lastSeen = Number(row.last_used ?? row.created_at ?? 0);
+  if (lastSeen && now - lastSeen > SESSION_MAX_IDLE_MS) {
+    await p.query(`DELETE FROM sessions WHERE token=$1`, [token]).catch(() => {});
+    return null;
+  }
+  // Slide the idle window (throttled: only write once an hour per token).
+  if (!lastSeen || now - lastSeen > 60 * 60 * 1000) {
+    p.query(`UPDATE sessions SET last_used=$2 WHERE token=$1`, [token, now]).catch(() => {});
+  }
+  return row.user_id ?? null;
+}
+
+/** Sign out every device for a user (e.g. after a password reset). */
+export async function revokeAllSessions(userId: number): Promise<void> {
+  await db().query(`DELETE FROM sessions WHERE user_id=$1`, [userId]);
 }
 
 export async function getData(userId: number): Promise<{ data: unknown; version: number }> {
@@ -707,11 +767,19 @@ export async function applyReset(email: string, code: string, password: string):
   const p = db();
   const lower = email.trim().toLowerCase();
   const row = (await p.query(`SELECT code, expires FROM reset_codes WHERE email=$1`, [lower])).rows[0];
-  if (!row || row.code !== code.trim() || Date.now() > Number(row.expires)) {
+  // Compare the code in constant time so it can't be guessed a digit at a time.
+  const given = Buffer.from((code || "").trim());
+  const want = Buffer.from(String(row?.code ?? ""));
+  const codeOk = !!row && given.length === want.length && timingSafeEqual(given, want);
+  if (!codeOk || Date.now() > Number(row.expires)) {
     throw new CloudError(400, "That code is wrong or expired.");
   }
   const salt = newSalt();
   const hash = hashPw(password, salt);
-  await p.query(`UPDATE users SET salt=$2, hash=$3 WHERE LOWER(email)=$1`, [lower, salt, hash]);
+  const users = (await p.query(
+    `UPDATE users SET salt=$2, hash=$3 WHERE LOWER(email)=$1 RETURNING id`, [lower, salt, hash]
+  )).rows;
   await p.query(`DELETE FROM reset_codes WHERE email=$1`, [lower]);
+  // A reset means "someone may have had access" — sign out every other device.
+  for (const u of users) await revokeAllSessions(u.id).catch(() => {});
 }

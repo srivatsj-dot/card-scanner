@@ -35,6 +35,15 @@ export function searchCard(text: string, settings: Settings): Promise<ScanResult
   return postJson<ScanResult>("/api/scan", { text, settings });
 }
 
+/** Price a card at a professional grade (e.g. PSA 10), plus its raw value. */
+export interface GradePriceResult {
+  graded: { low: number; mid: number; high: number; currency: string; count: number; note: string } | null;
+  raw: { mid: number; currency: string; count: number } | null;
+}
+export function gradePrice(card: ScanResult, company: string, grade: string, settings: Settings): Promise<GradePriceResult> {
+  return postJson<GradePriceResult>("/api/grade-price", { card, company, grade, settings });
+}
+
 /** Refine a result's price against recent sold comps (runs after the scan shows). */
 export function verifyPrice(card: ScanResult, settings: Settings): Promise<{ estimatedValue: ScanResult["estimatedValue"] }> {
   return postJson<{ estimatedValue: ScanResult["estimatedValue"] }>("/api/price-check", { card, settings });

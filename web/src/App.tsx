@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from "./types";
 import { defaultSettings } from "./types";
-import { searchCard, scanCard } from "./api";
+import { searchCard, scanCard, gradePrice } from "./api";
 import { searchCardCached } from "./cache";
 import { ensureDigest } from "./digest";
-import { describeCard, DAY_MS, makeThumbnail } from "./utils";
+import { describeCard, DAY_MS, makeThumbnail, money } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
@@ -34,7 +34,7 @@ import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import HomeView from "./components/HomeView";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount, setDisplayName } from "./auth";
-import { cloudActive, schedulePush, cloudPull, cloudUserKey, marketOffers } from "./cloud";
+import { cloudActive, schedulePush, cloudPull, cloudUserKey, marketOffers, cloudSignOutAll } from "./cloud";
 
 type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "market" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
 
@@ -125,15 +125,29 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // New accounts get a 3-question setup (language, style, cards) once.
   const ONBOARD_KEY = `card-scanner-onboard:${ns}`;
+  // Ask the setup questions ONCE per account. `settings.onboarded` rides along in
+  // the synced blob, so logging back in (here or on another device) never
+  // re-asks — even if the device-local "just signed up" flag is still lying around.
   const [needsOnboarding, setNeedsOnboarding] = useState(
-    () => !isGuest && (() => { try { return localStorage.getItem(ONBOARD_KEY) === "1"; } catch { return false; } })()
+    () => !isGuest && !settings.onboarded &&
+      // An account that already has a collection has obviously been set up before
+      // (e.g. signing in on a new device) — don't put it through setup again.
+      saved.length === 0 && wishlist.length === 0 &&
+      (() => { try { return localStorage.getItem(ONBOARD_KEY) === "1"; } catch { return false; } })()
   );
   function finishOnboarding(patch: Partial<Settings>) {
-    setSettings((s) => ({ ...s, ...patch }));
+    setSettings((s) => ({ ...s, ...patch, onboarded: true }));
     if (patch.language) setLanguage(patch.language);
     try { localStorage.removeItem(ONBOARD_KEY); } catch { /* ignore */ }
     setNeedsOnboarding(false);
   }
+  // If a synced pull says this account already onboarded, close the questions.
+  useEffect(() => {
+    if (settings.onboarded && needsOnboarding) {
+      setNeedsOnboarding(false);
+      try { localStorage.removeItem(ONBOARD_KEY); } catch { /* ignore */ }
+    }
+  }, [settings.onboarded, needsOnboarding]);
   const [, setNameTick] = useState(0); // bump to re-render after a username change
   const earnedRef = useRef<Set<string>>(
     new Set(
@@ -461,6 +475,55 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     } catch {
       /* leave text-only; user can retry via refresh */
     }
+  }
+
+  // Data portability: download everything we hold for this account as JSON, so
+  // your collection is never locked inside the app.
+  function exportMyData() {
+    const dump = {
+      exportedAt: new Date().toISOString(),
+      account: isGuest ? "guest" : userName,
+      settings, binder: saved, wishlist, later,
+      stats: { scans, trades, bestSetPct, streak, questMaster, tradeCounters },
+      achievements: unlockedIds,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `card-o-rama-${(isGuest ? "guest" : userName).replace(/\W+/g, "-")}-${dayISO()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(t("Your data has been downloaded."));
+  }
+
+  // Record a professional grade you had done (PSA 10, BGS 9.5, …). A slabbed card
+  // trades in a different market, so we re-price it against graded comps of that
+  // grade and remember the raw value to show what grading added.
+  async function setCardGrade(id: string, company: string, grade: string, certNumber?: string) {
+    const card = saved.find((c) => c.id === id);
+    if (!card) return;
+    if (!company) { // clear the grade
+      setSaved((prev) => prev.map((c) => (c.id === id ? { ...c, grade: undefined } : c)));
+      return;
+    }
+    const rawMid = card.grade?.rawMid ?? card.result.estimatedValue?.mid ?? null;
+    setSaved((prev) => prev.map((c) => (c.id === id
+      ? { ...c, grade: { company, grade, gradedAt: Date.now(), certNumber, rawMid } }
+      : c)));
+    try {
+      const r = await gradePrice(card.result, company, grade, aiSettings);
+      if (!r.graded) return; // no graded comps — keep the raw value
+      const g = r.graded;
+      setSaved((prev) => prev.map((c) => (c.id === id ? {
+        ...c,
+        previousMid: c.result.estimatedValue?.mid ?? null,
+        result: { ...c.result, estimatedValue: { low: g.low, mid: g.mid, high: g.high, currency: g.currency, note: g.note } },
+        grade: { company, grade, gradedAt: Date.now(), certNumber, rawMid: r.raw?.mid ?? rawMid },
+        lastRefreshedAt: Date.now(),
+        history: [...(c.history || []), { t: Date.now(), mid: g.mid }],
+      } : c)));
+      toast(`${t("Graded")} ${company} ${grade} — ${money(g.mid, g.currency)}`);
+    } catch { /* keep the grade; value stays as-is */ }
   }
 
   // Correct a saved binder card that was identified wrong: re-look it up from the
@@ -906,6 +969,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onToggleFlag={toggleFlag}
           onReorder={reorderCards}
           onEdit={editSavedCard}
+          onGrade={setCardGrade}
           mode={settings.binderMode || "list"}
           onModeChange={(m) => setSettings((s) => ({ ...s, binderMode: m }))}
         />
@@ -939,6 +1003,12 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           settings={settings}
           onChange={setSettings}
           onDeleteAccount={() => { if (!requireAuth()) return; onDeleteAccount(); }}
+          onExportData={exportMyData}
+          onSignOutAll={async () => {
+            if (!requireAuth()) return;
+            try { await cloudSignOutAll(); } catch { /* fall through to a local logout */ }
+            onLogout();
+          }}
           onRename={async (name) => { if (!user) { onRequestLogin(); return; } await setDisplayName(user, name); setNameTick((n) => n + 1); }}
           email={(user && emailOf(user)) || undefined}
           displayName={userName}

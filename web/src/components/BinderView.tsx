@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { SavedCard } from "../types";
+import { GRADERS } from "../types";
 import { money } from "../utils";
 import { useT } from "../translator";
 import ResultCard from "./ResultCard";
@@ -17,9 +18,13 @@ interface Props {
   onToggleFlag: (id: string, flag: "favorite" | "notNeeded") => void;
   onReorder: (aId: string, bId: string) => void;
   onEdit: (id: string, text: string) => Promise<void> | void;
+  onGrade: (id: string, company: string, grade: string, cert?: string) => Promise<void> | void;
   mode: "list" | "grid" | "pages";
   onModeChange: (m: "list" | "grid" | "pages") => void;
 }
+
+/** "PSA 10" — the short label for a graded slab. */
+export const gradeLabel = (g?: SavedCard["grade"]) => (g ? `${g.company} ${g.grade}`.trim() : "");
 
 // Best-guess description of a saved card, to prefill the edit box.
 function cardDesc(s: SavedCard): string {
@@ -57,7 +62,7 @@ function ConditionHistory({ log }: { log: NonNullable<SavedCard["conditionLog"]>
   );
 }
 
-type Sort = "recent" | "value" | "player" | "year" | "sport" | "manual";
+type Sort = "recent" | "value" | "player" | "year" | "sport" | "graded" | "manual";
 
 function ChangeBadge({ card }: { card: SavedCard }) {
   if (card.previousMid == null) return null;
@@ -72,8 +77,27 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, onEdit, mode, onModeChange }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, onEdit, onGrade, mode, onModeChange }: Props) {
   const t = useT();
+  // "I got this card graded" — enter the company + grade you received.
+  const [gradeFor, setGradeFor] = useState<SavedCard | null>(null);
+  const [gCompany, setGCompany] = useState<string>("PSA");
+  const [gValue, setGValue] = useState("");
+  const [gCert, setGCert] = useState("");
+  const [gSaving, setGSaving] = useState(false);
+  function startGrade(s: SavedCard) {
+    setGradeFor(s);
+    setGCompany(s.grade?.company || "PSA");
+    setGValue(s.grade?.grade || "");
+    setGCert(s.grade?.certNumber || "");
+    setDetailId(null);
+  }
+  async function commitGrade() {
+    if (!gradeFor || !gValue.trim()) return;
+    setGSaving(true);
+    try { await onGrade(gradeFor.id, gCompany, gValue.trim(), gCert.trim() || undefined); setGradeFor(null); }
+    finally { setGSaving(false); }
+  }
   const [editId, setEditId] = useState<string | null>(null); // card being corrected
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -139,6 +163,10 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
       case "player": list.sort((a, b) => (a.result.player || "").localeCompare(b.result.player || "")); break;
       case "year": list.sort((a, b) => num(b.result.year) - num(a.result.year)); break;
       case "sport": list.sort((a, b) => (a.result.sport || "").localeCompare(b.result.sport || "")); break;
+      // Slabs first, then by grade (10 before 9), then the raw cards.
+      case "graded": list.sort((a, b) =>
+        (b.grade ? 1 : 0) - (a.grade ? 1 : 0) ||
+        (parseFloat(b.grade?.grade || "0") || 0) - (parseFloat(a.grade?.grade || "0") || 0)); break;
       default: list.sort((a, b) => b.savedAt - a.savedAt);
     }
     return list;
@@ -179,6 +207,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
             <option value="player">Player A–Z</option>
             <option value="year">Year (newest)</option>
             <option value="sport">Type / sport</option>
+            <option value="graded">Graded first</option>
             <option value="manual">My order</option>
           </select>
           <select value={sportFilter} onChange={(e) => setSportFilter(e.target.value)}>
@@ -229,6 +258,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                   {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph"><span className="ph-name">{s.result.player || t("Card")}</span></div>}
                 </span>
                 {s.favorite && <span className="gallery-star">⭐</span>}
+                {s.grade && <span className="gallery-slab">{gradeLabel(s.grade)}</span>}
                 <div className="gallery-name">{s.result.player || "—"}</div>
                 <div className="gallery-val">{money(s.result.estimatedValue.mid, s.result.estimatedValue.currency)}</div>
               </button>
@@ -249,6 +279,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                 <button key={s.id} className={`pocket ${swapSel === s.id ? "swap-sel" : ""}`} onClick={() => tapTile(s.id)}>
                   {s.thumbnail ? <img src={s.thumbnail} alt="" /> : <div className="gallery-ph"><span className="ph-name">{s.result.player || t("Card")}</span></div>}
                   {s.favorite && <span className="gallery-star">⭐</span>}
+                  {s.grade && <span className="gallery-slab">{gradeLabel(s.grade)}</span>}
                 </button>
               ))}
               {Array.from({ length: PER - slice.length }).map((_, i) => <div key={`e${i}`} className="pocket empty" />)}
@@ -257,6 +288,62 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               <button className="btn ghost small" disabled={p === 0} onClick={() => setPage(p - 1)}>‹ {t("Previous page")}</button>
               <span className="muted" style={{ fontSize: 13 }}>{t("Page")} {p + 1} / {pages} · {t("tap the page to flip")}</span>
               <button className="btn ghost small" disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>{t("Next page")} ›</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {gradeFor && (() => {
+        const g = gradeFor.grade;
+        const up = g?.rawMid != null && gradeFor.result.estimatedValue
+          ? gradeFor.result.estimatedValue.mid - g.rawMid : null;
+        const cur = gradeFor.result.estimatedValue?.currency || "USD";
+        return (
+          <div className="backdrop" onClick={() => !gSaving && setGradeFor(null)}>
+            <div className="card login-modal" onClick={(e) => e.stopPropagation()} style={{ width: "min(460px, 94vw)" }}>
+              <button className="modal-x" onClick={() => !gSaving && setGradeFor(null)}>✕</button>
+              <h3 style={{ marginTop: 0 }}>🛡 {t("Grade this card")}</h3>
+              <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+                {gradeFor.result.player || t("Card")} — {t("got it slabbed? Enter the company and the grade you received, and we'll re-price it against graded sales.")}
+              </p>
+              <div className="grid2">
+                <label className="field">
+                  <span>{t("Company")}</span>
+                  <select value={gCompany} onChange={(e) => setGCompany(e.target.value)}>
+                    {GRADERS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t("Grade")}</span>
+                  <input
+                    type="text" value={gValue} autoFocus placeholder="10, 9.5, Authentic…"
+                    onChange={(e) => setGValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") commitGrade(); }}
+                  />
+                </label>
+              </div>
+              <label className="field">
+                <span>{t("Cert number")} ({t("optional")})</span>
+                <input type="text" value={gCert} placeholder="e.g. 84213377" onChange={(e) => setGCert(e.target.value)} />
+              </label>
+              {up != null && (
+                <p className="muted" style={{ fontSize: 13 }}>
+                  {up >= 0 ? "📈 " : "📉 "}{t("Grading changed this card's value by")} <strong>{money(Math.abs(up), cur)}</strong>{" "}
+                  ({t("raw was")} {money(g!.rawMid!, cur)}).
+                </p>
+              )}
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10, flexWrap: "wrap" }}>
+                {g && (
+                  <button className="btn ghost small" disabled={gSaving}
+                    onClick={async () => { await onGrade(gradeFor.id, "", ""); setGradeFor(null); }}>
+                    {t("Remove grade")}
+                  </button>
+                )}
+                <button className="btn ghost small" onClick={() => setGradeFor(null)} disabled={gSaving}>{t("Cancel")}</button>
+                <button className="btn" onClick={commitGrade} disabled={gSaving || !gValue.trim()}>
+                  {gSaving ? <><span className="spinner" />{t("Pricing…")}</> : t("Save grade")}
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -297,6 +384,9 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                 <button className={`btn ghost small ${s.favorite ? "flag-on" : ""}`} onClick={() => onToggleFlag(s.id, "favorite")}>{s.favorite ? "⭐" : "☆"} {t("Favorite")}</button>
                 <button className="btn ghost small" onClick={() => startEdit(s)}>✏️ {t("Edit")}</button>
+                <button className={`btn ghost small ${s.grade ? "flag-on" : ""}`} onClick={() => startGrade(s)}>
+                  🛡 {s.grade ? gradeLabel(s.grade) : t("Grade")}
+                </button>
                 <button className="btn ghost small" onClick={() => { onRemove(s.id); setDetailId(null); }}>{t("Remove")}</button>
               </div>
               <ResultCard result={s.result} />
@@ -324,6 +414,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                 <div style={{ marginTop: 4 }}>
                   {r.sport && <span className="pill">{r.sport}</span>}
                   {r.parallel && <span className="pill gold">{r.parallel}</span>}
+                  {s.grade && <span className="pill slab">🛡 {gradeLabel(s.grade)}</span>}
                   {s.favorite && <span className="pill gold">⭐ {t("Favorite")}</span>}
                   <ChangeBadge card={s} />
                 </div>
@@ -358,6 +449,9 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                     {open ? t("Hide") : t("View")}
                   </button>
                   <button className="btn ghost small" onClick={() => startEdit(s)} title={t("Fix a wrong identification")}>✏️ {t("Edit")}</button>
+                  <button className={`btn ghost small ${s.grade ? "flag-on" : ""}`} onClick={() => startGrade(s)} title={t("Enter a professional grade you had done")}>
+                    🛡 {s.grade ? gradeLabel(s.grade) : t("Grade")}
+                  </button>
                   <button className="btn ghost small" onClick={() => onRemove(s.id)}>{t("Remove")}</button>
                 </div>
               </div>

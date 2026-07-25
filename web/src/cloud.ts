@@ -126,6 +126,13 @@ export async function cloudGoogle(accessToken: string) {
 export async function cloudRename(display: string) {
   await call("/api/cloud/rename", { display }, true);
 }
+/** Sign out on every device (invalidates all sessions for this account). */
+export async function cloudSignOutAll() {
+  await call("/api/cloud/signout-all", {}, true);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TUSER_KEY);
+  localStorage.removeItem(VERSION_KEY);
+}
 export async function cloudLogout() {
   try { await call("/api/cloud/logout", {}, true); } catch { /* ignore */ }
   localStorage.removeItem(TOKEN_KEY);

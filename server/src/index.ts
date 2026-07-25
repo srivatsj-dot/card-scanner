@@ -33,6 +33,26 @@ app.use(cors());
 // Card photos arrive as base64 JSON, so allow a generous body size.
 app.use(express.json({ limit: "25mb" }));
 
+// Baseline security headers. These cost nothing and close off the common
+// browser-side attacks (clickjacking, MIME sniffing, referrer leakage) plus tell
+// browsers to stay on HTTPS.
+app.disable("x-powered-by"); // don't advertise the stack
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY"); // no embedding = no clickjacking
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups"); // Google sign-in popup
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), payment=()"); // camera stays allowed
+  res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+  next();
+});
+
+// Never let an account's data sit in a shared/CDN cache.
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 const PORT = Number(process.env.PORT) || 8787;
 
 // The morning digest only reports news from this date onward (avoids stale or
@@ -452,6 +472,46 @@ app.post("/api/scan", async (req: Request, res: Response) => {
       }
     }
     res.json(result);
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
+// Price a card AT A GRADE. When you slab a card (PSA 10 etc.) it's a different
+// market: priced against graded comps of that exact grade. Returns the graded
+// value plus the raw value, so the app can show what grading added.
+app.post("/api/grade-price", async (req: Request, res: Response) => {
+  if (!hasEbay) { res.status(503).json({ error: "Live pricing isn't configured on this server." }); return; }
+  const { card, company, grade, settings } = req.body as {
+    card?: ScanResultShape; company?: string; grade?: string; settings?: Settings;
+  };
+  const result = card || {};
+  const base = cardQuery(result);
+  if (!base) { res.status(400).json({ error: "Not enough card detail to price." }); return; }
+  const label = `${(company || "").trim()} ${(grade || "").trim()}`.trim();
+  try {
+    const [graded, raw] = await Promise.all([
+      // Graded comps: include the grade in the query, and keep slab listings.
+      ebayPrice(`${base} ${label}`.trim(), settings?.region, {
+        excludeGraded: false,
+        excludeParallels: looksBase(result),
+      }).catch(() => null),
+      // Raw comps for the same card, to show the grading uplift.
+      ebayPrice(base, settings?.region, {
+        excludeGraded: true,
+        excludeParallels: looksBase(result),
+      }).catch(() => null),
+    ]);
+    if (!graded) { res.json({ graded: null, raw: raw || null }); return; }
+    res.json({
+      graded: {
+        low: Math.round(graded.low), mid: Math.round(graded.mid), high: Math.round(graded.high),
+        currency: graded.currency, count: graded.count,
+        note: `Live eBay price for ${label || "this grade"} from ${graded.count} matching listings (${graded.currency}).`,
+      },
+      raw: raw ? { mid: Math.round(raw.mid), currency: raw.currency, count: raw.count } : null,
+    });
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });
@@ -1676,11 +1736,42 @@ app.get("/api/admin/reset", async (req: Request, res: Response) => {
   }
 });
 
+// --- Auth rate limiting ----------------------------------------------------
+// Password guessing is the main attack on an account. Cap attempts per client IP
+// in a sliding window (in-memory: one server process, resets on restart — enough
+// to stop brute force without adding infrastructure).
+const authHits = new Map<string, number[]>();
+const AUTH_WINDOW_MS = 10 * 60 * 1000;
+const AUTH_MAX = 12; // attempts per window, per IP, per action
+function clientIp(req: Request): string {
+  const fwd = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
+  return fwd || req.socket.remoteAddress || "unknown";
+}
+/** True if this caller is over the limit (and a 429 has been sent). */
+function authLimited(req: Request, res: Response, action: string): boolean {
+  const k = `${action}:${clientIp(req)}`;
+  const now = Date.now();
+  const hits = (authHits.get(k) || []).filter((t) => now - t < AUTH_WINDOW_MS);
+  if (hits.length >= AUTH_MAX) {
+    authHits.set(k, hits);
+    res.status(429).json({ error: "Too many attempts. Wait a few minutes and try again." });
+    return true;
+  }
+  hits.push(now);
+  authHits.set(k, hits);
+  if (authHits.size > 5000) authHits.clear(); // crude cap; never grows unbounded
+  return false;
+}
+/** Clear a caller's strikes after a SUCCESSFUL auth, so normal use is unaffected. */
+const authOk = (req: Request, action: string) => authHits.delete(`${action}:${clientIp(req)}`);
+
 app.post("/api/cloud/register", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
+  if (authLimited(req, res, "register")) return;
   const { username, email, password } = req.body as { username?: string; email?: string; password?: string };
   try {
     const auth = await cloud.register(username || "", email || "", password || "");
+    authOk(req, "register");
     res.json(auth);
   } catch (err) {
     cloudFail(res, err);
@@ -1689,9 +1780,12 @@ app.post("/api/cloud/register", async (req: Request, res: Response) => {
 
 app.post("/api/cloud/login", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
+  if (authLimited(req, res, "login")) return;
   const { username, password } = req.body as { username?: string; password?: string };
   try {
-    res.json(await cloud.login(username || "", password || ""));
+    const auth = await cloud.login(username || "", password || "");
+    authOk(req, "login");
+    res.json(auth);
   } catch (err) {
     cloudFail(res, err);
   }
@@ -1746,6 +1840,18 @@ app.post("/api/cloud/google", async (req: Request, res: Response) => {
   } catch (err) {
     cloudFail(res, err);
   }
+});
+
+// Sign out EVERY device (including this one). Use it if you left yourself logged
+// in somewhere, or think someone else has access.
+app.post("/api/cloud/signout-all", async (req: Request, res: Response) => {
+  if (!cloudGuard(res)) return;
+  try {
+    const userId = await cloud.userForToken(bearer(req));
+    if (!userId) { res.status(401).json({ error: "Not signed in." }); return; }
+    await cloud.revokeAllSessions(userId);
+    res.json({ ok: true });
+  } catch (err) { cloudFail(res, err); }
 });
 
 app.post("/api/cloud/rename", async (req: Request, res: Response) => {
@@ -1807,8 +1913,9 @@ async function marketUser(req: Request, res: Response): Promise<number | null> {
 app.get("/api/market/binder/:username", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   try {
-    if (!(await marketUser(req, res))) return;
-    const found = await cloud.lookupBinder(String(req.params.username || ""));
+    const viewerId = await marketUser(req, res);
+    if (!viewerId) return;
+    const found = await cloud.lookupBinder(String(req.params.username || ""), viewerId);
     if (!found) { res.status(404).json({ error: "No collector found with that username." }); return; }
     res.json(found);
   } catch (err) { cloudFail(res, err); }
@@ -1965,6 +2072,7 @@ app.delete("/api/cloud/account", async (req: Request, res: Response) => {
 
 app.post("/api/cloud/forgot", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
+  if (authLimited(req, res, "forgot")) return; // don't let anyone spam reset emails
   const email = ((req.body as { email?: string }).email || "").trim();
   if (!emailOk(email)) { res.status(400).json({ error: "Invalid email." }); return; }
   try {
@@ -1979,9 +2087,11 @@ app.post("/api/cloud/forgot", async (req: Request, res: Response) => {
 
 app.post("/api/cloud/reset", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
+  if (authLimited(req, res, "reset")) return; // cap guesses at the 6-digit code
   const { email, code, password } = req.body as { email?: string; code?: string; password?: string };
   try {
     await cloud.applyReset(email || "", code || "", password || "");
+    authOk(req, "reset");
     res.json({ ok: true });
   } catch (err) {
     cloudFail(res, err);

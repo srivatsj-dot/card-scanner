@@ -1042,6 +1042,14 @@ textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 .gallery-name { font-size: 12px; padding: 4px 6px 0; font-family: ui-sans-serif, system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gallery-val { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 6px 6px; }
 .gallery-star { position: absolute; top: 4px; right: 4px; font-size: 13px; }
+/* Graded-slab badge on a card tile, and the matching pill in list view. */
+.gallery-slab {
+  position: absolute; top: 4px; left: 4px; z-index: 1;
+  background: rgba(10,12,20,0.82); color: #ffd76a; border: 1px solid #ffd76a;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
+  padding: 1px 5px; border-radius: 999px; font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.pill.slab { border-color: #ffd76a; color: #ffd76a; }
 .binder-book { background: linear-gradient(180deg, var(--panel), var(--panel-2)); }
 .binder-page {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; padding: 14px;

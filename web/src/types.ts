@@ -22,6 +22,8 @@ export interface Settings {
   tradeAllowList?: string[]; // usernames allowed when tradeRequestsFrom = "list"
   binderMode?: "list" | "grid" | "pages"; // how the binder is laid out
   avatar?: string; // emoji, a preset icon, or a data/URL photo shown as your avatar
+  onboarded?: boolean; // finished the setup questions — never ask again (syncs)
+  binderPrivacy?: "friends" | "anyone"; // who may view your binder (default friends)
 }
 
 /** A card as shown in the marketplace (someone else's binder, or your picks). */
@@ -109,6 +111,7 @@ export const defaultSettings: Settings = {
   tradeAllowList: [],
   binderMode: "list",
   avatar: "",
+  binderPrivacy: "friends",
 };
 
 export interface ScanResult {
@@ -221,7 +224,20 @@ export interface SavedCard {
   conditionLog?: { t: number; grade: string; flaws: string[] }[]; // condition over time
   favorite?: boolean; // protected: keep out of trade suggestions
   notNeeded?: boolean; // trade bait: offer this up first
+  grade?: CardGrade; // professional grade you entered (slabbed card)
 }
+
+/** A professional grade the collector entered for a slabbed card. */
+export interface CardGrade {
+  company: string; // PSA, BGS, SGC, CGC, …
+  grade: string; // "10", "9.5", "Authentic" — free text, kept as typed
+  gradedAt: number;
+  certNumber?: string;
+  rawMid?: number | null; // value before grading, to show the grading uplift
+}
+
+/** Grading companies offered in the picker (plus free-text "Other"). */
+export const GRADERS = ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"] as const;
 
 /** A card on the wishlist (wanted, with an estimated price). */
 export interface WishItem {

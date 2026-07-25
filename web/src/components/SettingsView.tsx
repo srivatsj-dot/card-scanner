@@ -8,12 +8,14 @@ interface Props {
   settings: Settings;
   onChange: (s: Settings) => void;
   onDeleteAccount: () => void;
+  onExportData: () => void;
+  onSignOutAll: () => void;
   onRename?: (name: string) => Promise<void>;
   email?: string;
   displayName?: string;
 }
 
-export default function SettingsView({ settings, onChange, onDeleteAccount, onRename, email, displayName }: Props) {
+export default function SettingsView({ settings, onChange, onDeleteAccount, onExportData, onSignOutAll, onRename, email, displayName }: Props) {
   const t = useT();
   const [nameInput, setNameInput] = useState(displayName || "");
   const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -312,6 +314,36 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onRe
           />
         </label>
       )}
+
+      <h3 style={{ marginTop: 18 }}>🔒 {t("Privacy & security")}</h3>
+      <label className="field">
+        <span>{t("Who can see my binder")}</span>
+        <select
+          value={settings.binderPrivacy || "friends"}
+          onChange={(e) => set("binderPrivacy", e.target.value as Settings["binderPrivacy"])}
+        >
+          <option value="friends">{t("Friends only (recommended)")}</option>
+          <option value="anyone">{t("Any signed-in collector")}</option>
+        </select>
+        <span className="muted" style={{ fontSize: 12 }}>
+          {t("Your cards and their values are private. This is enforced on the server, not just hidden in the app.")}
+        </span>
+      </label>
+      <div className="field">
+        <span>{t("Your data")}</span>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn secondary small" onClick={onExportData}>⬇ {t("Download my data")}</button>
+          <button
+            className="btn ghost small"
+            onClick={() => { if (confirm(t("Sign out on every device? You'll need to log in again."))) onSignOutAll(); }}
+          >
+            🚪 {t("Sign out everywhere")}
+          </button>
+        </div>
+        <span className="muted" style={{ fontSize: 12 }}>
+          {t("Download gives you a JSON copy of everything stored for your account. Sign out everywhere ends every session, including this one.")}
+        </span>
+      </div>
 
       <h3 style={{ marginTop: 18 }}>{t("Block card types")}</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
