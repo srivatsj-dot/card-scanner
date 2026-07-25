@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { SavedCard } from "../types";
 import { GRADERS } from "../types";
 import { money } from "../utils";
+import { shareCard } from "../share";
 import { useT } from "../translator";
 import ResultCard from "./ResultCard";
 import Sparkline from "./Sparkline";
@@ -19,6 +20,7 @@ interface Props {
   onReorder: (aId: string, bId: string) => void;
   onEdit: (id: string, text: string) => Promise<void> | void;
   onGrade: (id: string, company: string, grade: string, cert?: string) => Promise<void> | void;
+  shareName?: string; // your display name, stamped on shared card images
   mode: "list" | "grid" | "pages";
   onModeChange: (m: "list" | "grid" | "pages") => void;
 }
@@ -77,8 +79,22 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, onEdit, onGrade, mode, onModeChange }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, onEdit, onGrade, shareName, mode, onModeChange }: Props) {
   const t = useT();
+  // Turn a card into a shareable image (native share sheet on phones).
+  const [sharing, setSharing] = useState<string | null>(null);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  async function share(s: SavedCard) {
+    setSharing(s.id);
+    try {
+      const how = await shareCard({ card: s, username: shareName });
+      if (how === "downloaded") {
+        setShareMsg(t("Image saved to your downloads — post it anywhere."));
+        setTimeout(() => setShareMsg(null), 4000);
+      }
+    } finally { setSharing(null); }
+  }
+
   // "I got this card graded" — enter the company + grade you received.
   const [gradeFor, setGradeFor] = useState<SavedCard | null>(null);
   const [gCompany, setGCompany] = useState<string>("PSA");
@@ -387,6 +403,9 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                 <button className={`btn ghost small ${s.grade ? "flag-on" : ""}`} onClick={() => startGrade(s)}>
                   🛡 {s.grade ? gradeLabel(s.grade) : t("Grade")}
                 </button>
+                <button className="btn ghost small" disabled={sharing === s.id} onClick={() => share(s)}>
+                  {sharing === s.id ? <><span className="spinner" />{t("Making image…")}</> : `📤 ${t("Share")}`}
+                </button>
                 <button className="btn ghost small" onClick={() => { onRemove(s.id); setDetailId(null); }}>{t("Remove")}</button>
               </div>
               <ResultCard result={s.result} />
@@ -452,6 +471,9 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                   <button className={`btn ghost small ${s.grade ? "flag-on" : ""}`} onClick={() => startGrade(s)} title={t("Enter a professional grade you had done")}>
                     🛡 {s.grade ? gradeLabel(s.grade) : t("Grade")}
                   </button>
+                  <button className="btn ghost small" disabled={sharing === s.id} onClick={() => share(s)} title={t("Share this card as an image")}>
+                    {sharing === s.id ? <span className="spinner" /> : "📤"}
+                  </button>
                   <button className="btn ghost small" onClick={() => onRemove(s.id)}>{t("Remove")}</button>
                 </div>
               </div>
@@ -496,6 +518,8 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
           e.target.value = "";
         }}
       />
+
+      {shareMsg && <div className="chat-toast" style={{ cursor: "default" }}>{shareMsg}</div>}
 
       <div className="card" style={{ textAlign: "center" }}>
         <button className="btn ghost" onClick={onClear}>Clear binder</button>

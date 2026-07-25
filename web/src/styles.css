@@ -1308,3 +1308,6 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.75; 
 :root[data-theme="light"] .dropzone:hover { background: rgba(230, 169, 32, 0.06); }
 /* Make the score number readable in light mode */
 :root[data-theme="light"] .score-ring .inner { color: var(--text); }
+
+/* Collection-value chart on Home. */
+.portfolio-svg { width: 100%; height: 160px; display: block; margin: 10px 0 4px; }

@@ -4,7 +4,7 @@ import { defaultSettings } from "./types";
 import { searchCard, scanCard, gradePrice } from "./api";
 import { searchCardCached } from "./cache";
 import { ensureDigest } from "./digest";
-import { describeCard, DAY_MS, makeThumbnail, money } from "./utils";
+import { describeCard, DAY_MS, makeThumbnail, money, sameCard } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
@@ -33,6 +33,7 @@ import TradeUpView from "./components/TradeUpView";
 import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import HomeView from "./components/HomeView";
+import PortfolioChart from "./components/PortfolioChart";
 import { currentUser, displayNameOf, emailOf, logout, deleteAccount, setDisplayName } from "./auth";
 import { cloudActive, schedulePush, cloudPull, cloudUserKey, marketOffers, cloudSignOutAll } from "./cloud";
 
@@ -211,16 +212,35 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   useEffect(() => {
     if (isGuest || !cloudActive()) return;
     let cancelled = false;
+    // Only announce a response that happened recently — never replay old history.
+    const RECENT_MS = 14 * DAY_MS;
     const fetchOffers = () => marketOffers()
       .then((o) => {
         if (cancelled) return;
         setIncomingPending(o.incoming.filter((x) => x.status === "pending").length);
-        let seen: string[] = [];
-        try { seen = JSON.parse(localStorage.getItem(SEEN_RESP_KEY) || "[]"); } catch { /* ignore */ }
+        const answered = o.outgoing.filter(
+          (x) => x.status === "accepted" || x.status === "declined" || x.status === "countered"
+        );
+        // The "already announced" list lives on this device. If it's MISSING (a
+        // fresh login, a new device, cleared storage), seed it with everything
+        // that's already been answered instead of popping them all up again —
+        // that's what caused "X declined your trade" on every single login.
+        let seen: string[] | null = null;
+        try {
+          const raw = localStorage.getItem(SEEN_RESP_KEY);
+          if (raw) seen = JSON.parse(raw) as string[];
+        } catch { /* treat as missing */ }
+        if (seen === null) {
+          try { localStorage.setItem(SEEN_RESP_KEY, JSON.stringify(answered.map((x) => x.id))); } catch { /* ignore */ }
+          setAnsweredOut([]);
+          return;
+        }
         const seenSet = new Set(seen);
+        const now = Date.now();
         setAnsweredOut(
-          o.outgoing
-            .filter((x) => (x.status === "accepted" || x.status === "declined" || x.status === "countered") && !seenSet.has(x.id))
+          answered
+            .filter((x) => !seenSet.has(x.id))
+            .filter((x) => !x.respondedAt || now - x.respondedAt < RECENT_MS)
             .map((x) => ({ id: x.id, who: x.toDisplay, status: x.status }))
         );
       })
@@ -390,8 +410,17 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     setLanguage(settings.language);
   }, [settings.language]);
 
-  function saveCard(result: ScanResult, frontDataUrl: string | undefined) {
+  function saveCard(result: ScanResult, frontDataUrl: string | undefined, quiet = false) {
     if (!requireAuth()) return;
+    // Duplicate warning: you very likely already own this exact card. Ask before
+    // adding a second copy on a single save; on a bulk save just say so after.
+    const copies = saved.filter((c) => sameCard(c.result, result)).length;
+    if (copies > 0 && !quiet) {
+      const ok = confirm(
+        `${t("You already have this card in your binder")}${copies > 1 ? ` (${copies} ${t("copies")})` : ""}.\n\n${result.player || t("Card")}\n\n${t("Add another copy?")}`
+      );
+      if (!ok) return;
+    }
     const now = Date.now();
     setSaved((prev) => [
       {
@@ -407,7 +436,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       },
       ...prev,
     ]);
-    toast(`${t("Saved to binder")}: ${result.player || t("card")}`);
+    toast(copies > 0
+      ? `⚠️ ${t("Duplicate")} — ${result.player || t("card")} (${copies + 1} ${t("copies")})`
+      : `${t("Saved to binder")}: ${result.player || t("card")}`);
   }
 
   // Re-scan a saved card's photo to log its condition over time and flag new damage.
@@ -877,17 +908,21 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         </div>
 
       {view === "home" && (
-        <HomeView
-          saved={saved}
-          wishlist={wishlist}
-          scans={scans}
-          currency={settings.currency}
-          onGo={(v) => setView(v)}
-          streak={liveStreak(streak, dayISO())}
-          quests={questState ? questProgress(questState, questCounters) : []}
-          isGuest={isGuest}
-          onLogin={onRequestLogin}
-        />
+        <>
+          {/* Value-over-time sits above the fold once you actually own cards. */}
+          {!isGuest && saved.length > 0 && <PortfolioChart saved={saved} currency={settings.currency} />}
+          <HomeView
+            saved={saved}
+            wishlist={wishlist}
+            scans={scans}
+            currency={settings.currency}
+            onGo={(v) => setView(v)}
+            streak={liveStreak(streak, dayISO())}
+            quests={questState ? questProgress(questState, questCounters) : []}
+            isGuest={isGuest}
+            onLogin={onRequestLogin}
+          />
+        </>
       )}
       {view === "today" && (
         <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} collected={collectedCategories} />
@@ -903,7 +938,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         </ErrorBoundary>
       )}
       {view === "bulk" && (isMobile() ? (
-        <BulkView settings={aiSettings} onSave={saveCard} onWish={addWishResults} />
+        <BulkView settings={aiSettings} onSave={(r, d) => saveCard(r, d, true)} onWish={addWishResults} />
       ) : (
         <div className="card" style={{ textAlign: "center", padding: "36px 22px" }}>
           <div style={{ fontSize: 40 }}>📱</div>
@@ -970,6 +1005,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onReorder={reorderCards}
           onEdit={editSavedCard}
           onGrade={setCardGrade}
+          shareName={isGuest ? undefined : userName}
           mode={settings.binderMode || "list"}
           onModeChange={(m) => setSettings((s) => ({ ...s, binderMode: m }))}
         />

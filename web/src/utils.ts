@@ -73,6 +73,23 @@ export function bulkCardToResult(c: BulkCard): ScanResult {
   };
 }
 
+/**
+ * Are these the same physical card (so saving one is a duplicate)? Compares the
+ * identity fields that distinguish a printing — player, year, set, number and
+ * parallel — ignoring case/punctuation. A missing field on either side doesn't
+ * block a match, so a slightly thinner scan of the same card still counts.
+ */
+export function sameCard(a: ScanResult, b: ScanResult): boolean {
+  const norm = (v: unknown) => (v == null ? "" : String(v).toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const player = norm(a.player), other = norm(b.player);
+  if (!player || player !== other) return false; // different subject → different card
+  const fields: (keyof ScanResult)[] = ["year", "setName", "cardNumber", "parallel"];
+  return fields.every((f) => {
+    const x = norm(a[f]), y = norm(b[f]);
+    return !x || !y || x === y; // only a genuine mismatch rules it out
+  });
+}
+
 /** Build a short text description of a saved card for the trade tool. */
 export function describeCard(r: ScanResult): string {
   const parts = [r.year, r.manufacturer, r.setName, r.player, r.parallel].filter(Boolean);
