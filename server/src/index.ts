@@ -927,16 +927,31 @@ const sideMid = (side?: TradeSideShape): number => {
 // label. We no longer accept "lopsided": resolve any non-directional or invalid
 // verdict to fair / favors_you / favors_them from the actual per-side values.
 // (favors_you = the cards RECEIVED are worth more than the cards GIVEN UP.)
+// Any gap smaller than this is noise between collectors — always "fair".
+const ALWAYS_FAIR_GAP = 10;
+
+/**
+ * Decide the fairness DIRECTION ourselves instead of trusting the model's label.
+ * The model kept contradicting itself — explaining that the card you receive is
+ * clearly better, then tagging the trade "favors_them". So we derive it from the
+ * two side worths it reported (which the prompt requires to already fold in
+ * player talent, not just price):
+ *   theirSide (what you RECEIVE) worth more  → favors_you
+ *   yourSide  (what you GIVE UP) worth more  → favors_them
+ * with a hard "under $10 apart is always fair" floor on top.
+ */
 function normalizeFairness(t: TradeShape): TradeShape {
-  if (t.fairness === "fair" || t.fairness === "favors_you" || t.fairness === "favors_them") return t;
   const you = sideMid(t.yourSide), them = sideMid(t.theirSide);
-  if (Number.isFinite(you) && Number.isFinite(them) && (you > 0 || them > 0)) {
-    const hi = Math.max(you, them), lo = Math.min(you, them);
-    const gap = hi > 0 ? (hi - lo) / hi : 0;
-    t.fairness = gap <= 0.2 ? "fair" : them > you ? "favors_you" : "favors_them";
-  } else {
-    t.fairness = "fair";
+  const known = Number.isFinite(you) && Number.isFinite(them) && (you > 0 || them > 0);
+  if (!known) {
+    // No usable numbers — keep a valid label, defaulting to fair.
+    if (t.fairness !== "favors_you" && t.fairness !== "favors_them") t.fairness = "fair";
+    return t;
   }
+  const gap = Math.abs(them - you);
+  const hi = Math.max(you, them);
+  if (gap < ALWAYS_FAIR_GAP || (hi > 0 && gap / hi <= 0.2)) t.fairness = "fair";
+  else t.fairness = them > you ? "favors_you" : "favors_them";
   return t;
 }
 
@@ -1075,7 +1090,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "11";
+const DIGEST_GEN_VERSION = "12";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
@@ -1091,6 +1106,28 @@ const factsToSections = (data: { sport: string; lines: string[] }[]): DigestSect
       trades: [], chase: [], news: [],
     }))
     .filter((s) => s.storylines.length);
+// Collectors don't want a tournament-results dump — especially not tiny online
+// locals. The prompt says so, but the model keeps producing them, so strip them
+// deterministically: drop any line that reads like an event result, and any line
+// citing a small field. At most one meta line survives per section.
+const RESULT_LINE = /(won by|winner:|\bwins\b|took (?:down )?(?:the )?(?:event|tournament)|1st place|top\s?(?:4|8|16)\b|with .*\bdeck\b)/i;
+const FIELD_SIZE = /\((\d[\d,]*)\s*players?\)/i;
+const SMALL_FIELD = 64;
+function scrubTournamentDump(lines: string[]): string[] {
+  let kept = 0;
+  return lines.filter((l) => {
+    const m = FIELD_SIZE.exec(l);
+    const size = m ? Number(m[1].replace(/,/g, "")) : NaN;
+    if (Number.isFinite(size) && size < SMALL_FIELD) return false; // a local, not news
+    if (!RESULT_LINE.test(l)) return true; // not a results line — keep
+    return ++kept <= 1; // allow a single meta signal from a real event
+  });
+}
+const dePokemonDump = (s: DigestSection): DigestSection =>
+  /pok[eé]mon|tcg/i.test(s.sport)
+    ? { ...s, storylines: scrubTournamentDump(s.storylines), news: scrubTournamentDump(s.news) }
+    : s;
+
 const briefingHasContent = (b: Briefing) =>
   b.sections.some((s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length);
 
@@ -1161,7 +1198,7 @@ async function buildDigest(target: string): Promise<Briefing> {
           ? `=== VERIFIED RESULTS (authoritative — pulled directly from official league data for ${windowStart}) ===\n${verified}\n\n` +
             `For the sports covered by this VERIFIED block, build "risingStars" and "storylines" ONLY from these real results — these scores and stat lines are correct and correctly dated. Do NOT add, invent, search for, or "remember" any other games for those sports. Pick the most notable lines, write each as one vivid sentence, and tag it [${windowStart}]. You may still use search for those sports' "trades" and "news" and for any sport NOT in the verified block.\n\n`
           : "") +
-        `=== POKÉMON TCG ===\nThere's no pre-verified feed for Pokémon, so research it with Google Search: find Pokémon TCG tournaments that CONCLUDED on ${windowStart} (Regionals, Special Events, Worlds, major online events) via Limitless TCG and RK9, report winners and winning decks plus meta shifts, in the Pokémon section. Only report what search confirms, date-tagged [${windowStart}]; never invent a tournament or deck.\n\n` +
+        `=== POKÉMON TCG ===\nThere's no pre-verified feed for Pokémon, so research it with Google Search — but this reader is a CARD COLLECTOR, not a competitive player. DO NOT produce a list of tournament results; a rundown of "event X (N players) — won by <username> with <deck>" is exactly the wrong output and must never appear. Small online locals (anything under ~64 players) are not news at all. Instead report, all date-tagged [${windowStart}] and only what search confirms: new and upcoming SET/product releases (English and Japanese), single CARDS spiking or falling in price, record or notable SALES, chase cards from current sets, grading and pop-report news, and restocks/reveals. At most ONE line may reference competitive play, and only as a meta signal from a PREMIER event (Regionals, Special Event, International, Worlds) — never an online local, and never a list.\n\n` +
         `Write the briefing for ${target} (covering ${windowStart}), for these categories: ${cats.join(", ")}.`,
     },
   ];
@@ -1175,7 +1212,7 @@ async function buildDigest(target: string): Promise<Briefing> {
       trades: keepInWindow(s.trades, windowStart, target),
       chase: keepInWindow(s.chase, windowStart, target),
       news: keepInWindow(s.news, windowStart, target),
-    }));
+    })).map(dePokemonDump);
     const briefing: Briefing = { overview: result.overview, yourCards: [], yourWishlist: [], sections };
     if (briefingHasContent(briefing)) return briefing;
     // Model returned nothing — fall back to the verified feeds, else quiet day.
