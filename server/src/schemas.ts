@@ -253,7 +253,8 @@ export const digestSchema = {
 export const tradeSchema = {
   type: "OBJECT",
   properties: {
-    fairness: { ...STR, description: "Exactly one of: fair, favors_you, favors_them. Use 'fair' when the two sides are within ~20% in overall worth; only pick a direction when one side is clearly ahead. Do NOT output 'lopsided' or any other value." },
+    betterFor: { ...STR, description: "WHO COMES OUT AHEAD — exactly one of: 'you', 'them', 'even'. 'you' = the collector ends up with the better side (the players/cards they RECEIVE are better than the ones they give up). 'them' = the other trader ends up ahead. 'even' = genuinely comparable. Decide this on PLAYER CALIBER and collectibility FIRST — a superstar for a role player is NOT even, no matter how close the prices are. This field alone determines the verdict shown to the user, so it MUST agree with your reasoning: if you write that the card being received is better, this must be 'you'." },
+    fairness: { ...STR, description: "Exactly one of: fair, favors_you, favors_them — must match betterFor ('you'→favors_you, 'them'→favors_them, 'even'→fair). Do NOT output 'lopsided' or any other value." },
     verdict: { ...STR, description: "One-line headline judgment." },
     yourSide: {
       type: "OBJECT",
@@ -273,7 +274,7 @@ export const tradeSchema = {
       items: STR,
     },
   },
-  required: ["fairness", "verdict", "yourSide", "theirSide", "valueGapNote", "reasoning", "suggestions"],
+  required: ["betterFor", "fairness", "verdict", "yourSide", "theirSide", "valueGapNote", "reasoning", "suggestions"],
 } as const;
 
 // "What should I ask for?" — given the cards the collector is giving up,

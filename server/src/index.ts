@@ -904,6 +904,7 @@ app.post("/api/offer/:id/respond", async (req: Request, res: Response) => {
 
 interface TradeSideShape { valueLow?: number; valueHigh?: number; notes?: string }
 interface TradeShape {
+  betterFor?: string; // "you" | "them" | "even" — the model's explicit call
   fairness?: string;
   verdict?: string;
   yourSide?: TradeSideShape;
@@ -927,31 +928,31 @@ const sideMid = (side?: TradeSideShape): number => {
 // label. We no longer accept "lopsided": resolve any non-directional or invalid
 // verdict to fair / favors_you / favors_them from the actual per-side values.
 // (favors_you = the cards RECEIVED are worth more than the cards GIVEN UP.)
-// Any gap smaller than this is noise between collectors — always "fair".
-const ALWAYS_FAIR_GAP = 10;
-
 /**
- * Decide the fairness DIRECTION ourselves instead of trusting the model's label.
- * The model kept contradicting itself — explaining that the card you receive is
- * clearly better, then tagging the trade "favors_them". So we derive it from the
- * two side worths it reported (which the prompt requires to already fold in
- * player talent, not just price):
- *   theirSide (what you RECEIVE) worth more  → favors_you
- *   yourSide  (what you GIVE UP) worth more  → favors_them
- * with a hard "under $10 apart is always fair" floor on top.
+ * Settle the verdict from the model's explicit `betterFor` call — who ends up
+ * ahead — rather than from its `fairness` label (which kept contradicting its own
+ * reasoning) or from the money (which is NOT what decides a trade: a superstar
+ * for a role player is lopsided even when both cards are cheap).
+ *
+ * Price is used only as a last-resort tiebreak when the model gives us no usable
+ * `betterFor`, and even then only as a ratio — never an absolute dollar gap.
  */
 function normalizeFairness(t: TradeShape): TradeShape {
+  const call = String(t.betterFor || "").trim().toLowerCase();
+  if (call === "you") { t.fairness = "favors_you"; return t; }
+  if (call === "them") { t.fairness = "favors_them"; return t; }
+  if (call === "even") { t.fairness = "fair"; return t; }
+  // No usable call — keep the model's label if it's valid, else infer from the
+  // side worths (which the prompt requires to already include player caliber).
+  if (t.fairness === "fair" || t.fairness === "favors_you" || t.fairness === "favors_them") return t;
   const you = sideMid(t.yourSide), them = sideMid(t.theirSide);
-  const known = Number.isFinite(you) && Number.isFinite(them) && (you > 0 || them > 0);
-  if (!known) {
-    // No usable numbers — keep a valid label, defaulting to fair.
-    if (t.fairness !== "favors_you" && t.fairness !== "favors_them") t.fairness = "fair";
-    return t;
+  if (Number.isFinite(you) && Number.isFinite(them) && (you > 0 || them > 0)) {
+    const hi = Math.max(you, them);
+    const gap = Math.abs(them - you);
+    t.fairness = hi > 0 && gap / hi <= 0.2 ? "fair" : them > you ? "favors_you" : "favors_them";
+  } else {
+    t.fairness = "fair";
   }
-  const gap = Math.abs(them - you);
-  const hi = Math.max(you, them);
-  if (gap < ALWAYS_FAIR_GAP || (hi > 0 && gap / hi <= 0.2)) t.fairness = "fair";
-  else t.fairness = them > you ? "favors_you" : "favors_them";
   return t;
 }
 

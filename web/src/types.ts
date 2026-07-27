@@ -250,6 +250,7 @@ export interface WishItem {
 }
 
 export interface TradeResult {
+  betterFor?: "you" | "them" | "even" | string; // who ends up ahead (talent-first)
   fairness: "fair" | "favors_you" | "favors_them" | "lopsided" | string;
   verdict: string;
   yourSide: { valueLow: number; valueHigh: number; notes: string };
