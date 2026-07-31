@@ -237,3 +237,25 @@ export async function streamChat(
     }
   }
 }
+
+/** One thing the assistant wants the app to do. */
+export interface AssistantAction {
+  type: string;
+  text?: string | null;
+  query?: string | null;
+  view?: string | null;
+  company?: string | null;
+  grade?: string | null;
+  on?: boolean | null;
+}
+/**
+ * The in-app assistant: answers using a snapshot of the collector's own data and
+ * can return actions for the app to carry out.
+ */
+export function askAssistant(
+  messages: ChatMessage[],
+  settings: Settings,
+  context: unknown
+): Promise<{ reply: string; actions: AssistantAction[] }> {
+  return postJson<{ reply: string; actions: AssistantAction[] }>("/api/assistant", { messages, settings, context });
+}

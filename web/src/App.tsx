@@ -614,6 +614,129 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     } catch { /* leave the card as-is on failure */ }
   }
 
+
+  // --- In-app assistant ------------------------------------------------------
+  // A compact snapshot of the collector's own data, so the assistant can answer
+  // specifically ("what's my binder worth?", "what was it worth in August?")
+  // instead of guessing. Kept small: identity + value per card, no images.
+  function assistantContext() {
+    const cur = settings.currency || "USD";
+    const inCur = (n: number, from?: string) => Math.round(convertMoney(n || 0, from || "USD", cur) * 100) / 100;
+    // A monthly value timeline plus the last 14 days, built from card histories.
+    const stamps: number[] = [];
+    const now = Date.now();
+    for (let d = 13; d >= 0; d--) stamps.push(now - d * DAY_MS);
+    for (let m = 1; m <= 24; m++) stamps.push(now - m * 30 * DAY_MS);
+    const timeline = [...new Set(stamps)].sort((a, b) => a - b).map((at) => {
+      let total = 0;
+      for (const c of saved) {
+        if ((c.savedAt || 0) > at) continue;
+        const pts = (c.history || []).filter((h) => h.t <= at);
+        const v = pts.length ? pts[pts.length - 1].mid : c.result.estimatedValue?.mid || 0;
+        total += convertMoney(Number(v) || 0, c.result.estimatedValue?.currency, cur);
+      }
+      return { date: new Date(at).toISOString().slice(0, 10), value: Math.round(total) };
+    });
+    return {
+      account: {
+        name: userName,
+        createdAt: user ? new Date(createdAtOf(user) || Date.now()).toISOString().slice(0, 10) : null,
+        currency: cur,
+      },
+      totals: {
+        cards: saved.length,
+        binderValue: inCur(saved.reduce((n, c) => n + convertMoney(c.result.estimatedValue?.mid || 0, c.result.estimatedValue?.currency, cur), 0)),
+        wishlistCards: wishlist.length,
+        scans, tradesChecked: trades,
+        achievementsEarned: unlockedIds.length,
+        briefingStreak: liveStreak(streak, dayISO()),
+      },
+      binder: saved.slice(0, 250).map((c) => ({
+        player: c.result.player, year: c.result.year, set: c.result.setName,
+        parallel: c.result.parallel, number: c.result.cardNumber,
+        value: inCur(c.result.estimatedValue?.mid || 0, c.result.estimatedValue?.currency),
+        grade: c.grade ? `${c.grade.company} ${c.grade.grade}` : null,
+        favorite: !!c.favorite,
+        addedOn: new Date(c.savedAt).toISOString().slice(0, 10),
+      })),
+      wishlist: wishlist.slice(0, 100).map((w) => ({
+        text: w.text,
+        value: inCur(w.result?.estimatedValue?.mid || 0, w.result?.estimatedValue?.currency),
+      })),
+      valueTimeline: timeline,
+    };
+  }
+
+  /** Find the binder card the assistant is referring to, by loose description. */
+  function findCard(query: string): SavedCard | undefined {
+    const q = (query || "").toLowerCase().trim();
+    if (!q) return undefined;
+    const words = q.split(/\s+/).filter((w) => w.length > 2);
+    const score = (c: SavedCard) => {
+      const hay = describeCard(c.result).toLowerCase();
+      return words.filter((w) => hay.includes(w)).length;
+    };
+    return saved.filter((c) => score(c) > 0).sort((a, b) => score(b) - score(a))[0];
+  }
+
+  /** Carry out one assistant action. Returns a line describing what happened. */
+  function runAssistantAction(a: { type: string; text?: string | null; query?: string | null; view?: string | null; company?: string | null; grade?: string | null; on?: boolean | null }): string | null {
+    switch (a.type) {
+      case "wishlist_add": {
+        const text = (a.text || a.query || "").trim();
+        if (!text) return null;
+        addWish(text);
+        return `${t("Added to your wishlist")}: ${text}`;
+      }
+      case "wishlist_remove": {
+        const q = (a.query || a.text || "").toLowerCase().trim();
+        const hit = wishlist.find((w) => q && w.text.toLowerCase().includes(q));
+        if (!hit) return t("Couldn't find that card on your wishlist.");
+        setWishlist((prev) => prev.filter((w) => w.id !== hit.id));
+        return `${t("Removed from your wishlist")}: ${hit.text}`;
+      }
+      case "binder_remove": {
+        const hit = findCard(a.query || a.text || "");
+        if (!hit) return t("Couldn't find that card in your binder.");
+        setSaved((prev) => prev.filter((c) => c.id !== hit.id));
+        return `${t("Removed from your binder")}: ${describeCard(hit.result)}`;
+      }
+      case "favorite": {
+        const hit = findCard(a.query || a.text || "");
+        if (!hit) return t("Couldn't find that card in your binder.");
+        const want = a.on !== false;
+        if (!!hit.favorite !== want) toggleFlag(hit.id, "favorite");
+        return `${want ? t("Starred") : t("Unstarred")}: ${describeCard(hit.result)}`;
+      }
+      case "grade": {
+        const hit = findCard(a.query || a.text || "");
+        if (!hit) return t("Couldn't find that card in your binder.");
+        if (!a.grade) return t("Tell me the grade it received.");
+        setCardGrade(hit.id, a.company || "PSA", String(a.grade));
+        return `${t("Recorded")} ${a.company || "PSA"} ${a.grade} ${t("on")} ${describeCard(hit.result)}`;
+      }
+      case "navigate": {
+        const v = String(a.view || a.text || "").toLowerCase();
+        const ok: View[] = ["home", "today", "scan", "search", "bulk", "trade", "tradeup", "market", "later", "binder", "wishlist", "sets", "awards", "settings"];
+        if (!ok.includes(v as View)) return null;
+        setView(v as View);
+        setChatOpen(false);
+        return `${t("Opened")} ${v}`;
+      }
+      case "refresh_prices":
+        refreshAll(true);
+        return t("Refreshing your prices now.");
+      case "set_currency": {
+        const code = String(a.text || a.query || "").toUpperCase().slice(0, 3);
+        if (!/^[A-Z]{3}$/.test(code)) return null;
+        setSettings((s2) => ({ ...s2, currency: code }));
+        return `${t("Currency switched to")} ${code}`;
+      }
+      default:
+        return null;
+    }
+  }
+
   // --- "For later" list (saved trades / cards to acquire) ------------------
   function saveLater(item: Omit<LaterItem, "id" | "savedAt">) {
     if (!requireAuth()) return;
@@ -1118,7 +1241,13 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       <button className="chat-fab" onClick={() => setChatOpen(true)}>💬 {t("Ask a question")}</button>
 
       {chatOpen && (
-        <ChatDrawer settings={aiSettings} cardContext={lastResult} onClose={() => setChatOpen(false)} />
+        <ChatDrawer
+          settings={aiSettings}
+          cardContext={lastResult}
+          onClose={() => setChatOpen(false)}
+          context={assistantContext()}
+          onAction={runAssistantAction}
+        />
       )}
 
       {needsOnboarding && <Onboarding settings={settings} onDone={finishOnboarding} />}

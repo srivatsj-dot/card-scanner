@@ -13,7 +13,7 @@ import { pokemonLookup } from "./prices.js";
 import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
 import { verifiedSportsFacts, verifiedSportsFactsData, hasLimitless } from "./sports.js";
-import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema } from "./schemas.js";
+import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema, assistantSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
   bulkSystemPrompt,
@@ -477,6 +477,43 @@ app.post("/api/scan", async (req: Request, res: Response) => {
       }
     }
     res.json(result);
+  } catch (err) {
+    const { status, message } = describeError(err);
+    res.status(status).json({ error: message });
+  }
+});
+
+// --- The in-app assistant --------------------------------------------------
+// Unlike /api/chat (which only talks), this one is given a snapshot of the
+// collector's own data AND can return ACTIONS the app then performs — adding to
+// the wishlist, starring a card, opening a section, re-pricing, and so on. The
+// app executes them locally, so the assistant never touches data directly.
+app.post("/api/assistant", async (req: Request, res: Response) => {
+  if (!apiKeyGuard(res)) return;
+  const { messages, settings, context } = req.body as {
+    messages?: { role: "user" | "assistant"; content: string }[];
+    settings?: Settings;
+    context?: unknown;
+  };
+  if (!Array.isArray(messages) || !messages.length) {
+    res.status(400).json({ error: "messages is required." });
+    return;
+  }
+  try {
+    const sys =
+      chatSystemPrompt(settings || {}, undefined) +
+      `\n\nYou are the collector's in-app assistant for Card-O-Rama. Today is ${today()}.` +
+      `\n\nYou can DO things, not just answer. When they ask you to change something — add a card to their wishlist, star a card, remove one, record a grade, open a section, refresh prices, switch currency — return the matching entry in "actions" and confirm it briefly in "reply". Only act on what they actually asked for; never invent extra actions, and never say you did something unless the action is in the list.` +
+      `\n\nYou are also given a snapshot of THEIR OWN COLLECTION below. Use it to answer questions about their data directly and specifically — what they own, what it's worth, what's gone up, how a set is coming along, what their collection was worth on a past date (from valueTimeline; if a date is before the earliest entry, say the collection didn't exist yet rather than guessing). Quote real numbers from the snapshot. If something genuinely isn't in the snapshot, say so instead of inventing it.` +
+      `\n\nCOLLECTION SNAPSHOT (JSON):\n${JSON.stringify(context ?? {}).slice(0, 60_000)}`;
+    const out = await analyze<{ reply?: string; actions?: unknown[] }>(
+      sys,
+      [{ text: messages.map((m) => `${m.role === "assistant" ? "Assistant" : "Collector"}: ${m.content}`).join("\n\n") }],
+      assistantSchema,
+      false, // their own data is right here; no web search needed for this path
+      512
+    );
+    res.json({ reply: out?.reply || "", actions: Array.isArray(out?.actions) ? out.actions : [] });
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });

@@ -343,3 +343,41 @@ export const checklistSchema = {
   },
   required: ["setName", "baseSetSize", "sizeConfidence", "notableMissing", "summary"],
 } as const;
+
+// The in-app assistant answers a question AND can act on the collection. It
+// returns a reply plus zero or more actions the app performs locally.
+export const assistantSchema = {
+  type: "OBJECT",
+  properties: {
+    reply: { ...STR, description: "Your answer to the collector, in plain conversational language. If you're performing actions, say what you're doing in one short sentence — don't list JSON. Never claim to have done something you didn't put in `actions`." },
+    actions: {
+      type: "ARRAY",
+      description: "Things to DO in the app. Empty when the user only asked a question. Only include an action the user actually asked for.",
+      items: {
+        type: "OBJECT",
+        properties: {
+          type: {
+            ...STR,
+            description:
+              "One of: wishlist_add (add a card to the wishlist; put the full card description in `text`), " +
+              "wishlist_remove (remove a wishlist card matching `query`), " +
+              "binder_remove (remove a binder card matching `query`), " +
+              "favorite (star a binder card matching `query`; set `on` false to unstar), " +
+              "grade (record a professional grade on the card matching `query`, using `company` and `grade`), " +
+              "navigate (open a section; `view` is one of home, today, scan, search, bulk, trade, tradeup, market, later, binder, wishlist, sets, awards, settings), " +
+              "refresh_prices (re-price the whole binder), " +
+              "set_currency (change the display currency; `text` is the 3-letter code).",
+          },
+          text: { ...nullableStr, description: "Card description for wishlist_add, or the value for set_currency." },
+          query: { ...nullableStr, description: "Which existing card to act on — a player name or description. Match the collector's own words." },
+          view: nullableStr,
+          company: { ...nullableStr, description: "Grading company for the grade action (PSA, BGS, SGC, CGC, TAG)." },
+          grade: { ...nullableStr, description: "The grade received, e.g. '10' or '9.5'." },
+          on: { type: "BOOLEAN", nullable: true, description: "For favorite: true to star, false to unstar." },
+        },
+        required: ["type"],
+      },
+    },
+  },
+  required: ["reply", "actions"],
+} as const;
