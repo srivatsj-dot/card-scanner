@@ -688,6 +688,56 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         addWish(text);
         return `${t("Added to your wishlist")}: ${text}`;
       }
+      case "binder_add": {
+        const text = (a.text || a.query || "").trim();
+        if (!text) return null;
+        // Look it up, then save it — same path as a manual search + save.
+        searchCardCached(text, aiSettings)
+          .then((r) => saveCard(r, undefined, true))
+          .catch(() => toast(t("Couldn't look that card up.")));
+        return `${t("Looking that up and adding it to your binder")}: ${text}`;
+      }
+      case "later_add": {
+        const text = (a.text || a.query || "").trim();
+        if (!text) return null;
+        saveLater({ target: text, give: [] });
+        return `${t("Saved for later")}: ${text}`;
+      }
+      case "later_remove": {
+        const q = (a.query || a.text || "").toLowerCase().trim();
+        const hit = later.find((l) => q && l.target.toLowerCase().includes(q));
+        if (!hit) return t("Couldn't find that in your For later list.");
+        removeLater(hit.id);
+        return t("Removed it from For later.");
+      }
+      case "wishlist_to_binder": {
+        const q = (a.query || a.text || "").toLowerCase().trim();
+        const hit = wishlist.find((w) => q && w.text.toLowerCase().includes(q));
+        if (!hit) return t("Couldn't find that card on your wishlist.");
+        if (hit.result) saveCard(hit.result, undefined, true);
+        setWishlist((prev) => prev.filter((w) => w.id !== hit.id));
+        return `${t("Moved to your binder")}: ${hit.text}`;
+      }
+      case "unfavorite_all": {
+        setSaved((prev) => prev.map((c) => (c.favorite ? { ...c, favorite: false } : c)));
+        return t("Cleared every star.");
+      }
+      case "sort_binder":
+      case "binder_layout": {
+        const v = String(a.text || a.view || "").toLowerCase();
+        if (a.type === "binder_layout" && ["list", "grid", "pages"].includes(v)) {
+          setSettings((s2) => ({ ...s2, binderMode: v as Settings["binderMode"] }));
+          setView("binder");
+          return `${t("Binder layout set to")} ${v}`;
+        }
+        return null;
+      }
+      case "theme": {
+        const v = String(a.text || "").toLowerCase();
+        if (v !== "dark" && v !== "light") return null;
+        setTheme(v as Theme);
+        return `${t("Switched to")} ${v} ${t("mode")}`;
+      }
       case "wishlist_remove": {
         const q = (a.query || a.text || "").toLowerCase().trim();
         const hit = wishlist.find((w) => q && w.text.toLowerCase().includes(q));

@@ -605,7 +605,6 @@ app.post("/api/quick-price", async (req: Request, res: Response) => {
 // market: priced against graded comps of that exact grade. Returns the graded
 // value plus the raw value, so the app can show what grading added.
 app.post("/api/grade-price", async (req: Request, res: Response) => {
-  if (!hasEbay) { res.status(503).json({ error: "Live pricing isn't configured on this server." }); return; }
   const { card, company, grade, settings } = req.body as {
     card?: ScanResultShape; company?: string; grade?: string; settings?: Settings;
   };
@@ -626,7 +625,37 @@ app.post("/api/grade-price", async (req: Request, res: Response) => {
         excludeParallels: looksBase(result),
       }).catch(() => null),
     ]);
-    if (!graded) { res.json({ graded: null, raw: raw || null }); return; }
+    if (!graded) {
+      // No graded listings for this exact grade (common — slabs of a given grade
+      // are thin on eBay). Grading still changes what the card is worth, so ask
+      // for a researched graded value rather than leaving the price untouched,
+      // which made "record a grade" look like it did nothing.
+      const est = await analyze<PriceVerifyShape>(
+        verifyPriceSystemPrompt(settings || {}),
+        [{
+          text:
+            `What is this card worth GRADED ${label || "at the stated grade"}?\n` +
+            `Card: ${base}\n` +
+            `Give the market value for a ${label || "graded"} example specifically — graded copies of a card sell for a different (usually higher) price than raw ones, and the multiple grows sharply at the top grades. Base it on recent sold slabs of this card at this grade; if there are none, reason from the raw value and this card's usual grade multiples, and say so in the note.`,
+        }],
+        priceVerifySchema,
+        true, // research it
+        512
+      ).catch(() => null);
+      const ok = est && [est.low, est.mid, est.high].every((n) => Number.isFinite(n) && n >= 0) && est.mid > 0;
+      res.json({
+        graded: ok
+          ? {
+            low: Math.round(est!.low), mid: Math.round(est!.mid), high: Math.round(est!.high),
+            currency: est!.currency || raw?.currency || settings?.currency || "USD",
+            count: 0,
+            note: `${est!.note || `Estimated value for a ${label} example.`} (Researched — few graded listings of this card are on the market right now.)`,
+          }
+          : null,
+        raw: raw ? { mid: Math.round(raw.mid), currency: raw.currency, count: raw.count } : null,
+      });
+      return;
+    }
     res.json({
       graded: {
         low: Math.round(graded.low), mid: Math.round(graded.mid), high: Math.round(graded.high),
@@ -1254,7 +1283,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "13";
+const DIGEST_GEN_VERSION = "14";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
@@ -1291,6 +1320,25 @@ const dePokemonDump = (s: DigestSection): DigestSection =>
   /pok[eé]mon|tcg/i.test(s.sport)
     ? { ...s, storylines: scrubTournamentDump(s.storylines), news: scrubTournamentDump(s.news) }
     : s;
+
+/**
+ * Which briefing lines are about cards the collector actually owns or wants?
+ * Matches on the distinctive words of each entry (a surname, a Pokémon name) so
+ * "2023 Topps Shohei Ohtani #17" still matches a line that just says "Ohtani".
+ */
+function linesMentioning(lines: string[], subjects: string[]): string[] {
+  const stop = new Set(["the", "and", "card", "cards", "topps", "panini", "bowman", "chrome", "prizm", "base", "rookie", "auto", "holo"]);
+  const terms = subjects
+    .flatMap((s) => String(s).toLowerCase().split(/[^a-z0-9é]+/i))
+    .filter((w) => w.length > 3 && !stop.has(w) && !/^\d+$/.test(w));
+  if (!terms.length) return [];
+  const wanted = [...new Set(terms)];
+  const out = lines.filter((l) => {
+    const low = l.toLowerCase();
+    return wanted.some((w) => low.includes(w));
+  });
+  return [...new Set(out)].slice(0, 8);
+}
 
 const briefingHasContent = (b: Briefing) =>
   b.sections.some((s) => s.risingStars.length || s.declining.length || s.storylines.length || s.trades.length || s.chase.length || s.news.length);
@@ -1337,9 +1385,40 @@ async function buildDigest(target: string): Promise<Briefing> {
     ? verifiedData.map((f) => `${f.sport} — VERIFIED results for ${windowStart}:\n${f.lines.join("\n")}`).join("\n\n")
     : "";
   const quiet = (): Briefing => ({ overview: "A quiet day across the hobby — nothing major to report.", yourCards: [], yourWishlist: [], sections: [] });
-  const fallback = (): Briefing | null => {
+  // If the main write-up fails we still have the verified feeds — but those are
+  // raw box scores ("7.0 IP, 4 K, 0 ER"), which is exactly the sports-ticker
+  // briefing collectors hate. So reframe them for the hobby in one cheap pass,
+  // and only fall back to the bare lines if even that fails.
+  const fallback = async (): Promise<Briefing | null> => {
     const s = factsToSections(verifiedData);
     if (!s.length) return null;
+    try {
+      const reframed = await analyze<DigestShape>(
+        sys,
+        [{
+          text:
+            `Turn these VERIFIED results from ${windowStart} into a CARD COLLECTOR's briefing. ` +
+            `Do NOT repeat them as stat lines or scores — that is worthless to this reader. For each one worth keeping, explain what it means for the hobby: whose cards are heating up, which rookies just debuted or broke out, what this does to demand. Drop anything with no card angle. Keep the sport sections you're given; 2-4 substantial lines each.\n\n` +
+            verifiedData.map((f) => `${f.sport}:\n${f.lines.join("\n")}`).join("\n\n"),
+        }],
+        digestSchema,
+        false,
+        512
+      );
+      const sections = (reframed.sections || [])
+        .map((x) => ({
+          sport: x.sport,
+          risingStars: keepInWindow(x.risingStars, windowStart, target),
+          declining: keepInWindow(x.declining, windowStart, target),
+          storylines: keepInWindow(x.storylines, windowStart, target),
+          trades: keepInWindow(x.trades, windowStart, target),
+          chase: keepInWindow(x.chase, windowStart, target),
+          news: keepInWindow(x.news, windowStart, target),
+        }))
+        .map(dePokemonDump);
+      const b: Briefing = { overview: reframed.overview, yourCards: [], yourWishlist: [], sections };
+      if (briefingHasContent(b)) return b;
+    } catch { /* fall through to the raw feed */ }
     return { overview: fallbackOverview(s), yourCards: [], yourWishlist: [], sections: s };
   };
   const parts: Part[] = [
@@ -1380,9 +1459,9 @@ async function buildDigest(target: string): Promise<Briefing> {
     const briefing: Briefing = { overview: result.overview, yourCards: [], yourWishlist: [], sections };
     if (briefingHasContent(briefing)) return briefing;
     // Model returned nothing — fall back to the verified feeds, else quiet day.
-    return fallback() || quiet();
+    return (await fallback()) || quiet();
   } catch {
-    return fallback() || quiet();
+    return (await fallback()) || quiet();
   }
 }
 
@@ -1391,6 +1470,13 @@ async function buildDigest(target: string): Promise<Briefing> {
 // so a transient empty result isn't locked in.
 const digestMem = new Map<string, Briefing>();
 const digestInflight = new Map<string, Promise<Briefing>>();
+
+/** Forget a day's briefing so the next request rebuilds it from scratch. */
+async function dropDigest(target: string): Promise<void> {
+  const key = `${DIGEST_GEN_VERSION}:${target}`;
+  digestMem.delete(key);
+  await cloud.deleteDigest(key).catch(() => {});
+}
 async function getDailyDigest(target: string): Promise<Briefing> {
   const key = `${DIGEST_GEN_VERSION}:${target}`;
   const hit = digestMem.get(key);
@@ -1520,7 +1606,9 @@ app.get("/briefing", async (_req: Request, res: Response) => {
 
 app.post("/api/digest", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
-  const { date, sports } = req.body as { date?: string; sports?: string[] };
+  const { date, sports, players, wishlist, refresh } = req.body as {
+    date?: string; sports?: string[]; players?: string[]; wishlist?: string[]; refresh?: boolean;
+  };
   const cats = (sports || []).map((s) => String(s).trim()).filter(Boolean);
   if (cats.length === 0) {
     res.status(400).json({ error: "Enable at least one category for the morning update." });
@@ -1529,11 +1617,23 @@ app.post("/api/digest", async (req: Request, res: Response) => {
   const reqDate = /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? (date as string) : today();
   const target = reqDate > today() ? today() : reqDate < LAUNCH_DATE ? LAUNCH_DATE : reqDate;
   try {
+    // `refresh` forces today's briefing to be rebuilt from scratch — the escape
+    // hatch when a cached one came out badly.
+    if (refresh) await dropDigest(target);
     const shared = await getDailyDigest(target);
     // Show only the sports this user follows.
     const keys = cats.map((c) => normSport(c).split(/[\s/(]/)[0]).filter(Boolean);
     const sections = shared.sections.filter((s) => keys.some((k) => normSport(s.sport).includes(k)));
-    res.json({ overview: shared.overview, yourCards: [], yourWishlist: [], sections });
+    // "From your binder" / "From your wishlist": pull the lines that actually
+    // mention the collector's own players out of the shared briefing. These were
+    // always sent back empty before, so the sections never appeared.
+    const all = sections.flatMap((s) => [...s.storylines, ...s.risingStars, ...s.declining, ...s.news, ...s.chase]);
+    res.json({
+      overview: shared.overview,
+      yourCards: linesMentioning(all, players || []),
+      yourWishlist: linesMentioning(all, wishlist || []),
+      sections,
+    });
   } catch (err) {
     const { status, message } = describeError(err);
     res.status(status).json({ error: message });

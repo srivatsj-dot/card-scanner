@@ -538,6 +538,12 @@ export async function purgeOldDigests(currentVersion: string): Promise<number> {
   } catch { return 0; }
 }
 
+/** Remove one cached briefing (so it gets rebuilt on the next request). */
+export async function deleteDigest(key: string): Promise<void> {
+  if (!hasCloud) return;
+  try { await db().query(`DELETE FROM digests WHERE key=$1`, [key]); } catch { /* ignore */ }
+}
+
 export async function loadDigest(key: string): Promise<unknown | null> {
   if (!hasCloud) return null;
   const r = await db().query(`SELECT data FROM digests WHERE key=$1`, [key]);

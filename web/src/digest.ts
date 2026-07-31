@@ -45,16 +45,17 @@ function write(cacheKey: string, date: string, digest: DigestResult) {
 }
 
 async function generate(
-  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[], settings: Settings
+  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[], settings: Settings,
+  refresh = false
 ): Promise<DigestResult | null> {
   try {
-    const d = await getDigest(date, sports, players, wishlist, settings);
+    const d = await getDigest(date, sports, players, wishlist, settings, refresh);
     const withTime = { ...d, generatedAt: Date.now(), __v: DIGEST_VERSION };
     // Never downgrade a good briefing to a blank one: if this regeneration came
     // back empty but we already had real content cached, keep the good one (just
     // re-stamp its version so we don't keep retrying it forever).
     const prev = readDigestArchive(cacheKey)[date];
-    if (!hasContent(withTime) && hasContent(prev)) {
+    if (!refresh && !hasContent(withTime) && hasContent(prev)) {
       const kept = { ...prev, __v: DIGEST_VERSION } as DigestResult;
       write(cacheKey, date, kept);
       return kept;
@@ -85,7 +86,9 @@ export function regenerateDigest(
   cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[], settings: Settings
 ): Promise<DigestResult | null> {
   const key = `${cacheKey}|${date}`;
-  const p = generate(cacheKey, date, sports, players, wishlist, settings).finally(() => inflight.delete(key));
+  // Force the SERVER to rebuild too — otherwise it just hands back the same
+  // cached briefing and nothing actually changes.
+  const p = generate(cacheKey, date, sports, players, wishlist, settings, true).finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
 }

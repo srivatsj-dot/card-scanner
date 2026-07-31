@@ -359,9 +359,17 @@ export const assistantSchema = {
           type: {
             ...STR,
             description:
-              "One of: wishlist_add (add a card to the wishlist; put the full card description in `text`), " +
+              "One of: binder_add (look a card up and SAVE it to the binder; full description in `text`), " +
+              "wishlist_add (add a card to the wishlist; full description in `text`), " +
+              "later_add (save a card to the 'For later' list; full description in `text`), " +
               "wishlist_remove (remove a wishlist card matching `query`), " +
               "binder_remove (remove a binder card matching `query`), " +
+              "later_remove (remove a 'For later' item matching `query`), " +
+              "wishlist_to_binder (you acquired a wishlist card — move it into the binder; `query` picks it), " +
+              "unfavorite_all (clear every star), " +
+              "sort_binder (`text` is one of recent, value, player, year, sport, graded, manual), " +
+              "binder_layout (`text` is one of list, grid, pages), " +
+              "theme (`text` is dark or light), " +
               "favorite (star a binder card matching `query`; set `on` false to unstar), " +
               "grade (record a professional grade on the card matching `query`, using `company` and `grade`), " +
               "navigate (open a section; `view` is one of home, today, scan, search, bulk, trade, tradeup, market, later, binder, wishlist, sets, awards, settings), " +
