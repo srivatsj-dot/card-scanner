@@ -35,6 +35,16 @@ export function searchCard(text: string, settings: Settings): Promise<ScanResult
   return postJson<ScanResult>("/api/scan", { text, settings });
 }
 
+/**
+ * Fast re-price of an already-identified card (used by the binder refresh).
+ * Skips the AI entirely and asks the live price sources, so refreshing a whole
+ * binder takes seconds instead of minutes. `estimatedValue` is null when there's
+ * no live price, meaning "leave this card as it is".
+ */
+export function quickPrice(card: ScanResult, settings: Settings): Promise<{ estimatedValue: ScanResult["estimatedValue"] | null }> {
+  return postJson<{ estimatedValue: ScanResult["estimatedValue"] | null }>("/api/quick-price", { card, settings });
+}
+
 /** Price a card at a professional grade (e.g. PSA 10), plus its raw value. */
 export interface GradePriceResult {
   graded: { low: number; mid: number; high: number; currency: string; count: number; note: string } | null;

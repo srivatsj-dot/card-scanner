@@ -26,15 +26,41 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+// --- Currency -------------------------------------------------------------
+// Prices are stored in whatever currency the market quoted (usually USD from
+// eBay). The collector picks the currency they want to SEE, so we convert at
+// display time — switching currency in Settings updates every figure in the app
+// instantly, with no refresh and no re-pricing.
+// Approximate rates: enough to read a collection at a glance, not for accounting.
+const USD_PER: Record<string, number> = {
+  USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73, AUD: 0.66, INR: 0.012, JPY: 0.0067,
+};
+let displayCurrency = "";
+/** Set the currency every price is shown in (called when the setting changes). */
+export function setDisplayCurrency(code: string) {
+  displayCurrency = (code || "").toUpperCase();
+}
+/** Convert between two currency codes; unknown codes pass through unchanged. */
+export function convertMoney(n: number, from: string, to: string): number {
+  const f = USD_PER[(from || "USD").toUpperCase()];
+  const t = USD_PER[(to || "USD").toUpperCase()];
+  if (!f || !t || f === t) return n;
+  return (n * f) / t;
+}
+
 export function money(n: number, currency: string) {
+  const from = (currency || "USD").toUpperCase();
+  // Show it in the collector's chosen currency, converting if we know both.
+  const to = displayCurrency && USD_PER[displayCurrency] && USD_PER[from] ? displayCurrency : from;
+  const amount = to === from ? n : convertMoney(n, from, to);
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
-      currency,
-      maximumFractionDigits: n >= 100 ? 0 : 2,
-    }).format(n);
+      currency: to,
+      maximumFractionDigits: amount >= 100 ? 0 : 2,
+    }).format(amount);
   } catch {
-    return `${currency} ${Math.round(n)}`;
+    return `${to} ${Math.round(amount)}`;
   }
 }
 

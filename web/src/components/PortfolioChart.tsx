@@ -4,7 +4,7 @@ import { money } from "../utils";
 import { useT } from "../translator";
 
 const DAY = 24 * 60 * 60 * 1000;
-type Range = 7 | 30 | 90 | 365 | 0; // 0 = all time
+type Range = 1 | 7 | 30 | 90 | 365 | 0; // 0 = all time
 
 /** Value of one card as of a moment in time (its latest known point by then). */
 function valueAt(c: SavedCard, at: number): number {
@@ -26,7 +26,7 @@ function series(saved: SavedCard[], days: number): { t: number; v: number }[] {
   const earliest = Math.min(...saved.map((c) => c.savedAt || now));
   const span = days > 0 ? days * DAY : Math.max(now - earliest, 7 * DAY);
   const start = now - span;
-  const steps = Math.min(120, Math.max(6, Math.round(span / DAY))); // cap the point count
+  const steps = Math.min(120, Math.max(12, Math.round(span / DAY))); // cap the point count
   const stepMs = span / steps;
 
   const out: { t: number; v: number }[] = [];
@@ -80,7 +80,9 @@ export default function PortfolioChart({ saved, currency }: { saved: SavedCard[]
 
   const shown = hover != null ? pts[hover] : null;
   const dateLabel = (ms: number) =>
-    new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: range === 0 || range === 365 ? "numeric" : undefined });
+    range === 1
+      ? new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+      : new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: range === 0 || range === 365 ? "numeric" : undefined });
 
   const movers = saved
     .map((c) => {
@@ -96,7 +98,7 @@ export default function PortfolioChart({ saved, currency }: { saved: SavedCard[]
     .slice(0, 3);
 
   const RANGES: { r: Range; label: string }[] = [
-    { r: 7, label: "7d" }, { r: 30, label: "30d" }, { r: 90, label: "90d" },
+    { r: 1, label: "1d" }, { r: 7, label: "7d" }, { r: 30, label: "30d" }, { r: 90, label: "90d" },
     { r: 365, label: "1y" }, { r: 0, label: t("All") },
   ];
 

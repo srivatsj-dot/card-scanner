@@ -483,6 +483,30 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   }
 });
 
+// Fast re-price for a card we've ALREADY identified (the binder's daily refresh).
+// Re-running the full AI analysis per card is what made "Refresh prices" crawl —
+// identity doesn't change, only the price does, so this hits eBay directly and
+// skips the model entirely. Returns null when there's no live price, and the
+// client then leaves the card alone.
+app.post("/api/quick-price", async (req: Request, res: Response) => {
+  const { card, settings } = req.body as { card?: ScanResultShape; settings?: Settings };
+  const result = card || {};
+  if (!result.identified || !result.estimatedValue) { res.json({ estimatedValue: null }); return; }
+  try {
+    // Pokémon has a free catalog price; everything else goes to eBay.
+    if (isPokemon(result)) {
+      const before = result.estimatedValue.mid;
+      await applyPokemonPrice(result);
+      res.json({ estimatedValue: result.estimatedValue.mid !== before ? result.estimatedValue : result.estimatedValue });
+      return;
+    }
+    const applied = await applyEbayPrice(result, settings);
+    res.json({ estimatedValue: applied ? result.estimatedValue : null });
+  } catch {
+    res.json({ estimatedValue: null });
+  }
+});
+
 // Price a card AT A GRADE. When you slab a card (PSA 10 etc.) it's a different
 // market: priced against graded comps of that exact grade. Returns the graded
 // value plus the raw value, so the app can show what grading added.
@@ -2216,7 +2240,12 @@ app.listen(PORT, () => {
   console.log(`  email: ${es.provider === "none" ? "off (set BREVO_API_KEY+BREVO_FROM — works behind SMTP blocks)" : es.note}`);
   if (cloud.hasCloud) {
     cloud.initCloud()
-      .then(() => console.log("  cloud accounts + sync: on (Postgres) — accounts sync across devices"))
+      .then(() => {
+        console.log("  cloud accounts + sync: on (Postgres) — accounts sync across devices");
+        // Briefings written under older rules are stale — clear them so every
+        // day (including past ones you can page back to) rebuilds properly.
+        return cloud.purgeOldDigests(DIGEST_GEN_VERSION);
+      })
       .catch((e) => console.error(`  ⚠  cloud DB init failed: ${e instanceof Error ? e.message : e}`));
   } else {
     console.log("  cloud accounts + sync: off (set DATABASE_URL to enable cross-device accounts)");

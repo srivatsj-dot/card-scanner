@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from "./types";
 import { defaultSettings } from "./types";
-import { searchCard, scanCard, gradePrice } from "./api";
+import { searchCard, scanCard, gradePrice, quickPrice } from "./api";
 import { searchCardCached } from "./cache";
 import { ensureDigest } from "./digest";
-import { describeCard, DAY_MS, makeThumbnail, money, sameCard } from "./utils";
+import { describeCard, DAY_MS, makeThumbnail, money, sameCard, setDisplayCurrency } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
@@ -350,6 +350,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     [wishlist]
   );
   const [refreshing, setRefreshing] = useState(false);
+  // "3 / 25" progress while refreshing, so a big binder never looks frozen.
+  const [refreshProgress, setRefreshProgress] = useState<{ done: number; total: number } | null>(null);
+  const [, setCurrencyTick] = useState(0); // bumped when the display currency changes
   const [adding, setAdding] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const [unlocks, setUnlocks] = useState<{ id: number; emoji: string; title: string; desc: string }[]>([]);
@@ -409,6 +412,13 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     document.documentElement.dir = langByName(settings.language).rtl ? "rtl" : "ltr";
     setLanguage(settings.language);
   }, [settings.language]);
+  // Every price is displayed in the chosen currency, converted on the fly — so
+  // switching currency updates the whole app at once instead of waiting for a
+  // re-price. Set before paint so the first render is already correct.
+  useLayoutEffect(() => {
+    setDisplayCurrency(settings.currency);
+    setCurrencyTick((n) => n + 1); // re-render everything showing a price
+  }, [settings.currency]);
 
   function saveCard(result: ScanResult, frontDataUrl: string | undefined, quiet = false) {
     if (!requireAuth()) return;
@@ -696,7 +706,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   // and refreshes everything. Runs several at once (no artificial gaps) so a
   // refresh is quick; auto runs cap the count so they don't burn quota.
   const AUTO_CAP = 5; // at most a few per auto run; the rest catch up later
-  const REFRESH_CONCURRENCY = 4;
+  // Refresh is now mostly cheap live-price lookups rather than AI calls, so more
+  // can run at once without tripping rate limits.
+  const REFRESH_CONCURRENCY = 8;
 
   async function refreshAll(force: boolean) {
     if (refreshingRef.current) return;
@@ -706,7 +718,13 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     const movers: string[] = [];
 
     async function refreshCard(card: SavedCard) {
-      const fresh = await searchCard(describeCard(card.result), aiSettings);
+      // Fast path: the card is already identified, so just re-price it from live
+      // market data. Only fall back to a full AI lookup when there's no live
+      // price to be had — that's what used to make this take minutes.
+      let fresh = card.result;
+      const quick = await quickPrice(card.result, aiSettings).catch(() => ({ estimatedValue: null }));
+      if (quick.estimatedValue) fresh = { ...card.result, estimatedValue: quick.estimatedValue };
+      else fresh = await searchCard(describeCard(card.result), aiSettings);
       const prevMid = card.result.estimatedValue.mid;
       const newMid = fresh.estimatedValue.mid;
       const at = Date.now();
@@ -759,6 +777,8 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     try {
       let idx = 0;
       let stop = false;
+      let done = 0;
+      if (force && work.length) setRefreshProgress({ done: 0, total: work.length });
       const worker = async () => {
         while (idx < work.length && !stop) {
           const job = work[idx++];
@@ -766,6 +786,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
             await job();
           } catch (e) {
             if (isRateLimit(e)) stop = true; // back off; catch up next load/manual
+          } finally {
+            done++;
+            if (force) setRefreshProgress({ done, total: work.length });
           }
         }
       };
@@ -776,6 +799,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     } finally {
       refreshingRef.current = false;
       setRefreshing(false);
+      setRefreshProgress(null);
     }
   }
 
@@ -999,6 +1023,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
           onClear={() => { if (confirm(t("Remove all saved cards from your binder?"))) setSaved([]); }}
           onRefresh={() => refreshAll(true)}
           refreshing={refreshing}
+          progress={refreshProgress}
           onConditionCheck={checkCondition}
           onSetPhoto={setCardPhoto}
           onToggleFlag={toggleFlag}

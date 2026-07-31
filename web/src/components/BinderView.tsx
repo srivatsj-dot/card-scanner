@@ -14,6 +14,7 @@ interface Props {
   onClear: () => void;
   onRefresh: () => void;
   refreshing: boolean;
+  progress?: { done: number; total: number } | null; // live "3/25" while refreshing
   onConditionCheck: (id: string, dataUrl: string) => Promise<void>;
   onSetPhoto: (id: string, dataUrl: string) => void;
   onToggleFlag: (id: string, flag: "favorite" | "notNeeded") => void;
@@ -79,7 +80,7 @@ function ChangeBadge({ card }: { card: SavedCard }) {
   );
 }
 
-export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, onEdit, onGrade, shareName, mode, onModeChange }: Props) {
+export default function BinderView({ saved, onRemove, onClear, onRefresh, refreshing, progress, onConditionCheck, onSetPhoto, onToggleFlag, onReorder, onEdit, onGrade, shareName, mode, onModeChange }: Props) {
   const t = useT();
   // Turn a card into a shareable image (native share sheet on phones).
   const [sharing, setSharing] = useState<string | null>(null);
@@ -237,7 +238,9 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
             style={{ flex: 1, minWidth: 120 }}
           />
           <button className="btn secondary small" onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? <><span className="spinner" />Updating…</> : `↻ ${t("Refresh prices")}`}
+            {refreshing
+              ? <><span className="spinner" />{progress ? `${progress.done}/${progress.total}` : t("Updating…")}</>
+              : `↻ ${t("Refresh prices")}`}
           </button>
         </div>
         <div className="auth-tabs" style={{ marginTop: 10 }}>
