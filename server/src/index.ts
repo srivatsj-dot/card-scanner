@@ -483,6 +483,63 @@ app.post("/api/scan", async (req: Request, res: Response) => {
   }
 });
 
+// --- Live exchange rates ---------------------------------------------------
+// Values are quoted in whatever currency the market used (usually USD) and the
+// app converts them for display. Static rates drift, so fetch real ones from a
+// free, keyless source and cache them for the day. Falls back to the last good
+// set, then to nothing (the client keeps its built-in approximations).
+const FX_TTL_MS = 12 * 60 * 60 * 1000;
+let fxCache: { at: number; rates: Record<string, number> } | null = null;
+
+async function fetchRates(): Promise<Record<string, number> | null> {
+  const symbols = "EUR,GBP,CAD,AUD,INR,JPY";
+  const sources = [
+    // Frankfurter (European Central Bank data) — no key, no rate limit.
+    async () => {
+      const r = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${symbols}`);
+      if (!r.ok) return null;
+      const d = (await r.json()) as { rates?: Record<string, number> };
+      return d.rates || null;
+    },
+    // Backup: open.er-api.com, also keyless.
+    async () => {
+      const r = await fetch("https://open.er-api.com/v6/latest/USD");
+      if (!r.ok) return null;
+      const d = (await r.json()) as { rates?: Record<string, number> };
+      return d.rates || null;
+    },
+  ];
+  for (const get of sources) {
+    try {
+      const rates = await get();
+      // Sanity-check before trusting it: a real USD→EUR rate sits near 1, and a
+      // garbage or error payload would fail this. Never let bad data through —
+      // wrong rates would silently misprice every collection.
+      if (rates && Number.isFinite(rates.EUR) && rates.EUR > 0.3 && rates.EUR < 3) return rates;
+    } catch { /* try the next source */ }
+  }
+  return null;
+}
+
+/** Live FX rates, expressed as USD per 1 unit of each currency. */
+app.get("/api/fx", async (_req: Request, res: Response) => {
+  const fresh = fxCache && Date.now() - fxCache.at < FX_TTL_MS;
+  if (!fresh) {
+    const rates = await fetchRates();
+    // "1 USD = 88.5 INR" → we want "1 INR = 0.0113 USD".
+    if (rates) {
+      const usdPer: Record<string, number> = { USD: 1 };
+      for (const [code, perUsd] of Object.entries(rates)) {
+        const n = Number(perUsd);
+        if (Number.isFinite(n) && n > 0) usdPer[code] = 1 / n;
+      }
+      fxCache = { at: Date.now(), rates: usdPer };
+    }
+  }
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.json({ rates: fxCache?.rates || null, at: fxCache?.at || null });
+});
+
 // Fast re-price for a card we've ALREADY identified (the binder's daily refresh).
 // Re-running the full AI analysis per card is what made "Refresh prices" crawl —
 // identity doesn't change, only the price does, so this hits eBay directly and

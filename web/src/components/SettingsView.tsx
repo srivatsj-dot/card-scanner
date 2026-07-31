@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Settings } from "../types";
 import { CATEGORIES, BLOCKABLE_CATEGORIES, REGIONS } from "../types";
 import { LANGS } from "../i18n";
@@ -21,6 +21,20 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onEx
   const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [savingName, setSavingName] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  // Show whether prices are being converted with live rates or the built-in
+  // approximations — so it's obvious at a glance which one is in play.
+  const [fxNote, setFxNote] = useState(t("Prices are converted into this currency."));
+  useEffect(() => {
+    fetch("/api/fx")
+      .then((r) => r.json())
+      .then((d: { rates?: Record<string, number> | null; at?: number | null }) => {
+        setFxNote(d?.rates && d.at
+          ? `${t("Prices are converted with live exchange rates, updated")} ${new Date(d.at).toLocaleDateString()}.`
+          : t("Prices are converted using built-in approximate rates (live rates unavailable)."));
+      })
+      .catch(() => setFxNote(t("Prices are converted using built-in approximate rates.")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Preset avatars: people + sports/hobby icons. Or upload your own photo.
   const AVATAR_PRESETS = ["😀", "😎", "🧢", "🦸", "🐉", "⚾", "🏀", "🏈", "⚽", "🏒", "🎾", "🃏", "🔥", "⭐", "👑", "🚀"];
   const isPhoto = (a?: string) => /^(data:|https?:)/.test(a || "");
@@ -149,6 +163,7 @@ export default function SettingsView({ settings, onChange, onDeleteAccount, onEx
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
+          <span className="muted" style={{ fontSize: 12 }}>{fxNote}</span>
         </label>
       </div>
 

@@ -4,7 +4,7 @@ import { defaultSettings } from "./types";
 import { searchCard, scanCard, gradePrice, quickPrice } from "./api";
 import { searchCardCached } from "./cache";
 import { ensureDigest } from "./digest";
-import { describeCard, DAY_MS, makeThumbnail, money, sameCard, setDisplayCurrency } from "./utils";
+import { describeCard, DAY_MS, makeThumbnail, money, sameCard, setDisplayCurrency, loadFxRates } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
@@ -419,6 +419,10 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     setDisplayCurrency(settings.currency);
     setCurrencyTick((n) => n + 1); // re-render everything showing a price
   }, [settings.currency]);
+  // Swap the built-in approximate rates for today's real ones, once per load.
+  useEffect(() => {
+    loadFxRates().then((ok) => { if (ok) setCurrencyTick((n) => n + 1); });
+  }, []);
 
   function saveCard(result: ScanResult, frontDataUrl: string | undefined, quiet = false) {
     if (!requireAuth()) return;

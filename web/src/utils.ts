@@ -31,11 +31,29 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 // eBay). The collector picks the currency they want to SEE, so we convert at
 // display time — switching currency in Settings updates every figure in the app
 // instantly, with no refresh and no re-pricing.
-// Approximate rates: enough to read a collection at a glance, not for accounting.
-const USD_PER: Record<string, number> = {
+// Built-in fallback rates, used only until live ones arrive (or if they can't be
+// fetched). `loadFxRates()` replaces these with real daily rates from the server.
+const FALLBACK_USD_PER: Record<string, number> = {
   USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73, AUD: 0.66, INR: 0.012, JPY: 0.0067,
 };
+let USD_PER: Record<string, number> = { ...FALLBACK_USD_PER };
 let displayCurrency = "";
+
+/**
+ * Pull today's real exchange rates from the server (cached there for 12h) and use
+ * them for every conversion from then on. Returns true if live rates were applied,
+ * so the app can re-render the prices it's already showing.
+ */
+export async function loadFxRates(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/fx");
+    if (!res.ok) return false;
+    const { rates } = (await res.json()) as { rates?: Record<string, number> | null };
+    if (!rates || !Number.isFinite(rates.EUR)) return false;
+    USD_PER = { ...FALLBACK_USD_PER, ...rates }; // keep fallbacks for any missing code
+    return true;
+  } catch { return false; }
+}
 /** Set the currency every price is shown in (called when the setting changes). */
 export function setDisplayCurrency(code: string) {
   displayCurrency = (code || "").toUpperCase();
