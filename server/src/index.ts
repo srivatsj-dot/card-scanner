@@ -748,9 +748,30 @@ const looksBase = (r: ScanResultShape) =>
     `${r.specialEdition || ""}`
   );
 
+// Genuine rarities (pre-war tobacco cards, iconic vintage rookies, 1/1s) almost
+// never have a real copy listed — what eBay returns is reprints, "reproduction"
+// novelties, and empty slabs. Filtering titles isn't enough because sellers omit
+// the word. For these, eBay is the WRONG source entirely: use the researched
+// value instead.
+const RARE_ERA = /\bt20[0-9]\b|\bt21[0-9]\b|\bgoudey\b|\bplay ball\b|\bbowman\b.*\b19[45][0-9]\b|\b18[5-9][0-9]\b|\b19[0-4][0-9]\b/i;
+function isGrail(r: ScanResultShape): boolean {
+  const blob = `${r.year || ""} ${r.manufacturer || ""} ${r.setName || ""} ${r.specialEdition || ""} ${r.serialNumber || ""}`;
+  if (RARE_ERA.test(blob)) return true; // pre-1950 issues
+  if (/\b1\s*\/\s*1\b|one[- ]of[- ]one/i.test(blob)) return true; // true one-of-ones
+  const yr = parseInt((r.year || "").replace(/\D/g, "").slice(0, 4), 10);
+  if (Number.isFinite(yr) && yr > 0 && yr < 1970) return true; // vintage generally
+  return false;
+}
+
 // Replace the model's value with a real eBay-listings range when available.
 async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Promise<boolean> {
   if (!hasEbay || !result?.identified || !result.estimatedValue) return false;
+  if (isGrail(result)) {
+    // Don't let a page of reprints define a rarity's price.
+    result.estimatedValue.note =
+      `${result.estimatedValue.note || ""} (Priced from research and auction history — live listings for a card this rare are almost all reprints, so they're not used.)`.trim();
+    return false;
+  }
   // Price against comps that MATCH this card: raw (not slabs) for a raw card, and
   // base copies (not parallels/refractors) for a base card — so it's exact.
   const ep = await ebayPrice(cardQuery(result), settings?.region, {

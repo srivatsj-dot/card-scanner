@@ -166,20 +166,25 @@ const CARD_RATIO = 2.5 / 3.5; // ~0.714
  * parallel and falls back to the first if nothing can be measured.
  */
 export async function pickCardImage(urls: string[]): Promise<string> {
-  const candidates = [...new Set(urls.filter(Boolean))].slice(0, 5);
-  if (candidates.length <= 1) return candidates[0] || "";
+  const candidates = [...new Set(urls.filter(Boolean))].slice(0, 6);
+  if (!candidates.length) return "";
   const shapes = await Promise.all(candidates.map((u) => imageShape(u)));
-  let best = candidates[0];
+  let best = "";
   let bestScore = Infinity;
   candidates.forEach((u, i) => {
     const ratio = shapes[i];
-    if (ratio == null) return;
-    // Distance from a card's aspect; square (1.0) and landscape (>1) score worse,
-    // which is exactly the padded-with-whitespace look we want to avoid.
-    const score = Math.abs(ratio - CARD_RATIO) + (ratio >= 0.95 ? 0.25 : 0);
+    if (ratio == null) return; // couldn't measure — can't vouch for it
+    // How far from a card's own shape? A photo where the card fills the frame
+    // lands near 0.71. Square (1.0) or landscape means the card is floating in
+    // background — that's the half-empty frame we refuse to show.
+    const score = Math.abs(ratio - CARD_RATIO);
     if (score < bestScore) { bestScore = score; best = u; }
   });
-  return best;
+  // QUALITY GATE: only return a photo we're confident actually shows a full card.
+  // Better no image at all (the app falls back to your own photo, then the
+  // player's name) than a picture of a card lost in a sea of whitespace.
+  const GOOD_ENOUGH = 0.18; // ~0.53–0.89 aspect — portrait, card-shaped
+  return bestScore <= GOOD_ENOUGH ? best : "";
 }
 
 /** Up to `n` candidate photos for a query, best-match order. */

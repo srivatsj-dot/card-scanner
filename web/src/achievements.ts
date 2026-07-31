@@ -1,4 +1,5 @@
 import type { SavedCard, WishItem } from "./types";
+import { convertMoney } from "./utils";
 
 export interface AchStats {
   cards: number;
@@ -65,6 +66,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "val_500", emoji: "💰", title: "Stacking Up", desc: "Binder worth $500+.", earned: (s) => s.totalValue >= 500 },
   { id: "val_1k", emoji: "💸", title: "Four Figures", desc: "Binder worth $1,000+.", earned: (s) => s.totalValue >= 1000 },
   { id: "val_2500", emoji: "🏦", title: "Serious Money", desc: "Binder worth $2,500+.", earned: (s) => s.totalValue >= 2500 },
+  { id: "val_10k", emoji: "💎", title: "Five Figures", desc: "Binder worth $10,000+.", earned: (s) => s.totalValue >= 10_000 },
+  { id: "val_100k", emoji: "🏛️", title: "Six Figures", desc: "Binder worth $100,000+.", earned: (s) => s.totalValue >= 100_000 },
+  { id: "val_1m", emoji: "👑", title: "Millionaire Binder", desc: "Binder worth $1,000,000+.", earned: (s) => s.totalValue >= 1_000_000 },
   // Single-card value (USD)
   { id: "single_50", emoji: "✨", title: "Nice Card", desc: "Own a card worth $50+.", earned: (s) => s.maxSingle >= 50 },
   { id: "single_100", emoji: "🌠", title: "Nice Pull", desc: "Own a card worth $100+.", earned: (s) => s.maxSingle >= 100 },
@@ -130,15 +134,12 @@ const decade = (year: string | null) => {
   return n >= 1900 && n <= 2099 ? Math.floor(n / 10) : NaN;
 };
 
-// Value thresholds in the achievement list are in USD, but a card's stored value
-// is in whatever currency the collector picked — so a ₹8,000 card must not count
-// as "$8,000". Convert every value to USD with approximate rates before tallying,
-// so the milestones mean the same thing in any currency.
-const USD_PER_UNIT: Record<string, number> = {
-  USD: 1, EUR: 1.08, GBP: 1.27, CAD: 0.73, AUD: 0.66, INR: 0.012, JPY: 0.0067,
-};
-const toUSD = (n: number, currency?: string) =>
-  (n || 0) * (USD_PER_UNIT[(currency || "USD").toUpperCase()] ?? 1);
+// Value thresholds are fixed amounts in USD, but a card's stored value is in
+// whatever currency it was priced in — so a ₹8,000 card must not count as
+// "$8,000". Everything is converted to USD through the SAME live-rate converter
+// the rest of the app uses, so switching your display currency can never hand
+// you a pile of value badges you didn't earn.
+const toUSD = (n: number, currency?: string) => convertMoney(n || 0, currency || "USD", "USD");
 
 export function computeStats(
   saved: SavedCard[],

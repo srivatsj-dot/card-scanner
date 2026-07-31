@@ -4,7 +4,7 @@ import { defaultSettings } from "./types";
 import { searchCard, scanCard, gradePrice, quickPrice } from "./api";
 import { searchCardCached } from "./cache";
 import { ensureDigest } from "./digest";
-import { describeCard, DAY_MS, makeThumbnail, money, sameCard, setDisplayCurrency, loadFxRates } from "./utils";
+import { describeCard, DAY_MS, makeThumbnail, money, sameCard, setDisplayCurrency, loadFxRates, convertMoney } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
 import { computeStats, earnedIds, ACHIEVEMENTS } from "./achievements";
@@ -34,7 +34,8 @@ import LaterView from "./components/LaterView";
 import DigestView from "./components/DigestView";
 import HomeView from "./components/HomeView";
 import PortfolioChart from "./components/PortfolioChart";
-import { currentUser, displayNameOf, emailOf, logout, deleteAccount, setDisplayName } from "./auth";
+import Confetti from "./components/Confetti";
+import { currentUser, displayNameOf, emailOf, logout, deleteAccount, setDisplayName, createdAtOf } from "./auth";
 import { cloudActive, schedulePush, cloudPull, cloudUserKey, marketOffers, cloudSignOutAll } from "./cloud";
 
 type View = "home" | "today" | "scan" | "search" | "bulk" | "trade" | "tradeup" | "market" | "later" | "binder" | "wishlist" | "sets" | "awards" | "settings";
@@ -353,6 +354,8 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   // "3 / 25" progress while refreshing, so a big binder never looks frozen.
   const [refreshProgress, setRefreshProgress] = useState<{ done: number; total: number } | null>(null);
   const [, setCurrencyTick] = useState(0); // bumped when the display currency changes
+  // Confetti + banner when a special card is saved.
+  const [celebrate, setCelebrate] = useState<{ title: string; sub: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
   const [unlocks, setUnlocks] = useState<{ id: number; emoji: string; title: string; desc: string }[]>([]);
@@ -453,6 +456,29 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     toast(copies > 0
       ? `⚠️ ${t("Duplicate")} — ${result.player || t("card")} (${copies + 1} ${t("copies")})`
       : `${t("Saved to binder")}: ${result.player || t("card")}`);
+    // A genuinely special pull deserves a moment — confetti + a banner naming it.
+    const why = rarityReason(result);
+    if (why) setCelebrate({ title: result.player || t("A big one!"), sub: why });
+  }
+
+  /**
+   * Is this card worth celebrating? Either it's valuable (≥ $250 equivalent) or
+   * it's the kind of card collectors chase — a one-of-one, serial numbered, an
+   * autograph or relic, or genuine vintage. Returns why, for the banner.
+   */
+  function rarityReason(r: ScanResult): string | null {
+    const v = r.estimatedValue;
+    const usd = v ? convertMoney(v.mid || 0, v.currency || "USD", "USD") : 0;
+    const blob = `${r.specialEdition || ""} ${r.parallel || ""}`.toLowerCase();
+    if (/\b1\s*\/\s*1\b|one[- ]of[- ]one/.test(blob)) return t("A one-of-one. There isn't another.");
+    if (usd >= 1000) return t("Worth four figures — a serious card.");
+    if (r.serialNumber) return `${t("Serial numbered")} /${r.serialNumber.replace(/^.*\//, "")}.`;
+    if (/auto|signed|signature/.test(blob)) return t("An autograph!");
+    if (/relic|patch|jersey|memorabilia/.test(blob)) return t("A piece of memorabilia in the card.");
+    if (usd >= 250) return t("One of the most valuable cards in your binder.");
+    const yr = parseInt((r.year || "").replace(/\D/g, "").slice(0, 4), 10);
+    if (Number.isFinite(yr) && yr > 1900 && yr < 1970) return t("Genuine vintage.");
+    return null;
   }
 
   // Re-scan a saved card's photo to log its condition over time and flag new damage.
@@ -938,7 +964,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {view === "home" && (
         <>
           {/* Value-over-time sits above the fold once you actually own cards. */}
-          {!isGuest && saved.length > 0 && <PortfolioChart saved={saved} currency={settings.currency} />}
+          {!isGuest && saved.length > 0 && <PortfolioChart saved={saved} currency={settings.currency} since={user ? createdAtOf(user) : null} />}
           <HomeView
             saved={saved}
             wishlist={wishlist}
@@ -1118,6 +1144,16 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
             </button>
           </div>
         </div>
+      )}
+
+      {celebrate && (
+        <>
+          <Confetti onDone={() => setCelebrate(null)} />
+          <div className="rare-banner">
+            <div className="rare-title">🎉 {celebrate.title}</div>
+            <div className="rare-sub">{celebrate.sub}</div>
+          </div>
+        </>
       )}
 
       <div className="toasts">

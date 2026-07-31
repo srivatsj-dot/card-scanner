@@ -150,6 +150,12 @@ export function displayNameOf(key: string): string {
   return loadUsers()[key]?.display || key;
 }
 
+/** When this account was created — the true start of its history. */
+export function createdAtOf(key: string): number | null {
+  const at = loadUsers()[key]?.createdAt;
+  return typeof at === "number" && at > 0 ? at : null;
+}
+
 export function hasAnyAccount(): boolean {
   return Object.keys(loadUsers()).length > 0;
 }

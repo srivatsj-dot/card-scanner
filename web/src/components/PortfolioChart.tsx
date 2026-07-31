@@ -20,10 +20,12 @@ function valueAt(c: SavedCard, at: number): number {
  * FINAL point is always "right now" computed from the live binder, so adding or
  * removing a card moves the line immediately instead of waiting for a refresh.
  */
-function series(saved: SavedCard[], days: number): { t: number; v: number }[] {
+function series(saved: SavedCard[], days: number, since?: number | null): { t: number; v: number }[] {
   const now = Date.now();
   if (!saved.length) return [{ t: now, v: 0 }];
-  const earliest = Math.min(...saved.map((c) => c.savedAt || now));
+  // "All time" means since you JOINED, not since your first card — so the empty
+  // stretch before your first scan is part of the story.
+  const earliest = Math.min(since || Infinity, ...saved.map((c) => c.savedAt || now));
   const span = days > 0 ? days * DAY : Math.max(now - earliest, 7 * DAY);
   const start = now - span;
   const steps = Math.min(120, Math.max(12, Math.round(span / DAY))); // cap the point count
@@ -44,13 +46,13 @@ function series(saved: SavedCard[], days: number): { t: number; v: number }[] {
   return out;
 }
 
-export default function PortfolioChart({ saved, currency }: { saved: SavedCard[]; currency: string }) {
+export default function PortfolioChart({ saved, currency, since }: { saved: SavedCard[]; currency: string; since?: number | null }) {
   const t = useT();
   const [range, setRange] = useState<Range>(30);
   const [hover, setHover] = useState<number | null>(null); // index of hovered point
   // `saved` is a new array on every change, so this recomputes the moment a card
   // is added, removed, graded, or re-priced.
-  const pts = useMemo(() => series(saved, range), [saved, range]);
+  const pts = useMemo(() => series(saved, range, since), [saved, range, since]);
   const cur = saved[0]?.result.estimatedValue?.currency || currency;
 
   if (saved.length === 0) return null;
