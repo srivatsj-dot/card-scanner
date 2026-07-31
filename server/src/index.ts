@@ -8,7 +8,7 @@ import { dirname, resolve, join } from "node:path";
 import type { Request, Response } from "express";
 import { ApiError } from "@google/genai";
 import { ai, MODEL, hasApiKey } from "./gemini.js";
-import { ebayPrice, ebayImageSearch, ebayImageFor, hasEbay } from "./ebay.js";
+import { ebayPrice, ebayImageSearch, ebayImageCandidates, pickCardImage, hasEbay } from "./ebay.js";
 import { pokemonLookup } from "./prices.js";
 import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
@@ -465,10 +465,15 @@ app.post("/api/scan", async (req: Request, res: Response) => {
       // prefer the eBay listing matched to the user's ACTUAL photo (scanWebImage)
       // — it's the closest to their exact card and always loads.
       if (result.identified && scanWebImage) result.imageUrl = scanWebImage;
-      // Text searches (and scans with no match) still deserve a picture: fetch a
-      // representative eBay photo even when there were too few comps to price.
-      if (!result.imageUrl && result.identified) {
-        result.imageUrl = await ebayImageFor(cardQuery(result), settings?.region).catch(() => "");
+      // Pick the photo where the CARD FILLS THE FRAME: gather several candidate
+      // listing photos and choose the one whose shape is closest to a real card,
+      // which weeds out shots padded with whitespace/background.
+      if (result.identified) {
+        const candidates = await ebayImageCandidates(cardQuery(result), settings?.region).catch(() => []);
+        const pool = [...(scanWebImage ? [scanWebImage] : []), ...candidates, ...(result.imageUrl ? [result.imageUrl] : [])];
+        const best = await pickCardImage(pool).catch(() => "");
+        if (best) result.imageUrl = best;
+        else if (!result.imageUrl && scanWebImage) result.imageUrl = scanWebImage;
       }
     }
     res.json(result);
@@ -672,6 +677,17 @@ async function applyEbayPrice(result: ScanResultShape, settings?: Settings): Pro
     excludeParallels: looksBase(result),
   });
   if (!ep) return false;
+  // SANITY GUARD for grails. Genuinely rare cards (a T206 Wagner, say) barely
+  // ever list, so eBay returns a handful of junk/altered/partial listings and we
+  // ended up reporting "$50" for a card the analysis itself calls priceless. If
+  // eBay lands drastically below the model's own researched estimate AND rests on
+  // few comps, the listings are the unreliable side — keep the estimate.
+  const draft = Number(result.estimatedValue.mid) || 0;
+  if (draft > 0 && ep.mid < draft * 0.25 && ep.count < 12) {
+    result.estimatedValue.note =
+      `${result.estimatedValue.note || ""} (Very few genuine listings exist for this card, so the value is based on research rather than current listings — verify against recent auction results before trading.)`.trim();
+    return false;
+  }
   result.estimatedValue = {
     low: Math.round(ep.low),
     mid: Math.round(ep.mid),
@@ -1020,11 +1036,19 @@ app.post("/api/trade", async (req: Request, res: Response) => {
       return;
     }
     const sys = tradeSystemPrompt(settings || {});
-    const priceLines = await ebayPricesFor([...giving, ...receiving], settings);
+    const [priceLines, patterns] = await Promise.all([
+      ebayPricesFor([...giving, ...receiving], settings),
+      cloud.tradePatterns().catch(() => [] as string[]),
+    ]);
     const parts: Part[] = [
       {
         text:
           "Evaluate whether this trade is fair." +
+          // Real behaviour beats theory: pairings collectors here have actually
+          // accepted, repeatedly. Advisory only — a popular swap can still be bad.
+          (patterns.length
+            ? `\n\nWhat collectors on this app actually accept (repeat pairings only — treat as supporting evidence of what the market considers an even swap, never as proof a specific trade is fair):\n- ${patterns.join("\n- ")}`
+            : "") +
           (priceLines.length
             ? `\n\nUSE THESE REAL eBay prices as the basis for each card's value — do NOT guess a price when a real one is given here:\n- ${priceLines.join("\n- ")}`
             : ""),
@@ -1091,7 +1115,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "12";
+const DIGEST_GEN_VERSION = "13";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];

@@ -57,6 +57,32 @@ function classify(r: SavedCard["result"]): TypeKey[] {
 
 // Group the binder into sets so completion can be tracked per set. Works for any
 // category (baseball, Pokémon, etc.) — grouping is by year + brand + set name.
+// Set names come back with small differences between scans — "Topps Series 1" vs
+// "Topps series one", stray punctuation, the brand repeated inside the set name.
+// Matching the raw strings split ONE set into many groups of a single card each,
+// which is why a 25-card set showed as "1 card owned". Normalise hard before
+// keying: lowercase, spell out numerals, drop punctuation and filler words, and
+// remove the manufacturer if it's echoed inside the set name.
+const NUMERALS: Record<string, string> = { one: "1", two: "2", three: "3", four: "4", five: "5" };
+function norm(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => NUMERALS[w] ?? w)
+    .filter((w) => !["the", "baseball", "basketball", "football", "hockey", "soccer", "cards", "card", "trading", "tcg", "edition"].includes(w))
+    .join(" ")
+    .trim();
+}
+function setKeyOf(r: { year?: string | null; manufacturer?: string | null; setName?: string | null }) {
+  const year = (r.year || "").trim();
+  const man = norm(r.manufacturer || "");
+  let set = norm(r.setName || "");
+  if (man && set.startsWith(`${man} `)) set = set.slice(man.length + 1); // "topps chrome" under Topps → "chrome"
+  return { year, man, set, key: `${year}|${man}|${set}` };
+}
+
 function groupSets(saved: SavedCard[]): SetGroup[] {
   const map = new Map<string, SetGroup>();
   for (const c of saved) {
@@ -65,7 +91,7 @@ function groupSets(saved: SavedCard[]): SetGroup[] {
     const manufacturer = (r.manufacturer || "").trim();
     const setName = (r.setName || "").trim();
     if (!setName && !manufacturer) continue; // not enough to identify a set
-    const key = `${year}|${manufacturer}|${setName}`.toLowerCase();
+    const { key } = setKeyOf(r);
     let g = map.get(key);
     if (!g) {
       g = {
@@ -82,7 +108,29 @@ function groupSets(saved: SavedCard[]): SetGroup[] {
     const num = (r.cardNumber || "").trim();
     if (num && !g.numbers.includes(num)) g.numbers.push(num);
   }
-  return [...map.values()].sort((a, b) => b.count - a.count);
+  // Second pass: fold year-less groups into the same set that DOES have a year
+  // (a scan that couldn't read the year shouldn't become its own "set").
+  const all = [...map.values()];
+  const byNameless = new Map<string, SetGroup>();
+  for (const g of all) {
+    if (!g.year) continue;
+    const k = `${norm(g.manufacturer)}|${norm(g.setName)}`;
+    const best = byNameless.get(k);
+    if (!best || g.count > best.count) byNameless.set(k, g);
+  }
+  const merged: SetGroup[] = [];
+  for (const g of all) {
+    const host = !g.year ? byNameless.get(`${norm(g.manufacturer)}|${norm(g.setName)}`) : undefined;
+    if (host && host !== g) {
+      host.count += g.count;
+      for (const k of Object.keys(g.types) as (keyof SetGroup["types"])[]) host.types[k] += g.types[k];
+      for (const n of g.numbers) if (!host.numbers.includes(n)) host.numbers.push(n);
+      if (!host.thumb && g.thumb) host.thumb = g.thumb;
+      continue; // absorbed
+    }
+    merged.push(g);
+  }
+  return merged.sort((a, b) => b.count - a.count);
 }
 
 // The highest completion badge a set has earned, if any.

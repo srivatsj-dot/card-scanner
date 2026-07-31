@@ -290,10 +290,21 @@ export async function pokemonFacts(date: string): Promise<SportFacts | null> {
   // Tournaments that finished on the window day, biggest first. Only SIGNIFICANT
   // events — small online locals (a handful of players) are noise, not news, so
   // require a real field size and keep just the top few.
-  const MIN_PLAYERS = 32;
+  // Online "locals" and cash-league events run constantly and mean nothing to a
+  // collector — only a genuinely large field is worth a single meta line.
+  const MIN_PLAYERS = 256;
+  // Only PREMIER events count — Regionals/Internationals/Worlds and the like.
+  // Casual online series (someone's "Dojo", cups, locals) are noise however many
+  // people enter, so exclude them by name as well as by field size.
+  const PREMIER = /\b(regional|international|worlds|world championship|special event|national|players cup|championship series)\b/i;
+  const CASUAL = /\b(dojo|local|locals|league|challenge|cup|showdown|gym|weekly|daily|ladder|club|friendly|festival)\b/i;
   const onDay = tournaments
     .filter((t: any) => String(t?.date || t?.endDate || t?.startDate || "").slice(0, 10) === date)
     .filter((t: any) => (Number(t?.players) || 0) >= MIN_PLAYERS)
+    .filter((t: any) => {
+      const name = String(t?.name || "");
+      return PREMIER.test(name) && !CASUAL.test(name);
+    })
     .sort((a: any, b: any) => (Number(b?.players) || 0) - (Number(a?.players) || 0));
   if (onDay.length === 0) return null;
 

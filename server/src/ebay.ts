@@ -102,8 +102,7 @@ function summarize(items: Item[], opts?: { excludeGraded?: boolean; excludeParal
   const at = (p: number) => core[Math.min(core.length - 1, Math.max(0, Math.floor(core.length * p)))];
   const mid = at(0.5);
   // Representative image: the TOP (most-relevant, Best-Match) real listing that
-  // has a photo — eBay orders by relevance, so the first is the best match for
-  // the card, not a random mid-priced lot.
+  // has a photo. `pickCardImage` refines this asynchronously where it's used.
   let image = "";
   for (const it of real) { const img = itemImage(it); if (img) { image = img; break; } }
   return {
@@ -114,6 +113,89 @@ function summarize(items: Item[], opts?: { excludeGraded?: boolean; excludeParal
     count: prices.length,
     image: image || undefined,
   };
+}
+
+// --- Picking the photo with the LEAST whitespace ----------------------------
+// A photo where the card fills the frame is portrait, close to a card's own 2.5:3.5
+// (~0.71) shape. Photos padded with white/background space are typically square
+// (sellers and eBay pad to 1:1) or landscape. We can tell them apart from the
+// image's DIMENSIONS alone — no decoding needed — by reading the size out of the
+// file header, which costs only the first few KB of each candidate.
+
+/** Read pixel dimensions from the first bytes of a JPEG/PNG. */
+function readSize(buf: Buffer): { w: number; h: number } | null {
+  // PNG: width/height are big-endian ints at bytes 16..24.
+  if (buf.length > 24 && buf[0] === 0x89 && buf[1] === 0x50) {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+  // JPEG: walk the segment markers to a Start-Of-Frame, which carries the size.
+  if (buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < buf.length) {
+      if (buf[i] !== 0xff) { i++; continue; }
+      const marker = buf[i + 1];
+      // SOF0..SOF15, skipping the non-frame markers in that range.
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+      }
+      i += 2 + buf.readUInt16BE(i + 2); // jump past this segment
+    }
+  }
+  return null;
+}
+
+async function imageShape(url: string, ms = 2500): Promise<number | null> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    // Only the header is needed to learn the dimensions.
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Range: "bytes=0-32767" } });
+    clearTimeout(timer);
+    if (!res.ok && res.status !== 206) return null;
+    const size = readSize(Buffer.from(await res.arrayBuffer()));
+    if (!size || !size.w || !size.h) return null;
+    return size.w / size.h;
+  } catch { return null; }
+}
+
+const CARD_RATIO = 2.5 / 3.5; // ~0.714
+
+/**
+ * Choose the listing photo whose shape is closest to a real card — i.e. the one
+ * with the least dead space around it. Checks a handful of candidates in
+ * parallel and falls back to the first if nothing can be measured.
+ */
+export async function pickCardImage(urls: string[]): Promise<string> {
+  const candidates = [...new Set(urls.filter(Boolean))].slice(0, 5);
+  if (candidates.length <= 1) return candidates[0] || "";
+  const shapes = await Promise.all(candidates.map((u) => imageShape(u)));
+  let best = candidates[0];
+  let bestScore = Infinity;
+  candidates.forEach((u, i) => {
+    const ratio = shapes[i];
+    if (ratio == null) return;
+    // Distance from a card's aspect; square (1.0) and landscape (>1) score worse,
+    // which is exactly the padded-with-whitespace look we want to avoid.
+    const score = Math.abs(ratio - CARD_RATIO) + (ratio >= 0.95 ? 0.25 : 0);
+    if (score < bestScore) { bestScore = score; best = u; }
+  });
+  return best;
+}
+
+/** Up to `n` candidate photos for a query, best-match order. */
+export async function ebayImageCandidates(query: string, region?: string, n = 5): Promise<string[]> {
+  if (!hasEbay || !query.trim()) return [];
+  try {
+    const tok = await getToken();
+    const market = (region && MARKETPLACE[region]) || "EBAY_US";
+    const url = `${SEARCH_URL}?q=${encodeURIComponent(query.trim())}&filter=buyingOptions:%7BFIXED_PRICE%7D&limit=40`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${tok}`, "X-EBAY-C-MARKETPLACE-ID": market } });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { itemSummaries?: Item[] };
+    const items = (data.itemSummaries || []).filter(isRealCard);
+    const raw = items.filter((it) => !isGradedListing(it)); // a slab hides the card behind plastic
+    return [...raw, ...items].map(itemImage).filter(Boolean).slice(0, n);
+  } catch { return []; }
 }
 
 export async function ebayPrice(

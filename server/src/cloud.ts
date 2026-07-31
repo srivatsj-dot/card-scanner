@@ -692,6 +692,42 @@ export async function userForToken(token: string): Promise<number | null> {
   return row.user_id ?? null;
 }
 
+/**
+ * What the community actually trades. Every ACCEPTED offer is a real data point
+ * about which players get swapped for which — far better evidence than a model's
+ * guess. One trade proves nothing, so we only report pairings seen repeatedly.
+ */
+export async function tradePatterns(minCount = 3, limit = 40): Promise<string[]> {
+  if (!hasCloud) return [];
+  try {
+    const rows = (await db().query(
+      `SELECT data FROM offers WHERE (data->>'market')='true' ORDER BY updated_at DESC LIMIT 500`
+    )).rows;
+    const subject = (c: { result?: { player?: string } }) => (c?.result?.player || "").trim().toLowerCase();
+    const tally = new Map<string, { a: string; b: string; n: number }>();
+    for (const r of rows) {
+      const o = r.data?.offer;
+      if (!o || o.status !== "accepted") continue;
+      const gave = [...new Set((o.give || []).map(subject).filter(Boolean))] as string[];
+      const got = [...new Set((o.want || []).map(subject).filter(Boolean))] as string[];
+      for (const a of gave) for (const b of got) {
+        if (a === b) continue;
+        const [x, y] = a < b ? [a, b] : [b, a]; // unordered pair
+        const k = `${x}|${y}`;
+        const cur = tally.get(k) || { a: x, b: y, n: 0 };
+        cur.n++;
+        tally.set(k, cur);
+      }
+    }
+    const title = (s: string) => s.replace(/\b\w/g, (m) => m.toUpperCase());
+    return [...tally.values()]
+      .filter((p) => p.n >= minCount)
+      .sort((p, q) => q.n - p.n)
+      .slice(0, limit)
+      .map((p) => `${title(p.a)} ↔ ${title(p.b)} (traded straight up ${p.n}×)`);
+  } catch { return []; }
+}
+
 /** Sign out every device for a user (e.g. after a password reset). */
 export async function revokeAllSessions(userId: number): Promise<void> {
   await db().query(`DELETE FROM sessions WHERE user_id=$1`, [userId]);
