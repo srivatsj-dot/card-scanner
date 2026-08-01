@@ -85,6 +85,12 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   const QUESTS_KEY = `card-scanner-quests:${ns}`;
   const QUEST_MASTER_KEY = `card-scanner-quest-master:${ns}`;
   const TRADE_COUNTERS_KEY = `card-scanner-trade-counters:${ns}`;
+  // A recorded log of what the binder was worth over time. This has to be kept
+  // as it HAPPENS: rebuilding history from the cards you currently hold silently
+  // erases the past (sell a card and the peak it created vanishes, as if you'd
+  // never owned it). Values are stored in USD so switching currency can't distort
+  // the shape of the line.
+  const VALUE_LOG_KEY = `card-scanner-value-log:${ns}`;
 
   const [view, setView] = useState<View>("home");
   const [settings, setSettings] = useState<Settings>(() => {
@@ -123,6 +129,25 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       return next;
     });
   }
+  const [valueLog, setValueLog] = useState<{ t: number; v: number }[]>(() => loadJSON<{ t: number; v: number }[]>(VALUE_LOG_KEY, []));
+  // Record the binder's total whenever it changes, at most one point an hour
+  // (later changes in the same hour overwrite it, so the log stays compact).
+  useEffect(() => {
+    if (isGuest) return;
+    const usd = saved.reduce((n, c) => n + convertMoney(c.result.estimatedValue?.mid || 0, c.result.estimatedValue?.currency, "USD"), 0);
+    setValueLog((prev) => {
+      const now = Date.now();
+      const last = prev[prev.length - 1];
+      if (last && Math.abs(last.v - usd) < 0.005) return prev; // nothing moved
+      const HOUR = 60 * 60 * 1000;
+      const next = last && now - last.t < HOUR ? [...prev.slice(0, -1), { t: now, v: usd }] : [...prev, { t: now, v: usd }];
+      const trimmed = next.slice(-2000);
+      try { localStorage.setItem(VALUE_LOG_KEY, JSON.stringify(trimmed)); } catch { /* quota */ }
+      return trimmed;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved, isGuest]);
+
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // New accounts get a 3-question setup (language, style, cards) once.
@@ -1137,7 +1162,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {view === "home" && (
         <>
           {/* Value-over-time sits above the fold once you actually own cards. */}
-          {!isGuest && saved.length > 0 && <PortfolioChart saved={saved} currency={settings.currency} since={user ? createdAtOf(user) : null} />}
+          {!isGuest && saved.length > 0 && <PortfolioChart saved={saved} currency={settings.currency} since={user ? createdAtOf(user) : null} log={valueLog} />}
           <HomeView
             saved={saved}
             wishlist={wishlist}

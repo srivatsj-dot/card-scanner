@@ -1327,16 +1327,24 @@ const dePokemonDump = (s: DigestSection): DigestSection =>
  * "2023 Topps Shohei Ohtani #17" still matches a line that just says "Ohtani".
  */
 function linesMentioning(lines: string[], subjects: string[]): string[] {
-  const stop = new Set(["the", "and", "card", "cards", "topps", "panini", "bowman", "chrome", "prizm", "base", "rookie", "auto", "holo"]);
-  const terms = subjects
-    .flatMap((s) => String(s).toLowerCase().split(/[^a-z0-9é]+/i))
-    .filter((w) => w.length > 3 && !stop.has(w) && !/^\d+$/.test(w));
-  if (!terms.length) return [];
-  const wanted = [...new Set(terms)];
-  const out = lines.filter((l) => {
-    const low = l.toLowerCase();
-    return wanted.some((w) => low.includes(w));
+  // Match on the WHOLE name ("aaron judge"), not its separate words. Matching
+  // word-by-word put unrelated news under "In your binder" — a card tagged
+  // (Baseball) matched every baseball line, and "Judge" matched a FIFA story.
+  const names = subjects
+    .map((s) => String(s).replace(/\s*\([^)]*\)\s*$/, "").toLowerCase().trim()) // drop the "(Sport)" suffix
+    .filter((n) => n.length > 3);
+  if (!names.length) return [];
+  const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [...new Set(names)].map((n) => {
+    // Full name anywhere, or — for a distinctive surname — that surname as a
+    // whole word. Short/common surnames must appear as part of the full name.
+    const parts = n.split(/\s+/).filter(Boolean);
+    const surname = parts[parts.length - 1] || "";
+    const alts = [escape(n)];
+    if (parts.length > 1 && surname.length >= 6) alts.push(`\\b${escape(surname)}\\b`);
+    return new RegExp(alts.join("|"), "i");
   });
+  const out = lines.filter((l) => patterns.some((re) => re.test(l)));
   return [...new Set(out)].slice(0, 8);
 }
 

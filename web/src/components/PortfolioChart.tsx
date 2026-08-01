@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { SavedCard } from "../types";
-import { money } from "../utils";
+import { money, convertMoney } from "../utils";
 import { useT } from "../translator";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -20,6 +20,23 @@ function valueAt(c: SavedCard, at: number): number {
  * FINAL point is always "right now" computed from the live binder, so adding or
  * removing a card moves the line immediately instead of waiting for a refresh.
  */
+/**
+ * Build the line from the RECORDED value log — the only source that tells the
+ * truth about the past. Reconstructing from cards you still own quietly deletes
+ * history: a card you held for a week and then sold takes its peak with it.
+ * `log` is stored in USD, so convert it into whatever you're viewing in.
+ */
+function fromLog(log: { t: number; v: number }[], days: number, since: number | null | undefined, cur: string, liveNow: number): { t: number; v: number }[] {
+  const now = Date.now();
+  const start = days > 0 ? now - days * DAY : Math.min(since || now, log[0]?.t ?? now);
+  const inRange = log.filter((p) => p.t >= start).map((p) => ({ t: p.t, v: convertMoney(p.v, "USD", cur) }));
+  // Anchor the left edge with the last known value from before the window, so a
+  // flat stretch doesn't get dropped off the start of the chart.
+  const before = log.filter((p) => p.t < start).pop();
+  const head = before ? [{ t: start, v: convertMoney(before.v, "USD", cur) }] : [];
+  return [...head, ...inRange, { t: now, v: liveNow }];
+}
+
 function series(saved: SavedCard[], days: number, since?: number | null): { t: number; v: number }[] {
   const now = Date.now();
   if (!saved.length) return [{ t: now, v: 0 }];
@@ -46,14 +63,21 @@ function series(saved: SavedCard[], days: number, since?: number | null): { t: n
   return out;
 }
 
-export default function PortfolioChart({ saved, currency, since }: { saved: SavedCard[]; currency: string; since?: number | null }) {
+export default function PortfolioChart({ saved, currency, since, log }: { saved: SavedCard[]; currency: string; since?: number | null; log?: { t: number; v: number }[] }) {
   const t = useT();
   const [range, setRange] = useState<Range>(30);
   const [hover, setHover] = useState<number | null>(null); // index of hovered point
   // `saved` is a new array on every change, so this recomputes the moment a card
   // is added, removed, graded, or re-priced.
-  const pts = useMemo(() => series(saved, range, since), [saved, range, since]);
   const cur = saved[0]?.result.estimatedValue?.currency || currency;
+  const pts = useMemo(() => {
+    const liveNow = saved.reduce((s2, c) => s2 + convertMoney(c.result.estimatedValue?.mid || 0, c.result.estimatedValue?.currency, cur), 0);
+    // Prefer the recorded log; fall back to reconstruction for collections that
+    // predate it (they simply have no log yet).
+    return log && log.length > 1
+      ? fromLog(log, range, since, cur, liveNow)
+      : series(saved, range, since);
+  }, [saved, range, since, log, cur]);
 
   if (saved.length === 0) return null;
   const values = pts.map((p) => p.v);

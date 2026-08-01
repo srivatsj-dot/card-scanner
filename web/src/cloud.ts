@@ -8,7 +8,7 @@ const TUSER_KEY = "card-scanner-cloud-user"; // lowercased username (namespacing
 const VERSION_KEY = "card-scanner-cloud-version"; // last server version we've seen
 
 // The per-user localStorage keys that make up an account's collection.
-const SYNC_BASES = ["settings", "binder", "wishlist", "theme", "scans", "trades", "earned", "wanted"];
+const SYNC_BASES = ["settings", "binder", "wishlist", "theme", "scans", "trades", "earned", "wanted", "value-log"];
 const lsKey = (base: string, user: string) => `card-scanner-${base}:${user}`;
 
 let enabled: Promise<boolean> | null = null;
@@ -91,6 +91,13 @@ function mergeBlob(
       out[base] = JSON.stringify(unionById(parse<{ id?: unknown }[]>(l), parse<{ id?: unknown }[]>(s)));
     } else if (base === "scans" || base === "trades") {
       out[base] = JSON.stringify(Math.max(parse<number>(l) ?? 0, parse<number>(s) ?? 0));
+    } else if (base === "value-log") {
+      // An append-only history: merge both devices' points by timestamp so a
+      // second device can't erase what the first recorded.
+      const merge = new Map<number, number>();
+      for (const p of parse<{ t: number; v: number }[]>(s) || []) merge.set(p.t, p.v);
+      for (const p of parse<{ t: number; v: number }[]>(l) || []) merge.set(p.t, p.v);
+      out[base] = JSON.stringify([...merge.entries()].map(([t2, v]) => ({ t: t2, v })).sort((a, b) => a.t - b.t).slice(-2000));
     } else if (base === "earned") {
       out[base] = JSON.stringify([...new Set([...(parse<string[]>(s) || []), ...(parse<string[]>(l) || [])])]);
     } else {
