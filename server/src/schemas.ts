@@ -236,8 +236,8 @@ export const digestSchema = {
         type: "OBJECT",
         properties: {
           sport: STR,
-          risingStars: STR_ARR,
-          declining: STR_ARR,
+          risingStars: { ...STR_ARR, description: "Who is heating up — PLAYERS on hot streaks or breakouts AND TEAMS running hot (win streaks, climbing the standings, deep runs). Include teams, not just individuals." },
+          declining: { ...STR_ARR, description: "Who is cooling off — PLAYERS slumping or injured AND TEAMS sliding (losing streaks, falling out of a race). Include teams, not just individuals." },
           storylines: { ...STR_ARR, description: "Team momentum, streaks, playoff/award races." },
           trades: { ...STR_ARR, description: "Recent/midseason trades, signings, call-ups, debuts." },
           chase: { ...STR_ARR, description: "Timely, reasoned cards/players to buy now." },

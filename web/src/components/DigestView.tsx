@@ -240,7 +240,7 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
           <div className="card" key={i}>
             <div className="digest-sport">{emojiFor(sec.sport)} {sec.sport}</div>
             <div className="digest-buckets">
-              <Bucket icon="📈" title={t("Rising stars")} tone="up" items={sec.risingStars} />
+              <Bucket icon="📈" title={t("Rising")} tone="up" items={sec.risingStars} />
               <Bucket icon="📉" title={t("Slumping")} tone="down" items={sec.declining} />
               <Bucket icon="🔥" title={t("Storylines")} tone="hot" items={sec.storylines} />
               <Bucket icon="🔄" title={t("Roster moves")} tone="info" items={sec.trades} />
