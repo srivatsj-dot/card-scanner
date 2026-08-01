@@ -324,7 +324,10 @@ async function analyze<T>(systemInstruction: string, parts: Part[], schema: unkn
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey, cloud: cloud.hasCloud, email: emailStatus() });
+  // digestGen lets clients notice their cached briefings were written under an
+  // older rule set and throw them away — without it, each account keeps whatever
+  // it happened to cache first, so two accounts show different briefings.
+  res.json({ ok: true, provider: "google-gemini", model: MODEL, grounding: USE_GROUNDING, hasApiKey, cloud: cloud.hasCloud, email: emailStatus(), digestGen: DIGEST_GEN_VERSION });
 });
 
 // --- eBay Marketplace Account Deletion / Closure notifications --------------
@@ -1641,6 +1644,7 @@ app.post("/api/digest", async (req: Request, res: Response) => {
       yourCards: linesMentioning(all, players || []),
       yourWishlist: linesMentioning(all, wishlist || []),
       sections,
+      gen: DIGEST_GEN_VERSION,
     });
   } catch (err) {
     const { status, message } = describeError(err);

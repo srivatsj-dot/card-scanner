@@ -8,12 +8,28 @@ import { getDigest } from "./api";
 type Archive = Record<string, DigestResult>;
 const inflight = new Map<string, Promise<DigestResult | null>>();
 
-// Bump when the digest's generation logic changes, so already-cached days are
-// silently regenerated with the new logic instead of showing stale results.
-// (There's no "regenerate" button by design — this is how fixes propagate.)
-const DIGEST_VERSION = 6;
-export const isFresh = (d: DigestResult | undefined): d is DigestResult =>
-  !!d && (d as { __v?: number }).__v === DIGEST_VERSION;
+// Bump when the CLIENT's handling changes. The server also stamps every briefing
+// with its own generation version (`gen`), and that's the one that matters: it
+// changes whenever the briefing rules change, and a cached day written under an
+// older `gen` is stale. Without this check each account kept whatever it first
+// cached, which is why two accounts showed completely different briefings for the
+// same day.
+const DIGEST_VERSION = 7;
+let serverGen: string | null = null;
+/** Learn the server's current briefing generation (once per session). */
+export async function loadDigestGen(): Promise<void> {
+  try {
+    const r = await fetch("/api/health");
+    const d = (await r.json()) as { digestGen?: string };
+    if (d?.digestGen) serverGen = String(d.digestGen);
+  } catch { /* offline — fall back to whatever is cached */ }
+}
+export const isFresh = (d: DigestResult | undefined): d is DigestResult => {
+  if (!d || (d as { __v?: number }).__v !== DIGEST_VERSION) return false;
+  const gen = (d as { __gen?: string }).__gen;
+  // Once we know the server's generation, anything from a different one is stale.
+  return !serverGen || !gen || gen === serverGen;
+};
 
 // Does a briefing actually have anything in it? Used so a temporarily-empty
 // regeneration never replaces a good cached briefing with a blank one.
@@ -50,13 +66,13 @@ async function generate(
 ): Promise<DigestResult | null> {
   try {
     const d = await getDigest(date, sports, players, wishlist, settings, refresh);
-    const withTime = { ...d, generatedAt: Date.now(), __v: DIGEST_VERSION };
+    const withTime = { ...d, generatedAt: Date.now(), __v: DIGEST_VERSION, __gen: (d as { gen?: string }).gen ?? serverGen ?? undefined };
     // Never downgrade a good briefing to a blank one: if this regeneration came
     // back empty but we already had real content cached, keep the good one (just
     // re-stamp its version so we don't keep retrying it forever).
     const prev = readDigestArchive(cacheKey)[date];
     if (!refresh && !hasContent(withTime) && hasContent(prev)) {
-      const kept = { ...prev, __v: DIGEST_VERSION } as DigestResult;
+      const kept = { ...prev, __v: DIGEST_VERSION, __gen: serverGen ?? undefined } as DigestResult;
       write(cacheKey, date, kept);
       return kept;
     }

@@ -3,7 +3,7 @@ import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from
 import { defaultSettings } from "./types";
 import { searchCard, scanCard, gradePrice, quickPrice } from "./api";
 import { searchCardCached } from "./cache";
-import { ensureDigest } from "./digest";
+import { ensureDigest, loadDigestGen } from "./digest";
 import { describeCard, DAY_MS, makeThumbnail, money, sameCard, setDisplayCurrency, loadFxRates, convertMoney } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
@@ -453,6 +453,9 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
   // Swap the built-in approximate rates for today's real ones, once per load.
   useEffect(() => {
     loadFxRates().then((ok) => { if (ok) setCurrencyTick((n) => n + 1); });
+    // Learn which briefing rule-set the server is on, so cached briefings written
+    // under older rules are discarded instead of lingering per-account.
+    loadDigestGen();
   }, []);
 
   function saveCard(result: ScanResult, frontDataUrl: string | undefined, quiet = false) {

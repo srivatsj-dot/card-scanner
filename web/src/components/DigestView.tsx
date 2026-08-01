@@ -229,7 +229,20 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
 
       {totallyQuiet && (
         <div className="card">
-          <p className="muted" style={{ margin: 0 }}>{t("No major card news today — enjoy the quiet, and check back tomorrow.")}</p>
+          {isToday ? (
+            <p className="muted" style={{ margin: 0 }}>{t("No major card news today — enjoy the quiet, and check back tomorrow.")}</p>
+          ) : (
+            <>
+              {/* For a past day, an empty briefing almost never means "quiet" — it
+                  means one was never successfully written for that date. Say so,
+                  and offer to build it now rather than leaving a blank page. */}
+              <p style={{ marginTop: 0 }}>{t("No briefing was saved for this day.")}</p>
+              <p className="muted" style={{ fontSize: 13 }}>
+                {t("This usually means it couldn't be written at the time. You can build it now — older days take a moment to research, and some may have little to report.")}
+              </p>
+              <button className="btn" onClick={() => retry(date)}>↻ {t("Build this day's briefing")}</button>
+            </>
+          )}
         </div>
       )}
 
