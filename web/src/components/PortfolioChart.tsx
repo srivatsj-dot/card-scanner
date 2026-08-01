@@ -26,14 +26,38 @@ function valueAt(c: SavedCard, at: number): number {
  * history: a card you held for a week and then sold takes its peak with it.
  * `log` is stored in USD, so convert it into whatever you're viewing in.
  */
-function fromLog(log: { t: number; v: number }[], days: number, since: number | null | undefined, cur: string, liveNow: number): { t: number; v: number }[] {
+function fromLog(
+  log: { t: number; v: number }[], days: number, since: number | null | undefined,
+  cur: string, liveNow: number, saved: SavedCard[]
+): { t: number; v: number }[] {
   const now = Date.now();
-  const start = days > 0 ? now - days * DAY : Math.min(since || now, log[0]?.t ?? now);
-  const inRange = log.filter((p) => p.t >= start).map((p) => ({ t: p.t, v: convertMoney(p.v, "USD", cur) }));
-  // Anchor the left edge with the last known value from before the window, so a
-  // flat stretch doesn't get dropped off the start of the chart.
+  const logStart = log[0]?.t ?? now;
+  const start = days > 0 ? now - days * DAY : Math.min(since || now, logStart);
+
+  // The recorded log only begins when logging was switched on. On its own it made
+  // every range — 1d through all-time — show the same two or three points, so a
+  // single big change looked like the entire history of the collection. Rebuild
+  // the stretch BEFORE the log from the cards' own value histories, then hand over
+  // to the log (which is the truth, including cards since removed).
+  const head: { t: number; v: number }[] = [];
+  if (start < logStart) {
+    const span = logStart - start;
+    const steps = Math.min(60, Math.max(4, Math.round(span / DAY)));
+    for (let i = 0; i < steps; i++) {
+      const at = start + (span / steps) * i;
+      let total = 0;
+      for (const c of saved) {
+        if ((c.savedAt || 0) > at) continue;
+        total += convertMoney(valueAt(c, at), c.result.estimatedValue?.currency, cur);
+      }
+      head.push({ t: at, v: total });
+    }
+  }
+  // Carry the last pre-window value forward so a flat stretch isn't cut off.
   const before = log.filter((p) => p.t < start).pop();
-  const head = before ? [{ t: start, v: convertMoney(before.v, "USD", cur) }] : [];
+  if (!head.length && before) head.push({ t: start, v: convertMoney(before.v, "USD", cur) });
+
+  const inRange = log.filter((p) => p.t >= start).map((p) => ({ t: p.t, v: convertMoney(p.v, "USD", cur) }));
   return [...head, ...inRange, { t: now, v: liveNow }];
 }
 
@@ -75,7 +99,7 @@ export default function PortfolioChart({ saved, currency, since, log }: { saved:
     // Prefer the recorded log; fall back to reconstruction for collections that
     // predate it (they simply have no log yet).
     return log && log.length > 1
-      ? fromLog(log, range, since, cur, liveNow)
+      ? fromLog(log, range, since, cur, liveNow, saved)
       : series(saved, range, since);
   }, [saved, range, since, log, cur]);
 
