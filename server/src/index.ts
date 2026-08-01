@@ -1651,9 +1651,10 @@ async function personalLines(
       digestSystemPrompt(settings || {}, []),
       [{
         text:
-          `Report only on THESE specific players/cards, for ${yesterday} (into the morning of ${date}). ` +
-          `Use Google Search and include an item ONLY if search confirms it happened in that window — no guessing, no filler, no stale news. ` +
-          `Write for a card collector: what happened, and what it means for that player's cards. If nothing real happened for someone, leave them out entirely.\n\n` +
+          `Report on THESE specific players/cards, for ${yesterday} (into the morning of ${date}). ` +
+          `Use Google Search to verify everything — never invent a score, a stat, or an event. ` +
+          `Write for a card collector: what happened, and what it means for that player's cards.\n\n` +
+          `DO NOT COME BACK EMPTY. In sport there is always something true to say about a real player. If someone didn't play, say so and give the actual context — the team's result without them, where they sit in the standings, a rest day, an injury update, a slump or hot streak they're in, or how their card market is moving. "Didn't play; the Dodgers won 5-2 without him and he's still hitting .310 over his last ten" is a perfectly good line. What is NOT acceptable is fabricating a game or a stat line. Prioritise the collector's most valuable and most notable players, and give 3-6 lines for the binder and 2-5 for the wishlist.\n\n` +
           (own.length ? `CARDS THEY OWN:\n- ${own.join("\n- ")}\n\n` : "") +
           (want.length ? `ON THEIR WISHLIST:\n- ${want.join("\n- ")}\n` : ""),
       }],
@@ -1665,9 +1666,13 @@ async function personalLines(
       yourCards: keepInWindow(Array.isArray(out.yourCards) ? out.yourCards : [], yesterday, date).slice(0, 8),
       yourWishlist: keepInWindow(Array.isArray(out.yourWishlist) ? out.yourWishlist : [], yesterday, date).slice(0, 8),
     };
-    yoursMem.set(key, res);
-    // Persist only when there's something worth keeping, so a quiet result can be retried.
-    if (res.yourCards.length || res.yourWishlist.length) await cloud.saveDigest(key, res).catch(() => {});
+    // Only cache a result that HAS something. Caching an empty one in memory
+    // froze the section as missing for the rest of the process's life, so a
+    // transient miss could never recover on the next visit.
+    if (res.yourCards.length || res.yourWishlist.length) {
+      yoursMem.set(key, res);
+      await cloud.saveDigest(key, res).catch(() => {});
+    }
     return res;
   } catch {
     return { yourCards: [], yourWishlist: [] };

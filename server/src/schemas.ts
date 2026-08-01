@@ -396,12 +396,12 @@ export const yoursSchema = {
   properties: {
     yourCards: {
       type: "ARRAY",
-      description: "One line per notable development for the players/Pokémon the collector OWNS. Name the player, say what happened, and what it means for their card. Only include someone if something real and verifiable happened in the window — an empty array is correct on a quiet day.",
+      description: "One line per development for the players/Pokémon the collector OWNS. Name the player, say what happened, and what it means for their card. There is ALWAYS something to say about a real player — a game, a rest day, a streak, their team's result, or how their market is moving — so with any players listed this should NOT be empty. Aim for 3-6 lines covering the most notable ones. Everything must be search-verified; report the true state of play rather than inventing events.",
       items: STR,
     },
     yourWishlist: {
       type: "ARRAY",
-      description: "Same, but for players/cards on the collector's WISHLIST — anything that changes whether now is a good moment to chase them.",
+      description: "Same, but for players/cards on the collector's WISHLIST — how they're performing and anything that changes whether now is a good moment to chase them. Should not be empty when there are wishlist entries; 2-5 lines.",
       items: STR,
     },
   },
