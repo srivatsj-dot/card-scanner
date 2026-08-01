@@ -57,7 +57,13 @@ const PORT = Number(process.env.PORT) || 8787;
 
 // The morning digest only reports news from this date onward (avoids stale or
 // hallucinated old events). The briefing archive officially starts here.
-const LAUNCH_DATE = "2026-06-19";
+//
+// Reset to 2026-08-01: everything written before this was produced under earlier,
+// worse rules — box-score dumps, tournament-result lists, days that never built at
+// all — and browsing back into that was showing bad or blank briefings. The
+// archive now starts clean from the first properly-generated day, and grows from
+// here. Older cached days are deleted on boot.
+const LAUNCH_DATE = "2026-08-01";
 
 // Google Search grounding gives the model live data (current player form,
 // recent sale prices) instead of its early-2025 training knowledge. On by
@@ -2471,7 +2477,10 @@ app.listen(PORT, () => {
         console.log("  cloud accounts + sync: on (Postgres) — accounts sync across devices");
         // Briefings written under older rules are stale — clear them so every
         // day (including past ones you can page back to) rebuilds properly.
-        return cloud.purgeOldDigests(DIGEST_GEN_VERSION);
+        // Drop briefings from older rule sets AND anything before the archive's
+        // start date, so nobody can page back into the bad early ones.
+        return cloud.purgeOldDigests(DIGEST_GEN_VERSION)
+          .then(() => cloud.purgeDigestsBefore(LAUNCH_DATE));
       })
       .catch((e) => console.error(`  ⚠  cloud DB init failed: ${e instanceof Error ? e.message : e}`));
   } else {

@@ -41,11 +41,21 @@ function hasContent(d: DigestResult | undefined): boolean {
   );
 }
 
+// The archive starts here — days before this were written under earlier, worse
+// rules (or never written at all), so they're dropped rather than shown.
+export const ARCHIVE_START = "2026-08-01";
+
 export function readDigestArchive(cacheKey: string): Archive {
   try {
     const raw = JSON.parse(localStorage.getItem(cacheKey) || "{}");
     if (raw && raw.sections) return {}; // old single-digest format — discard
-    return raw && typeof raw === "object" ? raw : {};
+    if (!raw || typeof raw !== "object") return {};
+    // Forget anything from before the archive's start date.
+    const kept: Archive = {};
+    for (const [day, d] of Object.entries(raw as Archive)) {
+      if (day >= ARCHIVE_START) kept[day] = d;
+    }
+    return kept;
   } catch {
     return {};
   }

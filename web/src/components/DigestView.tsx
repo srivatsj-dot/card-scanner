@@ -15,7 +15,9 @@ interface Props {
 const MAX_PER_BUCKET = 4;
 
 // The archive (and the digest's news) officially begins here.
-const LAUNCH = "2026-06-19";
+// Must match the server's LAUNCH_DATE — the archive starts here, so the date
+// picker can't wander back into days that were never properly generated.
+const LAUNCH = "2026-08-01";
 
 const SPORT_EMOJI: Record<string, string> = {
   pokémon: "⚡", pokemon: "⚡", baseball: "⚾", soccer: "⚽", cricket: "🏏",

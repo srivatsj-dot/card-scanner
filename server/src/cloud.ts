@@ -544,6 +544,20 @@ export async function deleteDigest(key: string): Promise<void> {
   try { await db().query(`DELETE FROM digests WHERE key=$1`, [key]); } catch { /* ignore */ }
 }
 
+/**
+ * Delete every cached briefing for a day before `firstDay`. Keys look like
+ * "<gen>:<YYYY-MM-DD>", so we compare the date part.
+ */
+export async function purgeDigestsBefore(firstDay: string): Promise<number> {
+  if (!hasCloud) return 0;
+  try {
+    const r = await db().query(`DELETE FROM digests WHERE split_part(key, ':', 2) < $1`, [firstDay]);
+    const n = r.rowCount ?? 0;
+    if (n) console.log(`[digest] removed ${n} briefing(s) from before ${firstDay}`);
+    return n;
+  } catch { return 0; }
+}
+
 export async function loadDigest(key: string): Promise<unknown | null> {
   if (!hasCloud) return null;
   const r = await db().query(`SELECT data FROM digests WHERE key=$1`, [key]);
