@@ -13,7 +13,7 @@ import { pokemonLookup } from "./prices.js";
 import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
 import { verifiedSportsFacts, verifiedSportsFactsData, hasLimitless } from "./sports.js";
-import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema, assistantSchema } from "./schemas.js";
+import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema, assistantSchema, yoursSchema } from "./schemas.js";
 import {
   scanSystemPrompt,
   bulkSystemPrompt,
@@ -1621,6 +1621,59 @@ app.get("/briefing", async (_req: Request, res: Response) => {
   res.type("html").send(briefingHtml(date, b));
 });
 
+
+// --- "In your binder" / "In your wishlist" ----------------------------------
+// Scraping the shared briefing for the collector's player names almost never
+// matched — a general hobby round-up rarely names the exact people you own, so
+// the section simply never appeared. So ask directly about THEIR players. Cached
+// per (day + set of names) so a returning reader doesn't pay for it twice.
+const yoursMem = new Map<string, { yourCards: string[]; yourWishlist: string[] }>();
+const hashOf = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h).toString(36); };
+
+async function personalLines(
+  date: string,
+  players: string[],
+  wishlist: string[],
+  settings?: Settings
+): Promise<{ yourCards: string[]; yourWishlist: string[] }> {
+  const own = [...new Set(players.map((p) => String(p).trim()).filter(Boolean))].slice(0, 14);
+  const want = [...new Set(wishlist.map((w) => String(w).trim()).filter(Boolean))].slice(0, 14);
+  if (!own.length && !want.length) return { yourCards: [], yourWishlist: [] };
+  const key = `${DIGEST_GEN_VERSION}:${date}:${hashOf(own.join("|") + "#" + want.join("|"))}`;
+  const hit = yoursMem.get(key);
+  if (hit) return hit;
+  const fromDb = (await cloud.loadDigest(key).catch(() => null)) as { yourCards: string[]; yourWishlist: string[] } | null;
+  if (fromDb && Array.isArray(fromDb.yourCards)) { yoursMem.set(key, fromDb); return fromDb; }
+
+  const yesterday = new Date(new Date(`${date}T12:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10);
+  try {
+    const out = await analyze<{ yourCards?: string[]; yourWishlist?: string[] }>(
+      digestSystemPrompt(settings || {}, []),
+      [{
+        text:
+          `Report only on THESE specific players/cards, for ${yesterday} (into the morning of ${date}). ` +
+          `Use Google Search and include an item ONLY if search confirms it happened in that window — no guessing, no filler, no stale news. ` +
+          `Write for a card collector: what happened, and what it means for that player's cards. If nothing real happened for someone, leave them out entirely.\n\n` +
+          (own.length ? `CARDS THEY OWN:\n- ${own.join("\n- ")}\n\n` : "") +
+          (want.length ? `ON THEIR WISHLIST:\n- ${want.join("\n- ")}\n` : ""),
+      }],
+      yoursSchema,
+      true, // must be grounded — these are specific, checkable claims
+      512
+    );
+    const res = {
+      yourCards: keepInWindow(Array.isArray(out.yourCards) ? out.yourCards : [], yesterday, date).slice(0, 8),
+      yourWishlist: keepInWindow(Array.isArray(out.yourWishlist) ? out.yourWishlist : [], yesterday, date).slice(0, 8),
+    };
+    yoursMem.set(key, res);
+    // Persist only when there's something worth keeping, so a quiet result can be retried.
+    if (res.yourCards.length || res.yourWishlist.length) await cloud.saveDigest(key, res).catch(() => {});
+    return res;
+  } catch {
+    return { yourCards: [], yourWishlist: [] };
+  }
+}
+
 app.post("/api/digest", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
   const { date, sports, players, wishlist, refresh } = req.body as {
@@ -1645,10 +1698,14 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     // mention the collector's own players out of the shared briefing. These were
     // always sent back empty before, so the sections never appeared.
     const all = sections.flatMap((s) => [...s.storylines, ...s.risingStars, ...s.declining, ...s.news, ...s.chase]);
+    // Ask about their players directly, and fold in anything the shared briefing
+    // already said about them (free, and sometimes catches more).
+    const mine = await personalLines(target, players || [], wishlist || [], undefined);
+    const dedupe = (a: string[], b: string[]) => [...new Set([...a, ...b])].slice(0, 8);
     res.json({
       overview: shared.overview,
-      yourCards: linesMentioning(all, players || []),
-      yourWishlist: linesMentioning(all, wishlist || []),
+      yourCards: dedupe(mine.yourCards, linesMentioning(all, players || [])),
+      yourWishlist: dedupe(mine.yourWishlist, linesMentioning(all, wishlist || [])),
       sections,
       gen: DIGEST_GEN_VERSION,
     });

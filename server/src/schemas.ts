@@ -389,3 +389,21 @@ export const assistantSchema = {
   },
   required: ["reply", "actions"],
 } as const;
+
+// The per-collector part of the briefing: what happened to THEIR players.
+export const yoursSchema = {
+  type: "OBJECT",
+  properties: {
+    yourCards: {
+      type: "ARRAY",
+      description: "One line per notable development for the players/Pokémon the collector OWNS. Name the player, say what happened, and what it means for their card. Only include someone if something real and verifiable happened in the window — an empty array is correct on a quiet day.",
+      items: STR,
+    },
+    yourWishlist: {
+      type: "ARRAY",
+      description: "Same, but for players/cards on the collector's WISHLIST — anything that changes whether now is a good moment to chase them.",
+      items: STR,
+    },
+  },
+  required: ["yourCards", "yourWishlist"],
+} as const;
