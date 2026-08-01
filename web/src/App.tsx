@@ -130,18 +130,21 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     });
   }
   const [valueLog, setValueLog] = useState<{ t: number; v: number }[]>(() => loadJSON<{ t: number; v: number }[]>(VALUE_LOG_KEY, []));
-  // Record the binder's total whenever it changes, at most one point an hour
-  // (later changes in the same hour overwrite it, so the log stays compact).
+  // Record the binder's total EVERY time it changes. Never coalesce two points
+  // with different values: an earlier version threw away any point less than an
+  // hour old, which deleted exactly the events worth seeing — add a $15,000 card
+  // and remove it twenty minutes later and the spike was overwritten by the
+  // value that followed it. A changed value is always a new point.
   useEffect(() => {
     if (isGuest) return;
     const usd = saved.reduce((n, c) => n + convertMoney(c.result.estimatedValue?.mid || 0, c.result.estimatedValue?.currency, "USD"), 0);
     setValueLog((prev) => {
       const now = Date.now();
       const last = prev[prev.length - 1];
-      if (last && Math.abs(last.v - usd) < 0.005) return prev; // nothing moved
-      const HOUR = 60 * 60 * 1000;
-      const next = last && now - last.t < HOUR ? [...prev.slice(0, -1), { t: now, v: usd }] : [...prev, { t: now, v: usd }];
-      const trimmed = next.slice(-2000);
+      if (last && Math.abs(last.v - usd) < 0.005) return prev; // genuinely unchanged
+      const next = [...prev, { t: now, v: usd }];
+      // Only ever drop from the OLDEST end, so recent history stays intact.
+      const trimmed = next.length > 3000 ? next.slice(-3000) : next;
       try { localStorage.setItem(VALUE_LOG_KEY, JSON.stringify(trimmed)); } catch { /* quota */ }
       return trimmed;
     });

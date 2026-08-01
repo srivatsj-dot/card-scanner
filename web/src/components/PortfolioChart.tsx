@@ -90,7 +90,13 @@ export default function PortfolioChart({ saved, currency, since, log }: { saved:
   const W = 640, H = 160, PAD = 8;
   const min = Math.min(...values), max = Math.max(...values);
   const span = max - min || Math.max(1, max || 1);
-  const x = (i: number) => (i / Math.max(1, values.length - 1)) * W;
+  // Position points by WHEN they happened, not by their position in the array.
+  // Log entries are irregular, so index-based spacing stretched a twenty-minute
+  // spike across as much width as a quiet month.
+  const t0 = pts[0]?.t ?? 0;
+  const t1 = pts[pts.length - 1]?.t ?? t0 + 1;
+  const tSpan = Math.max(1, t1 - t0);
+  const x = (i: number) => (((pts[i]?.t ?? t0) - t0) / tSpan) * W;
   const y = (v: number) => H - PAD - ((v - min) / span) * (H - PAD * 2);
   const line = values.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const area = `${line} L${W},${H} L0,${H} Z`;
@@ -101,7 +107,13 @@ export default function PortfolioChart({ saved, currency, since, log }: { saved:
   function onMove(e: React.PointerEvent<SVGSVGElement>) {
     const r = e.currentTarget.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-    setHover(Math.round(frac * (values.length - 1)));
+    // Find the point nearest that MOMENT (points aren't evenly spaced in time).
+    const at = t0 + frac * tSpan;
+    let best = 0;
+    for (let i = 1; i < pts.length; i++) {
+      if (Math.abs(pts[i].t - at) < Math.abs(pts[best].t - at)) best = i;
+    }
+    setHover(best);
   }
 
   const shown = hover != null ? pts[hover] : null;
