@@ -1435,8 +1435,13 @@ async function buildDigest(target: string): Promise<Briefing> {
         .map(dePokemonDump);
       const b: Briefing = { overview: reframed.overview, yourCards: [], yourWishlist: [], sections };
       if (briefingHasContent(b)) return b;
-    } catch { /* fall through to the raw feed */ }
-    return { overview: fallbackOverview(s), yourCards: [], yourWishlist: [], sections: s };
+    } catch { /* couldn't reframe */ }
+    // NEVER ship the raw feed. Those lines are bare box scores and final scores —
+    // a sports ticker, not a card briefing — and shipping them is worse than
+    // shipping nothing. If we can't write a real briefing, say so and let it be
+    // retried; an unwritten briefing is never persisted, so the next attempt is
+    // a genuine one.
+    return null;
   };
   const parts: Part[] = [
     {
@@ -1628,6 +1633,11 @@ app.get("/briefing", async (_req: Request, res: Response) => {
 // the section simply never appeared. So ask directly about THEIR players. Cached
 // per (day + set of names) so a returning reader doesn't pay for it twice.
 const yoursMem = new Map<string, { yourCards: string[]; yourWishlist: string[] }>();
+const yoursInflight = new Map<string, Promise<{ yourCards: string[]; yourWishlist: string[] }>>();
+// After a failure (usually a rate limit), don't retry this key for a while.
+// Retrying on every page load is what turned one 429 into a storm of them.
+const yoursCooldown = new Map<string, number>();
+const YOURS_COOLDOWN_MS = 10 * 60 * 1000;
 const hashOf = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h).toString(36); };
 
 async function personalLines(
@@ -1642,10 +1652,15 @@ async function personalLines(
   const key = `${DIGEST_GEN_VERSION}:${date}:${hashOf(own.join("|") + "#" + want.join("|"))}`;
   const hit = yoursMem.get(key);
   if (hit) return hit;
+  const cool = yoursCooldown.get(key);
+  if (cool && Date.now() < cool) return { yourCards: [], yourWishlist: [] }; // backing off
+  const running = yoursInflight.get(key);
+  if (running) return running; // several tabs/devices share one call
   const fromDb = (await cloud.loadDigest(key).catch(() => null)) as { yourCards: string[]; yourWishlist: string[] } | null;
   if (fromDb && Array.isArray(fromDb.yourCards)) { yoursMem.set(key, fromDb); return fromDb; }
 
   const yesterday = new Date(new Date(`${date}T12:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10);
+  const job = (async () => {
   try {
     const out = await analyze<{ yourCards?: string[]; yourWishlist?: string[] }>(
       digestSystemPrompt(settings || {}, []),
@@ -1673,10 +1688,15 @@ async function personalLines(
       yoursMem.set(key, res);
       await cloud.saveDigest(key, res).catch(() => {});
     }
+    if (!res.yourCards.length && !res.yourWishlist.length) yoursCooldown.set(key, Date.now() + YOURS_COOLDOWN_MS);
     return res;
   } catch {
+    yoursCooldown.set(key, Date.now() + YOURS_COOLDOWN_MS);
     return { yourCards: [], yourWishlist: [] };
   }
+  })().finally(() => yoursInflight.delete(key));
+  yoursInflight.set(key, job);
+  return job;
 }
 
 app.post("/api/digest", async (req: Request, res: Response) => {
@@ -1704,8 +1724,12 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     // always sent back empty before, so the sections never appeared.
     const all = sections.flatMap((s) => [...s.storylines, ...s.risingStars, ...s.declining, ...s.news, ...s.chase]);
     // Ask about their players directly, and fold in anything the shared briefing
-    // already said about them (free, and sometimes catches more).
-    const mine = await personalLines(target, players || [], wishlist || [], undefined);
+    // already said about them (free, and sometimes catches more). Skipped when the
+    // shared briefing itself came back empty — that means the service is
+    // struggling, and firing another call would only deepen the rate limiting.
+    const mine = sections.length
+      ? await personalLines(target, players || [], wishlist || [], undefined)
+      : { yourCards: [] as string[], yourWishlist: [] as string[] };
     const dedupe = (a: string[], b: string[]) => [...new Set([...a, ...b])].slice(0, 8);
     res.json({
       overview: shared.overview,
