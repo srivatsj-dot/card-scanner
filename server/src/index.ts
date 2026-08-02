@@ -309,6 +309,29 @@ async function structuredDirect<T>(model: string, systemInstruction: string, par
  * but degrading gracefully: a non-429 grounding failure drops grounding on the
  * same model; a rate limit moves on to the next (higher-quota) model.
  */
+/**
+ * Run an AI call, waiting out transient rate limits instead of failing on the
+ * first one. Quotas free up within seconds, and the briefing is worth waiting a
+ * moment for — giving up immediately is what left it unwritten. Only used where a
+ * few seconds of latency is acceptable (the briefing), never on the scan path.
+ */
+async function analyzePatiently<T>(
+  systemInstruction: string, parts: Part[], schema: unknown, grounded: boolean, thinkingBudget = 0
+): Promise<T> {
+  const waits = [0, 2000, 6000, 15000]; // ~23s of patience in total
+  let lastErr: unknown;
+  for (const wait of waits) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    try {
+      return await analyze<T>(systemInstruction, parts, schema, grounded, thinkingBudget);
+    } catch (err) {
+      lastErr = err;
+      if (!isRateLimit(err)) throw err; // a real error won't fix itself by waiting
+    }
+  }
+  throw lastErr;
+}
+
 async function analyze<T>(systemInstruction: string, parts: Part[], schema: unknown, grounded: boolean, thinkingBudget = 0): Promise<T> {
   let lastErr: unknown;
   for (const model of MODELS) {
@@ -1410,7 +1433,7 @@ async function buildDigest(target: string): Promise<Briefing> {
     const s = factsToSections(verifiedData);
     if (!s.length) return null;
     try {
-      const reframed = await analyze<DigestShape>(
+      const reframed = await analyzePatiently<DigestShape>(
         sys,
         [{
           text:
@@ -1468,7 +1491,7 @@ async function buildDigest(target: string): Promise<Briefing> {
     },
   ];
   try {
-    const result = await analyze<DigestShape>(sys, parts, digestSchema, groundedFor({}));
+    const result = await analyzePatiently<DigestShape>(sys, parts, digestSchema, groundedFor({}));
     const sections: DigestSection[] = (result.sections || []).map((s) => ({
       sport: s.sport,
       risingStars: keepInWindow(s.risingStars, windowStart, target),
@@ -1481,8 +1504,12 @@ async function buildDigest(target: string): Promise<Briefing> {
     const briefing: Briefing = { overview: result.overview, yourCards: [], yourWishlist: [], sections };
     if (briefingHasContent(briefing)) return briefing;
     // Model returned nothing — fall back to the verified feeds, else quiet day.
+    lastDigestFailure = null;
     return (await fallback()) || quiet();
-  } catch {
+  } catch (err) {
+    lastDigestFailure = isRateLimit(err)
+      ? "The AI service is at its rate limit right now. It usually frees up within a minute."
+      : "The briefing couldn't be generated just now.";
     return (await fallback()) || quiet();
   }
 }
@@ -1490,6 +1517,9 @@ async function buildDigest(target: string): Promise<Briefing> {
 // Shared cache: memory (fast) + Postgres (survives restarts). One generation per
 // day serves every user. We only persist briefings that actually have content,
 // so a transient empty result isn't locked in.
+// Why the last build attempt failed, so the app can tell the reader whether it's
+// a quota problem (wait) or something else (report it) instead of guessing.
+let lastDigestFailure: string | null = null;
 const digestMem = new Map<string, Briefing>();
 const digestInflight = new Map<string, Promise<Briefing>>();
 
@@ -1737,6 +1767,7 @@ app.post("/api/digest", async (req: Request, res: Response) => {
       yourWishlist: dedupe(mine.yourWishlist, linesMentioning(all, wishlist || [])),
       sections,
       gen: DIGEST_GEN_VERSION,
+      ...(sections.length ? {} : { reason: lastDigestFailure || undefined }),
     });
   } catch (err) {
     const { status, message } = describeError(err);

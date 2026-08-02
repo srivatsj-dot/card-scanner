@@ -255,7 +255,9 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
               to try again, rather than claiming nothing happened. */}
           <p style={{ marginTop: 0 }}>{t("This briefing hasn't been written yet.")}</p>
           <p className="muted" style={{ fontSize: 13 }}>
-            {t("This usually means the service was busy. Give it a moment and try again — it takes a few seconds to research.")}
+            {digest?.reason
+              ? digest.reason
+              : t("Give it a moment and try again — it takes a few seconds to research.")}
           </p>
           <button className="btn" onClick={() => retry(date)}>↻ {t("Try again")}</button>
         </div>

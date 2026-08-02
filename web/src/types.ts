@@ -308,6 +308,8 @@ export interface LaterItem {
 
 /** The daily "morning update" digest, grouped by sport. */
 export interface DigestResult {
+  /** Why the briefing is empty, when the server couldn't write one. */
+  reason?: string;
   generatedAt: number;
   overview: string;
   yourCards: string[];
