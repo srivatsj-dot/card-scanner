@@ -169,6 +169,11 @@ function apiKeyGuard(res: Response): boolean {
 function describeError(err: unknown): { status: number; message: string } {
   if (err instanceof ApiError) {
     if (err.status === 429) {
+      // Log what Google actually said. A 429 on a PAID key is usually the Google
+      // Search grounding quota (separate and much smaller) or a per-minute
+      // request cap — not the daily token allowance — and only the raw message
+      // distinguishes them. Without this there's no way to tell them apart.
+      console.warn("[ai] 429 from Google:", (err as { message?: string }).message || err);
       return {
         status: 429,
         message: "We're a bit busy right now. Please wait a minute and try again.",
@@ -347,6 +352,23 @@ async function analyze<T>(systemInstruction: string, parts: Part[], schema: unkn
       lastErr = err;
       if (isRateLimit(err)) continue; // try the next model's separate quota
       throw err;
+    }
+  }
+  // Every model was rate limited. When the call was GROUNDED, that's usually the
+  // Google Search tool's own quota rather than the model's — it's far lower and
+  // is billed separately, so it runs out first even on a paid plan. Switching
+  // models can't help with that, but dropping search can: retry without it. The
+  // answer leans on what we already supply (verified feeds, the card's details)
+  // instead of live search, which beats returning nothing.
+  if (grounded) {
+    console.warn("[ai] grounded call rate limited on every model — retrying without Google Search");
+    for (const model of MODELS) {
+      try {
+        return await structuredDirect<T>(model, systemInstruction, parts, schema, thinkingBudget);
+      } catch (err) {
+        lastErr = err;
+        if (!isRateLimit(err)) throw err;
+      }
     }
   }
   throw lastErr;
