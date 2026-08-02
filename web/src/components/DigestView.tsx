@@ -168,9 +168,10 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
     navigated.current = true;
     setDate(target);
   }
+  /** Rebuild a day from scratch — clears the cached copy on the server too. */
   function retry(d: string) {
     tried.current.delete(d);
-    generate(d);
+    generate(d, true); // force: without this it just re-served the same briefing
   }
 
   const totallyQuiet = digest &&
@@ -187,6 +188,17 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
               <button className="iconbtn" disabled={date <= LAUNCH} onClick={() => goTo(addDays(date, -1))} aria-label="Previous day">‹</button>
               <button className="digest-datebtn" onClick={() => setShowCal((s) => !s)}>📅 {isToday ? t("Today") : human(date)}</button>
               <button className="iconbtn" disabled={isToday} onClick={() => goTo(addDays(date, 1))} aria-label="Next day">›</button>
+              {/* Write this day again from scratch — for when the briefing that
+                  came out isn't good enough. */}
+              <button
+                className="iconbtn"
+                onClick={() => retry(date)}
+                disabled={busy}
+                title={t("Rewrite this day's briefing from scratch")}
+                aria-label={t("Regenerate briefing")}
+              >
+                {busy ? <span className="spinner" /> : "↻"}
+              </button>
             </div>
             {digest && <h2 style={{ margin: "8px 0 0", fontSize: 22 }}>{digest.overview}</h2>}
             {collected.length === 0 && (
@@ -205,6 +217,12 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
             has={(d) => !!archive[d]}
             onPick={(d) => { goTo(d); setShowCal(false); }}
           />
+        )}
+
+        {busy && (
+          <p className="muted" style={{ fontSize: 13, margin: "10px 0 0" }}>
+            <span className="spinner" />{t("Writing this day's briefing — it researches live sources, so give it a few seconds.")}
+          </p>
         )}
 
         {error && !busy && (
