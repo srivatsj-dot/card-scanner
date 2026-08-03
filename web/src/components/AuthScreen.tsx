@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { login, register, hasAnyAccount, loginWithGoogle, accountByEmail, resetPassword, maskEmail, currentUser } from "../auth";
 import { notifySignup, sendResetCode } from "../api";
 import { cloudEnabled, cloudForgot, cloudReset, fetchCaptcha } from "../cloud";
+import type { Captcha } from "../cloud";
 import { trackSignup } from "../analytics";
 import { useT } from "../translator";
 import Logo from "./Logo";
@@ -22,16 +23,17 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Bot check. The answer is verified on the server and each question works once,
-  // so a script can't solve one and reuse it. Turnstile takes over automatically
-  // if the server has a key for it.
-  const [captcha, setCaptcha] = useState<{ mode: "question" | "turnstile"; id?: string; question?: string; siteKey?: string } | null>(null);
+  // Bot check. The server draws a distorted picture and keeps the answer to
+  // itself, so it can't be read out of the page; each one works exactly once.
+  // Turnstile takes over automatically if the server has a key for it.
+  const [captcha, setCaptcha] = useState<Captcha | null>(null);
   const [captchaAnswer, setCaptchaAnswer] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [honeypot, setHoneypot] = useState(""); // never shown; only a bot fills it
   const turnstileRef = useRef<HTMLDivElement | null>(null);
-  const loadCaptcha = () => {
+  const loadCaptcha = (kind: "image" | "text" = "image") => {
     setTurnstileToken("");
-    fetchCaptcha()
+    fetchCaptcha(kind)
       .then((c) => { setCaptcha(c); setCaptchaAnswer(""); })
       .catch(() => setCaptcha(null));
   };
@@ -213,7 +215,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
     setError(null);
     setBusy(true);
     try {
-      const proof = { captchaId: captcha?.id, captchaAnswer, turnstileToken };
+      const proof = { captchaId: captcha?.id, captchaAnswer, turnstileToken, hp: honeypot };
       if (mode === "register") {
         await register(username, password, email, proof);
         trackSignup(); // ad conversion: a real account was created
@@ -386,6 +388,39 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
           />
         </label>
 
+        {/* Honeypot: off-screen and out of the tab order, so a person never sees
+            it and a form-filling script does. */}
+        <input
+          type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
+          className="hp-field" value={honeypot} onChange={(e) => setHoneypot(e.target.value)}
+        />
+
+        {captcha?.mode === "image" && (
+          <label className="field">
+            <span>{t("Quick check — type what you see")}</span>
+            <div className="captcha-row">
+              <img className="captcha-img" src={captcha.image} alt={t("Distorted characters to type in")} />
+              <button type="button" className="captcha-refresh" onClick={() => loadCaptcha()} disabled={busy} title={t("New picture")}>
+                ↻
+              </button>
+            </div>
+            <input
+              type="text"
+              autoComplete="off" autoCapitalize="characters" autoCorrect="off" spellCheck={false}
+              value={captchaAnswer}
+              onChange={(e) => setCaptchaAnswer(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+              placeholder={t("Type the characters")}
+              maxLength={8}
+              style={{ marginTop: 8, letterSpacing: 3, textTransform: "uppercase" }}
+              aria-label={t("The characters shown in the picture")}
+            />
+            <button type="button" className="link-btn" style={{ marginTop: 6 }} onClick={() => loadCaptcha("text")} disabled={busy}>
+              {t("Can't see it? Use a question instead")}
+            </button>
+          </label>
+        )}
+
         {captcha?.mode === "question" && (
           <label className="field">
             <span>{t("Quick check — are you human?")}</span>
@@ -402,7 +437,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
                 style={{ width: 110 }}
                 aria-label={captcha.question}
               />
-              <button type="button" className="link-btn" onClick={loadCaptcha} disabled={busy}>
+              <button type="button" className="link-btn" onClick={() => loadCaptcha("text")} disabled={busy}>
                 {t("New question")}
               </button>
             </div>
@@ -424,7 +459,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
           onClick={submit}
           disabled={
             busy || !username.trim() || !password || (mode === "register" && !email.trim()) ||
-            (captcha?.mode === "question" && !captchaAnswer.trim()) ||
+            ((captcha?.mode === "question" || captcha?.mode === "image") && !captchaAnswer.trim()) ||
             (captcha?.mode === "turnstile" && !turnstileToken)
           }
         >

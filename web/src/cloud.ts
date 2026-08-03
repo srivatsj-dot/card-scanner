@@ -120,13 +120,27 @@ function store(auth: AuthResult): { key: string; display: string; email: string 
 }
 
 /** Proof that a human is at the keyboard — a solved challenge or a Turnstile token. */
-export interface CaptchaProof { captchaId?: string; captchaAnswer?: string; turnstileToken?: string }
+export interface CaptchaProof {
+  captchaId?: string;
+  captchaAnswer?: string;
+  turnstileToken?: string;
+  hp?: string; // honeypot: only a bot fills this in
+}
 
-/** The current bot-check to show on the auth screen. */
-export function fetchCaptcha() {
-  return fetch("/api/captcha").then((r) => r.json()) as Promise<{
-    mode: "question" | "turnstile"; id?: string; question?: string; siteKey?: string;
-  }>;
+export interface Captcha {
+  mode: "image" | "question" | "turnstile";
+  id?: string;
+  image?: string; // data: URL of the picture (image mode)
+  question?: string; // spoken-word sum (accessible mode)
+  siteKey?: string; // Turnstile
+}
+
+/** The current bot-check to show on the auth screen. `text` asks for the
+ * screen-reader-friendly question instead of the picture. */
+export async function fetchCaptcha(kind: "image" | "text" = "image"): Promise<Captcha> {
+  const r = await fetch(`/api/captcha${kind === "text" ? "?mode=text" : ""}`);
+  if (!r.ok) throw new Error("Couldn't load the check.");
+  return r.json();
 }
 
 export async function cloudRegister(username: string, email: string, password: string, proof: CaptchaProof = {}) {

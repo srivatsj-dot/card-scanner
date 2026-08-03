@@ -12,6 +12,7 @@ import { ebayPrice, ebayImageSearch, ebayImageCandidates, pickCardImage, hasEbay
 import { pokemonLookup } from "./prices.js";
 import { webDetect, hasVision } from "./vision.js";
 import * as cloud from "./cloud.js";
+import * as captcha from "./captcha.js";
 import { verifiedSportsFacts, verifiedSportsFactsData, hasLimitless } from "./sports.js";
 import { scanSchema, tradeSchema, askSchema, bulkSchema, tradeUpSchema, digestSchema, checklistSchema, priceVerifySchema, assistantSchema, yoursSchema } from "./schemas.js";
 import {
@@ -2225,39 +2226,16 @@ const authOk = (req: Request, action: string) => authHits.delete(`${action}:${cl
 
 
 // --- Bot protection on the auth screens ------------------------------------
-// A server-checked challenge, so the answer can't be read or faked from the
-// browser. Two modes:
-//   • Cloudflare Turnstile when TURNSTILE_SECRET is set (proper bot detection,
-//     invisible to most people) — the recommended setup.
-//   • Otherwise a built-in arithmetic challenge, which needs no accounts or keys
-//     and still stops the scripted signup floods that hit any open form.
+// Three tiers, best first:
+//   • Cloudflare Turnstile when TURNSTILE_SECRET is set — real bot detection,
+//     invisible to almost everyone. Set the keys and it takes over on its own.
+//   • Otherwise a distorted PNG the server draws itself (see captcha.ts): the
+//     answer is never in the page, so a script has to actually read the image.
+//   • A spoken-word sum as the accessible alternative, for screen readers.
+// Plus a honeypot field and a "too fast to be human" floor, which cost a real
+// person nothing.
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || "";
 export const hasTurnstile = Boolean(TURNSTILE_SECRET);
-
-interface Challenge { answer: number; expires: number }
-const challenges = new Map<string, Challenge>();
-const CAPTCHA_TTL_MS = 10 * 60 * 1000;
-const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-
-function newChallenge(): { id: string; question: string } {
-  // Prune expired entries so the map can't grow without bound.
-  const now = Date.now();
-  if (challenges.size > 5000) for (const [k, c] of challenges) if (c.expires < now) challenges.delete(k);
-  // Pick the SUM first and split it, so every number in the question — including
-  // a + b on the minus form — still has a word for it below.
-  const sum = 4 + Math.floor(Math.random() * (WORDS.length - 4)); // 4…12
-  const b = 1 + Math.floor(Math.random() * (sum - 2)); // 1…sum-2, so a stays ≥ 2
-  const a = sum - b;
-  const plus = Math.random() < 0.7;
-  // Spelled-out numbers so a trivial regex can't just grab the digits.
-  const question = plus
-    ? `What is ${WORDS[a]} plus ${WORDS[b]}?`
-    : `What is ${WORDS[a + b]} minus ${WORDS[b]}?`;
-  const answer = plus ? a + b : a;
-  const id = randomBytes(12).toString("hex");
-  challenges.set(id, { answer, expires: now + CAPTCHA_TTL_MS });
-  return { id, question };
-}
 
 /** Verify a Cloudflare Turnstile token with their API. */
 async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
@@ -2271,30 +2249,26 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
 
 /**
  * Check whatever proof the client sent. Returns null when it's fine, or a
- * message to show. Challenges are SINGLE USE — solving one doesn't let a script
- * replay it for thousands of signups.
+ * message to show.
  */
 async function checkCaptcha(req: Request): Promise<string | null> {
-  const { captchaId, captchaAnswer, turnstileToken } = (req.body || {}) as {
-    captchaId?: string; captchaAnswer?: string; turnstileToken?: string;
-  };
+  const body = (req.body || {}) as captcha.Proof & { turnstileToken?: string };
   if (hasTurnstile) {
-    if (!turnstileToken) return "Please complete the verification.";
-    return (await verifyTurnstile(turnstileToken, clientIp(req))) ? null : "Verification failed. Please try again.";
+    if (body.hp) return "That looked automated. Please reload the page and try again.";
+    if (!body.turnstileToken) return "Please complete the verification.";
+    return (await verifyTurnstile(body.turnstileToken, clientIp(req))) ? null : "Verification failed. Please try again.";
   }
-  const c = captchaId ? challenges.get(captchaId) : undefined;
-  if (!c) return "Please answer the verification question.";
-  challenges.delete(captchaId as string); // one use only, right or wrong
-  if (Date.now() > c.expires) return "That verification expired — here's a new one.";
-  const given = String(captchaAnswer ?? "").trim().toLowerCase();
-  const asNumber = /^\d+$/.test(given) ? Number(given) : WORDS.indexOf(given);
-  return asNumber === c.answer ? null : "That answer wasn't right — please try the new question.";
+  return captcha.verify(body);
 }
 
-/** Hand the login screen a fresh challenge. */
-app.get("/api/captcha", (_req: Request, res: Response) => {
+/** Hand the login screen a fresh challenge. `?mode=text` asks for the accessible one. */
+app.get("/api/captcha", (req: Request, res: Response) => {
   if (hasTurnstile) { res.json({ mode: "turnstile", siteKey: process.env.TURNSTILE_SITE_KEY || "" }); return; }
-  res.json({ mode: "question", ...newChallenge() });
+  if (captcha.issueLimited(clientIp(req))) {
+    res.status(429).json({ error: "Too many attempts. Wait a few minutes and try again." });
+    return;
+  }
+  res.json(req.query.mode === "text" ? captcha.textChallenge() : captcha.imageChallenge());
 });
 
 app.post("/api/cloud/register", async (req: Request, res: Response) => {
