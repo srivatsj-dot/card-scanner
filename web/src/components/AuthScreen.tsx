@@ -31,13 +31,22 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
   const [turnstileToken, setTurnstileToken] = useState("");
   const [honeypot, setHoneypot] = useState(""); // never shown; only a bot fills it
   const turnstileRef = useRef<HTMLDivElement | null>(null);
-  const loadCaptcha = (kind: "image" | "text" = "image") => {
+  const loadCaptcha = () => {
     setTurnstileToken("");
-    fetchCaptcha(kind)
+    fetchCaptcha()
       .then((c) => { setCaptcha(c); setCaptchaAnswer(""); })
       .catch(() => setCaptcha(null));
   };
   useEffect(() => { loadCaptcha(); }, []);
+  // Google's callback is wired up once, so it can't read this render's state.
+  // Keep the current proof in a ref for it to pick up.
+  const proof = { captchaId: captcha?.id, captchaAnswer, turnstileToken, hp: honeypot };
+  const proofRef = useRef(proof);
+  proofRef.current = proof;
+  const loadCaptchaRef = useRef(loadCaptcha);
+  loadCaptchaRef.current = loadCaptcha;
+  /** True once the person has done whatever the check asks of them. */
+  const solved = captcha?.mode === "turnstile" ? !!turnstileToken : !!captchaAnswer.trim();
   // Turnstile mode: pull in Cloudflare's widget and hand us a token when it's
   // satisfied. Only runs if the server was given a site key.
   useEffect(() => {
@@ -169,7 +178,8 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
           setBusy(true);
           setError(null);
           try {
-            const r = await loginWithGoogle(resp.access_token);
+            // Google gets the same bot check as the password form.
+            const r = await loginWithGoogle(resp.access_token, proofRef.current);
             if (r.created) {
               trackSignup(); // ad conversion: a real account was created
               notifySignup(r.email, r.display);
@@ -178,6 +188,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
             onAuthedRef.current();
           } catch (e) {
             setError(e instanceof Error ? e.message : "Google sign-in failed.");
+            loadCaptchaRef.current(); // the challenge was spent, right or wrong
           } finally {
             setBusy(false);
           }
@@ -215,7 +226,6 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
     setError(null);
     setBusy(true);
     try {
-      const proof = { captchaId: captcha?.id, captchaAnswer, turnstileToken, hp: honeypot };
       if (mode === "register") {
         await register(username, password, email, proof);
         trackSignup(); // ad conversion: a real account was created
@@ -317,9 +327,10 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
 
         {(
           <>
+            {/* Google signs people up too, so it waits on the same check. */}
             <button
               className="btn-google"
-              disabled={busy || (!!GOOGLE_CLIENT_ID && !googleReady)}
+              disabled={busy || !solved || (!!GOOGLE_CLIENT_ID && !googleReady)}
               onClick={
                 GOOGLE_CLIENT_ID
                   ? startGoogle
@@ -329,6 +340,11 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
               <GoogleG />
               {t("Continue with Google")}
             </button>
+            {!solved && captcha && (
+              <p className="muted" style={{ fontSize: 12, margin: "6px 0 0", textAlign: "center" }}>
+                {t("Type the characters below first.")}
+              </p>
+            )}
             <div className="auth-divider"><span>{t("or")}</span></div>
           </>
         )}
@@ -400,7 +416,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
             <span>{t("Quick check — type what you see")}</span>
             <div className="captcha-row">
               <img className="captcha-img" src={captcha.image} alt={t("Distorted characters to type in")} />
-              <button type="button" className="captcha-refresh" onClick={() => loadCaptcha()} disabled={busy} title={t("New picture")}>
+              <button type="button" className="captcha-refresh" onClick={loadCaptcha} disabled={busy} title={t("New picture")}>
                 ↻
               </button>
             </div>
@@ -415,32 +431,6 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
               style={{ marginTop: 8, letterSpacing: 3, textTransform: "uppercase" }}
               aria-label={t("The characters shown in the picture")}
             />
-            <button type="button" className="link-btn" style={{ marginTop: 6 }} onClick={() => loadCaptcha("text")} disabled={busy}>
-              {t("Can't see it? Use a question instead")}
-            </button>
-          </label>
-        )}
-
-        {captcha?.mode === "question" && (
-          <label className="field">
-            <span>{t("Quick check — are you human?")}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span className="captcha-q">{captcha.question}</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                value={captchaAnswer}
-                onChange={(e) => setCaptchaAnswer(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-                placeholder={t("Answer")}
-                style={{ width: 110 }}
-                aria-label={captcha.question}
-              />
-              <button type="button" className="link-btn" onClick={() => loadCaptcha("text")} disabled={busy}>
-                {t("New question")}
-              </button>
-            </div>
           </label>
         )}
 
@@ -457,11 +447,7 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
           className="btn"
           style={{ marginTop: 14, width: "100%" }}
           onClick={submit}
-          disabled={
-            busy || !username.trim() || !password || (mode === "register" && !email.trim()) ||
-            ((captcha?.mode === "question" || captcha?.mode === "image") && !captchaAnswer.trim()) ||
-            (captcha?.mode === "turnstile" && !turnstileToken)
-          }
+          disabled={busy || !username.trim() || !password || (mode === "register" && !email.trim()) || !solved}
         >
           {busy ? <><span className="spinner" />{t("Please wait…")}</> : mode === "register" ? t("Create account") : t("Log in")}
         </button>

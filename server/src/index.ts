@@ -2261,14 +2261,14 @@ async function checkCaptcha(req: Request): Promise<string | null> {
   return captcha.verify(body);
 }
 
-/** Hand the login screen a fresh challenge. `?mode=text` asks for the accessible one. */
+/** Hand the login screen a fresh challenge. */
 app.get("/api/captcha", (req: Request, res: Response) => {
   if (hasTurnstile) { res.json({ mode: "turnstile", siteKey: process.env.TURNSTILE_SITE_KEY || "" }); return; }
   if (captcha.issueLimited(clientIp(req))) {
     res.status(429).json({ error: "Too many attempts. Wait a few minutes and try again." });
     return;
   }
-  res.json(req.query.mode === "text" ? captcha.textChallenge() : captcha.imageChallenge());
+  res.json(captcha.imageChallenge());
 });
 
 app.post("/api/cloud/register", async (req: Request, res: Response) => {
@@ -2339,6 +2339,11 @@ async function verifyGoogleAccessToken(accessToken: string): Promise<{ email: st
 
 app.post("/api/cloud/google", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
+  if (authLimited(req, res, "google")) return;
+  // Google sign-in creates accounts too, so it goes through the same check as
+  // the password form — a stolen or scripted OAuth token isn't enough on its own.
+  const badGoogle = await checkCaptcha(req);
+  if (badGoogle) { res.status(400).json({ error: badGoogle, captcha: true }); return; }
   try {
     const body = req.body as { accessToken?: string; credential?: string };
     const profile = body.accessToken

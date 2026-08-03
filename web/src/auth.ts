@@ -262,11 +262,11 @@ async function googleProfile(accessToken: string): Promise<{ email: string; name
 // (no password). The username defaults to the part of the email before the @,
 // and is editable later in Settings. Returns whether a new account was created
 // so the caller can fire the welcome email / signup conversion.
-export async function loginWithGoogle(accessToken: string): Promise<{ key: string; email: string; display: string; created: boolean }> {
+export async function loginWithGoogle(accessToken: string, proof: CaptchaProof = {}): Promise<{ key: string; email: string; display: string; created: boolean }> {
   // Cloud mode: the server verifies the Google token and owns the account.
   if (await cloudEnabled()) {
     const before = loadUsers();
-    const r = await cloudGoogle(accessToken);
+    const r = await cloudGoogle(accessToken, proof);
     const knew = Object.values(before).some((u) => u.email?.toLowerCase() === (r.email || "").toLowerCase());
     upsertCloudUser(r.key, r.display, r.email);
     localStorage.setItem(SESSION_KEY, r.key);

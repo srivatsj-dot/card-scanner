@@ -9,8 +9,9 @@
  * so the glyphs come from a small bitmap font below and the PNG is encoded by
  * hand with zlib. It costs about a millisecond per challenge.
  *
- * A spoken-word arithmetic question is offered as the accessible alternative,
- * because an image-only check locks out anyone using a screen reader.
+ * This is the ONLY check — every way into an account goes through the same
+ * picture, including Continue with Google. An arithmetic alternative used to
+ * sit alongside it, but a sum anyone can do in their head is a door left open.
  */
 import { deflateSync } from "node:zlib";
 import { randomBytes, randomInt } from "node:crypto";
@@ -259,8 +260,6 @@ const TTL_MS = 10 * 60 * 1000;
 /** Nobody types five characters in under a second — a form that fast is a script. */
 const MIN_SOLVE_MS = 1200;
 
-const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-
 function newId(): string {
   // Prune expired entries so the map can't grow without bound.
   const now = Date.now();
@@ -281,19 +280,6 @@ export function imageChallenge(): { mode: "image"; id: string; image: string } {
   for (let i = 0; i < LEN; i++) text += CHARS[randomInt(CHARS.length)];
   const png = render(text);
   return { mode: "image", id: store(text), image: `data:image/png;base64,${png.toString("base64")}` };
-}
-
-/** The accessible alternative: a spelled-out sum, readable by a screen reader. */
-export function textChallenge(): { mode: "question"; id: string; question: string } {
-  // Pick the SUM first and split it, so every number in the question has a word.
-  const sum = 4 + randomInt(WORDS.length - 4); // 4…12
-  const b = 1 + randomInt(sum - 2);            // 1…sum-2, so a stays ≥ 2
-  const a = sum - b;
-  const plus = Math.random() < 0.7;
-  const question = plus
-    ? `What is ${WORDS[a]} plus ${WORDS[b]}?`
-    : `What is ${WORDS[sum]} minus ${WORDS[b]}?`;
-  return { mode: "question", id: store(String(plus ? sum : a)), question };
 }
 
 export interface Proof { captchaId?: string; captchaAnswer?: string; hp?: string }
@@ -317,10 +303,7 @@ export function verify(proof: Proof): string | null {
 
   const given = String(proof.captchaAnswer ?? "").trim().toLowerCase().replace(/\s+/g, "");
   if (!given) return "Please complete the check below.";
-  // Numbers may be typed as digits or spelled out.
-  const asWord = WORDS.indexOf(given);
-  if (given === c.answer || (asWord >= 0 && String(asWord) === c.answer)) return null;
-  return "That wasn't right — please try the new one.";
+  return given === c.answer ? null : "That wasn't right — please try the new one.";
 }
 
 // --- Per-IP issuing limit --------------------------------------------------

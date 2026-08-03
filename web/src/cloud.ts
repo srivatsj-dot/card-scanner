@@ -128,17 +128,15 @@ export interface CaptchaProof {
 }
 
 export interface Captcha {
-  mode: "image" | "question" | "turnstile";
+  mode: "image" | "turnstile";
   id?: string;
-  image?: string; // data: URL of the picture (image mode)
-  question?: string; // spoken-word sum (accessible mode)
+  image?: string; // data: URL of the picture
   siteKey?: string; // Turnstile
 }
 
-/** The current bot-check to show on the auth screen. `text` asks for the
- * screen-reader-friendly question instead of the picture. */
-export async function fetchCaptcha(kind: "image" | "text" = "image"): Promise<Captcha> {
-  const r = await fetch(`/api/captcha${kind === "text" ? "?mode=text" : ""}`);
+/** The current bot-check to show on the auth screen. */
+export async function fetchCaptcha(): Promise<Captcha> {
+  const r = await fetch("/api/captcha");
   if (!r.ok) throw new Error("Couldn't load the check.");
   return r.json();
 }
@@ -150,8 +148,8 @@ export async function cloudLogin(username: string, password: string, proof: Capt
   return store(await call<AuthResult>("/api/cloud/login", { username, password, ...proof }));
 }
 /** Sign in (or auto-create an account) with a Google OAuth access token. */
-export async function cloudGoogle(accessToken: string) {
-  return store(await call<AuthResult>("/api/cloud/google", { accessToken }));
+export async function cloudGoogle(accessToken: string, proof: CaptchaProof = {}) {
+  return store(await call<AuthResult>("/api/cloud/google", { accessToken, ...proof }));
 }
 /** Change the shown display name on the server (account key stays the same). */
 export async function cloudRename(display: string) {

@@ -1328,14 +1328,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.75; 
 .rare-banner .rare-title { font-size: 20px; font-weight: 800; color: var(--gold); }
 .rare-banner .rare-sub { font-size: 14px; color: var(--text); margin-top: 4px; }
 
-/* Bot-check question on the sign-in screen. */
-.captcha-q {
-  font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 15px;
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-  padding: 9px 12px; user-select: none;
-}
-
-/* Bot-check picture. */
+/* Bot-check picture on the sign-in screen. */
 .captcha-row { display: flex; align-items: center; gap: 8px; }
 .captcha-img {
   flex: 1; min-width: 0; max-width: 280px; height: auto; display: block;
