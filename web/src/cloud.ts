@@ -119,11 +119,21 @@ function store(auth: AuthResult): { key: string; display: string; email: string 
   return { key, display: auth.display, email: auth.email };
 }
 
-export async function cloudRegister(username: string, email: string, password: string) {
-  return store(await call<AuthResult>("/api/cloud/register", { username, email, password }));
+/** Proof that a human is at the keyboard — a solved challenge or a Turnstile token. */
+export interface CaptchaProof { captchaId?: string; captchaAnswer?: string; turnstileToken?: string }
+
+/** The current bot-check to show on the auth screen. */
+export function fetchCaptcha() {
+  return fetch("/api/captcha").then((r) => r.json()) as Promise<{
+    mode: "question" | "turnstile"; id?: string; question?: string; siteKey?: string;
+  }>;
 }
-export async function cloudLogin(username: string, password: string) {
-  return store(await call<AuthResult>("/api/cloud/login", { username, password }));
+
+export async function cloudRegister(username: string, email: string, password: string, proof: CaptchaProof = {}) {
+  return store(await call<AuthResult>("/api/cloud/register", { username, email, password, ...proof }));
+}
+export async function cloudLogin(username: string, password: string, proof: CaptchaProof = {}) {
+  return store(await call<AuthResult>("/api/cloud/login", { username, password, ...proof }));
 }
 /** Sign in (or auto-create an account) with a Google OAuth access token. */
 export async function cloudGoogle(accessToken: string) {

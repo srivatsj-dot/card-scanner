@@ -2223,9 +2223,86 @@ function authLimited(req: Request, res: Response, action: string): boolean {
 /** Clear a caller's strikes after a SUCCESSFUL auth, so normal use is unaffected. */
 const authOk = (req: Request, action: string) => authHits.delete(`${action}:${clientIp(req)}`);
 
+
+// --- Bot protection on the auth screens ------------------------------------
+// A server-checked challenge, so the answer can't be read or faked from the
+// browser. Two modes:
+//   • Cloudflare Turnstile when TURNSTILE_SECRET is set (proper bot detection,
+//     invisible to most people) — the recommended setup.
+//   • Otherwise a built-in arithmetic challenge, which needs no accounts or keys
+//     and still stops the scripted signup floods that hit any open form.
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || "";
+export const hasTurnstile = Boolean(TURNSTILE_SECRET);
+
+interface Challenge { answer: number; expires: number }
+const challenges = new Map<string, Challenge>();
+const CAPTCHA_TTL_MS = 10 * 60 * 1000;
+const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+
+function newChallenge(): { id: string; question: string } {
+  // Prune expired entries so the map can't grow without bound.
+  const now = Date.now();
+  if (challenges.size > 5000) for (const [k, c] of challenges) if (c.expires < now) challenges.delete(k);
+  // Pick the SUM first and split it, so every number in the question — including
+  // a + b on the minus form — still has a word for it below.
+  const sum = 4 + Math.floor(Math.random() * (WORDS.length - 4)); // 4…12
+  const b = 1 + Math.floor(Math.random() * (sum - 2)); // 1…sum-2, so a stays ≥ 2
+  const a = sum - b;
+  const plus = Math.random() < 0.7;
+  // Spelled-out numbers so a trivial regex can't just grab the digits.
+  const question = plus
+    ? `What is ${WORDS[a]} plus ${WORDS[b]}?`
+    : `What is ${WORDS[a + b]} minus ${WORDS[b]}?`;
+  const answer = plus ? a + b : a;
+  const id = randomBytes(12).toString("hex");
+  challenges.set(id, { answer, expires: now + CAPTCHA_TTL_MS });
+  return { id, question };
+}
+
+/** Verify a Cloudflare Turnstile token with their API. */
+async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
+  try {
+    const body = new URLSearchParams({ secret: TURNSTILE_SECRET, response: token, remoteip: ip });
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body });
+    const d = (await r.json()) as { success?: boolean };
+    return d?.success === true;
+  } catch { return false; }
+}
+
+/**
+ * Check whatever proof the client sent. Returns null when it's fine, or a
+ * message to show. Challenges are SINGLE USE — solving one doesn't let a script
+ * replay it for thousands of signups.
+ */
+async function checkCaptcha(req: Request): Promise<string | null> {
+  const { captchaId, captchaAnswer, turnstileToken } = (req.body || {}) as {
+    captchaId?: string; captchaAnswer?: string; turnstileToken?: string;
+  };
+  if (hasTurnstile) {
+    if (!turnstileToken) return "Please complete the verification.";
+    return (await verifyTurnstile(turnstileToken, clientIp(req))) ? null : "Verification failed. Please try again.";
+  }
+  const c = captchaId ? challenges.get(captchaId) : undefined;
+  if (!c) return "Please answer the verification question.";
+  challenges.delete(captchaId as string); // one use only, right or wrong
+  if (Date.now() > c.expires) return "That verification expired — here's a new one.";
+  const given = String(captchaAnswer ?? "").trim().toLowerCase();
+  const asNumber = /^\d+$/.test(given) ? Number(given) : WORDS.indexOf(given);
+  return asNumber === c.answer ? null : "That answer wasn't right — please try the new question.";
+}
+
+/** Hand the login screen a fresh challenge. */
+app.get("/api/captcha", (_req: Request, res: Response) => {
+  if (hasTurnstile) { res.json({ mode: "turnstile", siteKey: process.env.TURNSTILE_SITE_KEY || "" }); return; }
+  res.json({ mode: "question", ...newChallenge() });
+});
+
 app.post("/api/cloud/register", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   if (authLimited(req, res, "register")) return;
+  // Signups are the main target for scripted abuse — always verified.
+  const bad = await checkCaptcha(req);
+  if (bad) { res.status(400).json({ error: bad, captcha: true }); return; }
   const { username, email, password } = req.body as { username?: string; email?: string; password?: string };
   try {
     const auth = await cloud.register(username || "", email || "", password || "");
@@ -2239,6 +2316,8 @@ app.post("/api/cloud/register", async (req: Request, res: Response) => {
 app.post("/api/cloud/login", async (req: Request, res: Response) => {
   if (!cloudGuard(res)) return;
   if (authLimited(req, res, "login")) return;
+  const badLogin = await checkCaptcha(req);
+  if (badLogin) { res.status(400).json({ error: badLogin, captcha: true }); return; }
   const { username, password } = req.body as { username?: string; password?: string };
   try {
     const auth = await cloud.login(username || "", password || "");

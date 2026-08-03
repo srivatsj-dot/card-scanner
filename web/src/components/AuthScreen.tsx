@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { login, register, hasAnyAccount, loginWithGoogle, accountByEmail, resetPassword, maskEmail, currentUser } from "../auth";
 import { notifySignup, sendResetCode } from "../api";
-import { cloudEnabled, cloudForgot, cloudReset } from "../cloud";
+import { cloudEnabled, cloudForgot, cloudReset, fetchCaptcha } from "../cloud";
 import { trackSignup } from "../analytics";
 import { useT } from "../translator";
 import Logo from "./Logo";
@@ -22,6 +22,42 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bot check. The answer is verified on the server and each question works once,
+  // so a script can't solve one and reuse it. Turnstile takes over automatically
+  // if the server has a key for it.
+  const [captcha, setCaptcha] = useState<{ mode: "question" | "turnstile"; id?: string; question?: string; siteKey?: string } | null>(null);
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef<HTMLDivElement | null>(null);
+  const loadCaptcha = () => {
+    setTurnstileToken("");
+    fetchCaptcha()
+      .then((c) => { setCaptcha(c); setCaptchaAnswer(""); })
+      .catch(() => setCaptcha(null));
+  };
+  useEffect(() => { loadCaptcha(); }, []);
+  // Turnstile mode: pull in Cloudflare's widget and hand us a token when it's
+  // satisfied. Only runs if the server was given a site key.
+  useEffect(() => {
+    if (captcha?.mode !== "turnstile" || !captcha.siteKey || !turnstileRef.current) return;
+    const el = turnstileRef.current;
+    const draw = () => {
+      const ts = (window as unknown as { turnstile?: { render: (e: HTMLElement, o: Record<string, unknown>) => void } }).turnstile;
+      if (!ts) return;
+      el.innerHTML = "";
+      ts.render(el, {
+        sitekey: captcha.siteKey,
+        callback: (tok: string) => setTurnstileToken(tok),
+        "expired-callback": () => setTurnstileToken(""),
+        "error-callback": () => setTurnstileToken(""),
+      });
+    };
+    const SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    if (document.querySelector(`script[src="${SRC}"]`)) { draw(); return; }
+    const s = document.createElement("script");
+    s.src = SRC; s.async = true; s.defer = true; s.onload = draw;
+    document.head.appendChild(s);
+  }, [captcha]);
   // Password reset (device-local: looks up the account here, server only emails
   // the code). Two steps: enter username → enter emailed code + new password.
   const [resetStep, setResetStep] = useState<"id" | "code">("id");
@@ -177,17 +213,19 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
     setError(null);
     setBusy(true);
     try {
+      const proof = { captchaId: captcha?.id, captchaAnswer, turnstileToken };
       if (mode === "register") {
-        await register(username, password, email);
+        await register(username, password, email, proof);
         trackSignup(); // ad conversion: a real account was created
         notifySignup(email, username);
         flagOnboarding(); // new account → show the 3-question setup
       } else {
-        await login(username, password);
+        await login(username, password, proof);
       }
       onAuthed();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
+      loadCaptcha(); // each question is single-use, so always issue a fresh one
     } finally {
       setBusy(false);
     }
@@ -348,13 +386,47 @@ export default function AuthScreen({ onAuthed, onBack }: { onAuthed: () => void;
           />
         </label>
 
+        {captcha?.mode === "question" && (
+          <label className="field">
+            <span>{t("Quick check — are you human?")}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span className="captcha-q">{captcha.question}</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={captchaAnswer}
+                onChange={(e) => setCaptchaAnswer(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+                placeholder={t("Answer")}
+                style={{ width: 110 }}
+                aria-label={captcha.question}
+              />
+              <button type="button" className="link-btn" onClick={loadCaptcha} disabled={busy}>
+                {t("New question")}
+              </button>
+            </div>
+          </label>
+        )}
+
+        {captcha?.mode === "turnstile" && (
+          <div className="field">
+            <span>{t("Quick check — are you human?")}</span>
+            <div ref={turnstileRef} style={{ marginTop: 6 }} />
+          </div>
+        )}
+
         {error && <div className="error-box" style={{ marginTop: 4 }}>{error}</div>}
 
         <button
           className="btn"
           style={{ marginTop: 14, width: "100%" }}
           onClick={submit}
-          disabled={busy || !username.trim() || !password || (mode === "register" && !email.trim())}
+          disabled={
+            busy || !username.trim() || !password || (mode === "register" && !email.trim()) ||
+            (captcha?.mode === "question" && !captchaAnswer.trim()) ||
+            (captcha?.mode === "turnstile" && !turnstileToken)
+          }
         >
           {busy ? <><span className="spinner" />{t("Please wait…")}</> : mode === "register" ? t("Create account") : t("Log in")}
         </button>

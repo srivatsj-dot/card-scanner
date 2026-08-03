@@ -5,7 +5,7 @@
 // never leave the device — it just lets multiple people share a browser and
 // keep separate collections, with a real log-in/log-out gate.
 
-import { cloudEnabled, cloudRegister, cloudLogin, cloudLogout, cloudActive, cloudDeleteAccount, cloudGoogle, cloudRename } from "./cloud";
+import { cloudEnabled, cloudRegister, cloudLogin, cloudLogout, cloudActive, cloudDeleteAccount, cloudGoogle, cloudRename, type CaptchaProof } from "./cloud";
 
 const USERS_KEY = "card-scanner-users";
 const SESSION_KEY = "card-scanner-session";
@@ -176,10 +176,10 @@ function migrateLegacy(userKey: string) {
   }
 }
 
-export async function register(name: string, password: string, email: string): Promise<void> {
+export async function register(name: string, password: string, email: string, proof: CaptchaProof = {}): Promise<void> {
   // Cloud mode: the server owns the account so it works on any device.
   if (await cloudEnabled()) {
-    const r = await cloudRegister(name.trim(), email.trim(), password);
+    const r = await cloudRegister(name.trim(), email.trim(), password, proof);
     upsertCloudUser(r.key, r.display, r.email);
     localStorage.setItem(SESSION_KEY, r.key);
     return;
@@ -204,9 +204,9 @@ export async function register(name: string, password: string, email: string): P
   localStorage.setItem(SESSION_KEY, key);
 }
 
-export async function login(name: string, password: string): Promise<void> {
+export async function login(name: string, password: string, proof: CaptchaProof = {}): Promise<void> {
   if (await cloudEnabled()) {
-    const r = await cloudLogin(name.trim(), password);
+    const r = await cloudLogin(name.trim(), password, proof);
     upsertCloudUser(r.key, r.display, r.email);
     localStorage.setItem(SESSION_KEY, r.key);
     return;
