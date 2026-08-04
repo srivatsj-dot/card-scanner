@@ -131,18 +131,18 @@ function keepInWindow(items: unknown, start: string, end: string): string[] {
   if (!Array.isArray(items)) return [];
   const year = Number(start.slice(0, 4));
   const out: string[] = [];
+  let untagged = 0;
   for (const raw of items) {
     if (typeof raw !== "string") continue;
     const m = /^\s*[\[(]?(\d{4}-\d{2}-\d{2})[\])]?[\s:.,-]*/.exec(raw);
-    // If the item carries a leading [date] tag, honor it strictly: drop anything
-    // tagged outside the window. If it has NO tag, keep it — the model is
-    // grounded on this window, and dropping every untagged item was nuking real
-    // news and leaving an empty briefing under a full headline.
-    let text = raw.trim();
-    if (m) {
-      if (m[1] < start || m[1] > end) continue; // tagged outside the window → drop
-      text = raw.slice(m[0].length).trim();
-    }
+    // A DATE TAG IS REQUIRED. Untagged items used to be kept on the theory that
+    // the model was grounded on this window anyway — but that is exactly how a
+    // trade from the 1st turned up in the briefing for the 3rd. If it can't be
+    // dated it can't be shown, and an empty briefing now retries rather than
+    // being cached forever.
+    if (!m) { untagged++; continue; }
+    if (m[1] < start || m[1] > end) continue; // outside the window → drop
+    const text = raw.slice(m[0].length).trim();
     if (!text) continue;
     // Still reject anything whose sentence cites a day outside the window — that
     // catches stale events even when they slip in without a leading tag.
@@ -150,6 +150,7 @@ function keepInWindow(items: unknown, start: string, end: string): string[] {
     if (VAGUE.test(text)) continue; // "whoever is on the …" — a sentence with no news in it
     out.push(text);
   }
+  if (untagged) console.warn(`[digest] dropped ${untagged} undated item(s) for ${start}..${end}`);
   return out;
 }
 
@@ -1345,7 +1346,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "17";
+const DIGEST_GEN_VERSION = "18";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
@@ -1445,6 +1446,41 @@ function fallbackOverview(sections: DigestSection[]): string {
 
 // Generate one day's shared briefing. NEVER throws — on total failure it returns
 // a verified-feed fallback or a quiet-day briefing, so the app is never blank.
+/**
+ * Drop anything yesterday's briefing already said. Date tags stop a stale event
+ * being re-dated INTO today, but the same story can also be retold in fresh
+ * words; comparing against the day before catches that, and it's the difference
+ * between a briefing and a rerun.
+ */
+async function dropRepeats(sections: DigestSection[], target: string): Promise<DigestSection[]> {
+  const prevDay = addDaysISO(target, -1);
+  const prev = digestMem.get(`${DIGEST_GEN_VERSION}:${prevDay}`)
+    || ((await cloud.loadDigest(`${DIGEST_GEN_VERSION}:${prevDay}`).catch(() => null)) as Briefing | null);
+  if (!prev || !Array.isArray(prev.sections)) return sections;
+  // Compare on the words alone: same story, different punctuation, still a repeat.
+  const norm = (l: string) => l.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  const seen = new Set<string>();
+  for (const s of prev.sections) {
+    for (const k of ["risingStars", "declining", "storylines", "trades", "chase", "news"] as const) {
+      for (const line of s[k] || []) seen.add(norm(line));
+    }
+  }
+  if (!seen.size) return sections;
+  let dropped = 0;
+  const sift = (lines: string[]) => lines.filter((l) => {
+    if (!seen.has(norm(l))) return true;
+    dropped++;
+    return false;
+  });
+  const out = sections.map((s) => ({
+    sport: s.sport,
+    risingStars: sift(s.risingStars), declining: sift(s.declining), storylines: sift(s.storylines),
+    trades: sift(s.trades), chase: sift(s.chase), news: sift(s.news),
+  }));
+  if (dropped) console.warn(`[digest] dropped ${dropped} line(s) already published on ${prevDay}`);
+  return out;
+}
+
 async function buildDigest(target: string): Promise<Briefing> {
   const yesterday = addDaysISO(target, -1);
   const windowStart = yesterday < LAUNCH_DATE ? LAUNCH_DATE : yesterday;
@@ -1486,7 +1522,7 @@ async function buildDigest(target: string): Promise<Briefing> {
           news: keepInWindow(x.news, windowStart, target),
         }))
         .map(dePokemonDump);
-      const b: Briefing = { overview: reframed.overview, yourCards: [], yourWishlist: [], sections };
+      const b: Briefing = { overview: reframed.overview, yourCards: [], yourWishlist: [], sections: await dropRepeats(sections, target) };
       if (briefingHasContent(b)) return b;
     } catch { /* couldn't reframe */ }
     // NEVER ship the raw feed. Those lines are bare box scores and final scores —
@@ -1531,7 +1567,7 @@ async function buildDigest(target: string): Promise<Briefing> {
       chase: keepInWindow(s.chase, windowStart, target),
       news: keepInWindow(s.news, windowStart, target),
     })).map(dePokemonDump);
-    const briefing: Briefing = { overview: result.overview, yourCards: [], yourWishlist: [], sections };
+    const briefing: Briefing = { overview: result.overview, yourCards: [], yourWishlist: [], sections: await dropRepeats(sections, target) };
     if (briefingHasContent(briefing)) return briefing;
     // Model returned nothing — fall back to the verified feeds, else quiet day.
     lastDigestFailure = null;

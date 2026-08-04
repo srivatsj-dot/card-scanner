@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Settings, DigestResult } from "../types";
-import { ensureDigest, regenerateDigest, readDigestArchive, isFresh, ARCHIVE_START } from "../digest";
+import { ensureDigest, regenerateDigest, readDigestArchive, isFresh, hasContent, ARCHIVE_START } from "../digest";
 import { useT } from "../translator";
 
 interface Props {
@@ -158,7 +158,10 @@ export default function DigestView({ settings, players, wishlist, wishPlayers, c
   // Navigating to a past day with no saved (or stale-version) briefing
   // regenerates it silently.
   useEffect(() => {
-    if (date === today || isFresh(archive[date]) || busy || tried.current.has(date)) return;
+    // Only a day that is MISSING or came out empty is worth generating. A past
+    // day that already has a briefing is left exactly as it was written.
+    if (date === today || busy || tried.current.has(date)) return;
+    if (isFresh(archive[date], date) && hasContent(archive[date])) return;
     if (date < LAUNCH || date > today) return;
     tried.current.add(date);
     generate(date);

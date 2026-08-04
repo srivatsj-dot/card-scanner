@@ -28,16 +28,32 @@ export async function loadDigestGen(): Promise<void> {
     if (d?.digestGen) serverGen = String(d.digestGen);
   } catch { /* offline — fall back to whatever is cached */ }
 }
-export const isFresh = (d: DigestResult | undefined): d is DigestResult => {
+/**
+ * A cached briefing is good enough to show without asking the server again.
+ *
+ * The generation check only applies to TODAY. A past day is HISTORY: it was
+ * written under the rules of its own day, and re-writing it because the rules
+ * changed since meant every deploy silently rebuilt the whole archive — which
+ * is what made the briefing feel like it was regenerating constantly. Past days
+ * are only rebuilt when you press ↻.
+ */
+export const isFresh = (d: DigestResult | undefined, date?: string): d is DigestResult => {
   if (!d || (d as { __v?: number }).__v !== DIGEST_VERSION) return false;
+  if (date && date !== todayISO()) return true; // history stands
   const gen = (d as { __gen?: string }).__gen;
   // Once we know the server's generation, anything from a different one is stale.
   return !serverGen || !gen || gen === serverGen;
 };
 
+function todayISO(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // Does a briefing actually have anything in it? Used so a temporarily-empty
 // regeneration never replaces a good cached briefing with a blank one.
-function hasContent(d: DigestResult | undefined): boolean {
+export function hasContent(d: DigestResult | undefined): boolean {
   if (!d) return false;
   if (d.yourCards?.length || d.yourWishlist?.length) return true;
   return (d.sections || []).some(
@@ -111,7 +127,9 @@ export function ensureDigest(
   wishPlayers: string[], settings: Settings
 ): Promise<DigestResult | null> {
   const existing = readDigestArchive(cacheKey)[date];
-  if (isFresh(existing) && hasContent(existing)) return Promise.resolve(existing);
+  // Anything with real content in it is kept. Only a missing or empty day is
+  // worth another call — a briefing that already says something never is.
+  if (isFresh(existing, date) && hasContent(existing)) return Promise.resolve(existing);
   const key = `${cacheKey}|${date}`;
   const running = inflight.get(key);
   if (running) return running;
