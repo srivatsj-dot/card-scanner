@@ -469,9 +469,6 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     },
   ];
 
-  // A real photo of the scanned card (from eBay image-search), used to fill the
-  // binder frame when the priced-listings path doesn't yield one.
-  let scanWebImage = "";
   try {
     // Photo-based identification boosters (run together): both feed the model a
     // strong hint of what the card is, from matching the EXACT photo online.
@@ -480,7 +477,6 @@ app.post("/api/scan", async (req: Request, res: Response) => {
         hasVision ? webDetect(images[0].imageBase64).catch(() => null) : Promise.resolve(null),
         hasEbay ? ebayImageSearch(images[0].imageBase64, settings?.region).catch(() => ({ titles: [], price: null, image: "" })) : Promise.resolve({ titles: [] as string[], price: null, image: "" }),
       ]);
-      scanWebImage = ebayMatch.image || "";
       // eBay image search: matching listing TITLES already carry the right
       // player/set/year/number — the strongest single ID signal we have.
       if (ebayMatch.titles.length) {
@@ -516,19 +512,20 @@ app.post("/api/scan", async (req: Request, res: Response) => {
     } else {
       const ebayApplied = await applyEbayPrice(result, settings);
       if (!ebayApplied && isPokemon(result)) await applyPokemonPrice(result); // free real Pokémon prices
-      // Fill the binder frame with a real photo of THIS card. For a photo scan,
-      // prefer the eBay listing matched to the user's ACTUAL photo (scanWebImage)
-      // — it's the closest to their exact card and always loads.
-      if (result.identified && scanWebImage) result.imageUrl = scanWebImage;
-      // Pick the photo where the CARD FILLS THE FRAME: gather several candidate
-      // listing photos and choose the one whose shape is closest to a real card,
-      // which weeds out shots padded with whitespace/background.
-      if (result.identified) {
+      // A web photo is for LOOKUPS ONLY. When someone photographs their own
+      // card, that photo IS the card — swapping in a stranger's listing shot
+      // shows them someone else's copy, in someone else's condition.
+      if (images.length > 0) {
+        delete result.imageUrl; // pricing may have attached one; the scan wins
+      } else if (result.identified) {
+        // Typed lookup: there's no photo of their card, so fill the frame with a
+        // real one. Gather several candidate listing photos and pick the one
+        // whose shape is closest to a real card, which weeds out shots padded
+        // with whitespace or background.
         const candidates = await ebayImageCandidates(cardQuery(result), settings?.region).catch(() => []);
-        const pool = [...(scanWebImage ? [scanWebImage] : []), ...candidates, ...(result.imageUrl ? [result.imageUrl] : [])];
+        const pool = [...candidates, ...(result.imageUrl ? [result.imageUrl] : [])];
         const best = await pickCardImage(pool).catch(() => "");
         if (best) result.imageUrl = best;
-        else if (!result.imageUrl && scanWebImage) result.imageUrl = scanWebImage;
       }
     }
     res.json(result);
@@ -999,6 +996,9 @@ app.post("/api/bulk", async (req: Request, res: Response) => {
         out.cards.map(async (c) => {
           const applied = await applyEbayPrice(c, settings).catch(() => false);
           if (!applied) await applyPokemonPrice(c).catch(() => {});
+          // Same rule as a single scan: these came from the collector's own
+          // photo, so a listing shot never replaces it.
+          delete c.imageUrl;
         })
       );
     }

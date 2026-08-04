@@ -1,17 +1,9 @@
-import type { ScanResult } from "../types";
+import type { ScanResult, CardGrade } from "../types";
 import { useT } from "../translator";
-
-function money(n: number, currency: string) {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      maximumFractionDigits: n >= 100 ? 0 : 2,
-    }).format(n);
-  } catch {
-    return `${currency} ${n}`;
-  }
-}
+// Shared money(), so a scan result respects the collector's chosen currency —
+// the local copy this file used to carry always printed the appraisal currency.
+import { money } from "../utils";
+import { plainVerdict } from "../verdict";
 
 function trendPill(trend: string, tr: (s: string) => string) {
   const t = trend.toLowerCase();
@@ -24,9 +16,11 @@ function trendPill(trend: string, tr: (s: string) => string) {
 export default function ResultCard({
   result,
   onWishAll,
+  grade,
 }: {
   result: ScanResult;
   onWishAll?: (texts: string[]) => void;
+  grade?: CardGrade | null; // the slab, when this card has been graded
 }) {
   const tr = useT();
   if (!result.identified) {
@@ -51,6 +45,9 @@ export default function ResultCard({
   const rating = result.rating || { score: 0, label: "", summary: "" };
   const outlook = result.playerOutlook || { trend: "unknown", summary: "" };
   const score = Math.max(0, Math.min(100, Math.round(rating.score || 0)));
+  // The plain-English answer, above everything else — most people just want to
+  // know whether the thing in their hand is worth anything.
+  const verdict = plainVerdict(result, grade);
 
   return (
     <>
@@ -107,6 +104,13 @@ export default function ResultCard({
           </div>
         </div>
       </div>
+
+      {verdict && (
+        <div className={`card verdict verdict-${verdict.tone}`}>
+          <div className="verdict-headline">{tr(verdict.headline)}</div>
+          <p className="verdict-advice">{tr(verdict.advice)}</p>
+        </div>
+      )}
 
       <div className="grid2">
         <div className="card">

@@ -411,7 +411,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
                 </button>
                 <button className="btn ghost small" onClick={() => { onRemove(s.id); setDetailId(null); }}>{t("Remove")}</button>
               </div>
-              <ResultCard result={s.result} />
+              <ResultCard result={s.result} grade={s.grade} />
             </div>
           </div>
         );
@@ -482,7 +482,7 @@ export default function BinderView({ saved, onRemove, onClear, onRefresh, refres
               </div>
             </div>
             {s.conditionLog && s.conditionLog.length > 0 && <ConditionHistory log={s.conditionLog} />}
-            {open && <div style={{ marginTop: 14 }}><ResultCard result={r} /></div>}
+            {open && <div style={{ marginTop: 14 }}><ResultCard result={r} grade={s.grade} /></div>}
           </div>
         );
       })}

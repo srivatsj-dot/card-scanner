@@ -474,9 +474,10 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       {
         id: uid(),
         savedAt: now,
-        // Prefer a real web photo of the card (fills the frame) over the captured/
-        // uploaded shot; fall back to the user's photo when we have no web image.
-        thumbnail: result.imageUrl || frontDataUrl || "",
+        // Your own photo wins whenever you took one — it's YOUR copy, in your
+        // condition. The server only sends a web photo for typed lookups, where
+        // there's no photo of the actual card to show.
+        thumbnail: frontDataUrl || result.imageUrl || "",
         result,
         lastRefreshedAt: now,
         previousMid: null,
