@@ -1338,7 +1338,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "15";
+const DIGEST_GEN_VERSION = "16";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
@@ -1730,9 +1730,16 @@ async function personalLines(
       true, // must be grounded — these are specific, checkable claims
       512
     );
+    // Keep only lines that are in the window AND actually name one of their
+    // cards — asking about a wishlist has come back with binder lines about
+    // players they don't own.
     const res = {
-      yourCards: keepInWindow(Array.isArray(out.yourCards) ? out.yourCards : [], yesterday, date).slice(0, 8),
-      yourWishlist: keepInWindow(Array.isArray(out.yourWishlist) ? out.yourWishlist : [], yesterday, date).slice(0, 8),
+      yourCards: own.length
+        ? linesMentioning(keepInWindow(Array.isArray(out.yourCards) ? out.yourCards : [], yesterday, date), own).slice(0, 8)
+        : [],
+      yourWishlist: want.length
+        ? linesMentioning(keepInWindow(Array.isArray(out.yourWishlist) ? out.yourWishlist : [], yesterday, date), want).slice(0, 8)
+        : [],
     };
     // Only cache a result that HAS something. Caching an empty one in memory
     // froze the section as missing for the rest of the process's life, so a
@@ -1784,10 +1791,15 @@ app.post("/api/digest", async (req: Request, res: Response) => {
       ? await personalLines(target, players || [], wishlist || [], undefined)
       : { yourCards: [] as string[], yourWishlist: [] as string[] };
     const dedupe = (a: string[], b: string[]) => [...new Set([...a, ...b])].slice(0, 8);
+    // A line only belongs under "In your binder" if it actually names something
+    // in the binder. Without this last filter the model could hand back lines
+    // about players the collector has never owned — and an empty binder could
+    // still come back with a section full of strangers.
+    const own = players || [], want = wishlist || [];
     res.json({
       overview: shared.overview,
-      yourCards: dedupe(mine.yourCards, linesMentioning(all, players || [])),
-      yourWishlist: dedupe(mine.yourWishlist, linesMentioning(all, wishlist || [])),
+      yourCards: own.length ? linesMentioning(dedupe(mine.yourCards, linesMentioning(all, own)), own) : [],
+      yourWishlist: want.length ? linesMentioning(dedupe(mine.yourWishlist, linesMentioning(all, want)), want) : [],
       sections,
       gen: DIGEST_GEN_VERSION,
       ...(sections.length ? {} : { reason: lastDigestFailure || undefined }),

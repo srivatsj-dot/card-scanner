@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Settings, DigestResult } from "../types";
-import { ensureDigest, regenerateDigest, readDigestArchive, isFresh } from "../digest";
+import { ensureDigest, regenerateDigest, readDigestArchive, isFresh, ARCHIVE_START } from "../digest";
 import { useT } from "../translator";
 
 interface Props {
@@ -14,10 +14,10 @@ interface Props {
 // Keep each bucket short so the briefing is a quick read, not a wall of text.
 const MAX_PER_BUCKET = 4;
 
-// The archive (and the digest's news) officially begins here.
-// Must match the server's LAUNCH_DATE — the archive starts here, so the date
-// picker can't wander back into days that were never properly generated.
-const LAUNCH = "2026-08-01";
+// The archive (and the digest's news) officially begins here. One shared
+// constant, because a second copy of this date drifted out of sync once and had
+// the app generating weeks of briefings it then threw away.
+const LAUNCH = ARCHIVE_START;
 
 const SPORT_EMOJI: Record<string, string> = {
   pokémon: "⚡", pokemon: "⚡", baseball: "⚾", soccer: "⚽", cricket: "🏏",

@@ -3,7 +3,7 @@ import type { ScanResult, Settings, SavedCard, WishItem, Theme, LaterItem } from
 import { defaultSettings } from "./types";
 import { searchCard, scanCard, gradePrice, quickPrice } from "./api";
 import { searchCardCached } from "./cache";
-import { ensureDigest, loadDigestGen } from "./digest";
+import { ensureDigest, loadDigestGen, ARCHIVE_START } from "./digest";
 import { describeCard, DAY_MS, makeThumbnail, money, sameCard, setDisplayCurrency, loadFxRates, convertMoney } from "./utils";
 import { langByName, detectLanguageName } from "./i18n";
 import { useT, setLanguage } from "./translator";
@@ -1058,7 +1058,12 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     if (digestPrefetched.current) return;
     if (settings.morningUpdate === false) return;
     digestPrefetched.current = true;
-    const LAUNCH = "2026-06-19";
+    // The archive starts at ARCHIVE_START and readDigestArchive DROPS anything
+    // older, so back-filling from an earlier date generated dozens of briefings
+    // per page load that were thrown away the moment they were written — a
+    // standing flood of AI calls, and a large part of why the service kept
+    // reporting itself busy.
+    const LAUNCH = ARCHIVE_START;
     const pad = (n: number) => String(n).padStart(2, "0");
     const fmt = (dt: Date) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
     const today = fmt(new Date());

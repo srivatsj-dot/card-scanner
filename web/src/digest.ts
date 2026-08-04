@@ -7,6 +7,10 @@ import { getDigest } from "./api";
 
 type Archive = Record<string, DigestResult>;
 const inflight = new Map<string, Promise<DigestResult | null>>();
+// Days whose last attempt came back empty, and how long to wait before trying
+// that day again. Short, because an empty briefing is worth another go soon.
+const emptyAt = new Map<string, number>();
+const EMPTY_RETRY_MS = 60 * 1000;
 
 // Bump when the CLIENT's handling changes. The server also stamps every briefing
 // with its own generation version (`gen`), and that's the one that matters: it
@@ -86,6 +90,14 @@ async function generate(
       write(cacheKey, date, kept);
       return kept;
     }
+    // An empty briefing is a FAILURE, not a result. Writing it to the archive
+    // used to make it permanent: every later visit found a "fresh" cached day
+    // and never asked again, so "hasn't been written yet" stuck for good. Show
+    // it, don't keep it — the next open tries again.
+    if (!hasContent(withTime)) {
+      emptyAt.set(`${cacheKey}|${date}`, Date.now());
+      return withTime;
+    }
     write(cacheKey, date, withTime);
     return withTime;
   } catch {
@@ -98,10 +110,14 @@ export function ensureDigest(
   cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[], settings: Settings
 ): Promise<DigestResult | null> {
   const existing = readDigestArchive(cacheKey)[date];
-  if (isFresh(existing)) return Promise.resolve(existing);
+  if (isFresh(existing) && hasContent(existing)) return Promise.resolve(existing);
   const key = `${cacheKey}|${date}`;
   const running = inflight.get(key);
   if (running) return running;
+  // A day that just came back empty is retried on the NEXT visit, not on every
+  // re-render — one failed briefing shouldn't turn into a burst of retries.
+  const failedAt = emptyAt.get(key);
+  if (failedAt && Date.now() - failedAt < EMPTY_RETRY_MS) return Promise.resolve(existing || null);
   const p = generate(cacheKey, date, sports, players, wishlist, settings).finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
