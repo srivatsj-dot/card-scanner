@@ -121,6 +121,12 @@ function datesInProse(text: string, year: number): string[] {
 // only items whose tagged date AND every date mentioned in the prose fall inside
 // the window; drop anything older, newer, or undated — then strip the tag for
 // display. Enforces the window deterministically instead of trusting the model.
+// Sentences that name nobody and say nothing — "whoever is on the …", "a player
+// on the Tigers", a leftover "[player name]". The model reaches for these when
+// it can't find a real fact, and they read as broken. A briefing line with no
+// name in it isn't worth printing.
+const VAGUE = /\bwhoever\b|\bsomeone (?:else )?on the\b|\ba player on the\b|\bunnamed\b|\bTBD\b|\bTBA\b|\[[^\]]*\]|\.{3}|…/i;
+
 function keepInWindow(items: unknown, start: string, end: string): string[] {
   if (!Array.isArray(items)) return [];
   const year = Number(start.slice(0, 4));
@@ -141,6 +147,7 @@ function keepInWindow(items: unknown, start: string, end: string): string[] {
     // Still reject anything whose sentence cites a day outside the window — that
     // catches stale events even when they slip in without a leading tag.
     if (datesInProse(text, year).some((d) => d < start || d > end)) continue;
+    if (VAGUE.test(text)) continue; // "whoever is on the …" — a sentence with no news in it
     out.push(text);
   }
   return out;
@@ -1338,7 +1345,7 @@ app.post("/api/tradeup", async (req: Request, res: Response) => {
 
 // --- Morning digest: generated ONCE on the server per day, cached & shared --
 // Bump to regenerate every cached briefing after a logic change.
-const DIGEST_GEN_VERSION = "16";
+const DIGEST_GEN_VERSION = "17";
 // The shared briefing always covers all supported sports; each user's view is
 // filtered to the sports they follow. That lets one generation serve everyone.
 const ALL_DIGEST_SPORTS = ["Baseball", "Basketball", "Football", "Soccer", "Hockey", "Cricket", "Pokémon"];
@@ -1697,10 +1704,13 @@ async function personalLines(
   date: string,
   players: string[],
   wishlist: string[],
+  /** Player names behind the wishlist entries — what a news line can match. */
+  wishNames: string[],
   settings?: Settings
 ): Promise<{ yourCards: string[]; yourWishlist: string[] }> {
   const own = [...new Set(players.map((p) => String(p).trim()).filter(Boolean))].slice(0, 14);
   const want = [...new Set(wishlist.map((w) => String(w).trim()).filter(Boolean))].slice(0, 14);
+  const wantMatch = wishNames.length ? wishNames : want;
   if (!own.length && !want.length) return { yourCards: [], yourWishlist: [] };
   const key = `${DIGEST_GEN_VERSION}:${date}:${hashOf(own.join("|") + "#" + want.join("|"))}`;
   const hit = yoursMem.get(key);
@@ -1738,7 +1748,7 @@ async function personalLines(
         ? linesMentioning(keepInWindow(Array.isArray(out.yourCards) ? out.yourCards : [], yesterday, date), own).slice(0, 8)
         : [],
       yourWishlist: want.length
-        ? linesMentioning(keepInWindow(Array.isArray(out.yourWishlist) ? out.yourWishlist : [], yesterday, date), want).slice(0, 8)
+        ? linesMentioning(keepInWindow(Array.isArray(out.yourWishlist) ? out.yourWishlist : [], yesterday, date), wantMatch).slice(0, 8)
         : [],
     };
     // Only cache a result that HAS something. Caching an empty one in memory
@@ -1761,8 +1771,9 @@ async function personalLines(
 
 app.post("/api/digest", async (req: Request, res: Response) => {
   if (!apiKeyGuard(res)) return;
-  const { date, sports, players, wishlist, refresh } = req.body as {
-    date?: string; sports?: string[]; players?: string[]; wishlist?: string[]; refresh?: boolean;
+  const { date, sports, players, wishlist, wishlistNames, refresh } = req.body as {
+    date?: string; sports?: string[]; players?: string[]; wishlist?: string[];
+    wishlistNames?: string[]; refresh?: boolean;
   };
   const cats = (sports || []).map((s) => String(s).trim()).filter(Boolean);
   if (cats.length === 0) {
@@ -1783,23 +1794,28 @@ app.post("/api/digest", async (req: Request, res: Response) => {
     // mention the collector's own players out of the shared briefing. These were
     // always sent back empty before, so the sections never appeared.
     const all = sections.flatMap((s) => [...s.storylines, ...s.risingStars, ...s.declining, ...s.news, ...s.chase]);
+    const own = players || [], want = wishlist || [];
+    // Wishlist entries are full card descriptions ("2018 Topps Chrome Shohei
+    // Ohtani #150"). Nothing in a news line ever matches a string like that, so
+    // match on the PLAYER NAMES the client sends alongside them.
+    const wantNames = (wishlistNames || []).filter(Boolean);
+    const wantMatch = wantNames.length ? wantNames : want;
     // Ask about their players directly, and fold in anything the shared briefing
     // already said about them (free, and sometimes catches more). Skipped when the
     // shared briefing itself came back empty — that means the service is
     // struggling, and firing another call would only deepen the rate limiting.
     const mine = sections.length
-      ? await personalLines(target, players || [], wishlist || [], undefined)
+      ? await personalLines(target, players || [], wishlist || [], wantMatch, undefined)
       : { yourCards: [] as string[], yourWishlist: [] as string[] };
     const dedupe = (a: string[], b: string[]) => [...new Set([...a, ...b])].slice(0, 8);
     // A line only belongs under "In your binder" if it actually names something
     // in the binder. Without this last filter the model could hand back lines
     // about players the collector has never owned — and an empty binder could
     // still come back with a section full of strangers.
-    const own = players || [], want = wishlist || [];
     res.json({
       overview: shared.overview,
       yourCards: own.length ? linesMentioning(dedupe(mine.yourCards, linesMentioning(all, own)), own) : [],
-      yourWishlist: want.length ? linesMentioning(dedupe(mine.yourWishlist, linesMentioning(all, want)), want) : [],
+      yourWishlist: want.length ? linesMentioning(dedupe(mine.yourWishlist, linesMentioning(all, wantMatch)), wantMatch) : [],
       sections,
       gen: DIGEST_GEN_VERSION,
       ...(sections.length ? {} : { reason: lastDigestFailure || undefined }),

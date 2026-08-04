@@ -7,6 +7,7 @@ interface Props {
   settings: Settings;
   players: string[];
   wishlist: string[];
+  wishPlayers: string[]; // the players behind those wishlist cards, for matching
   cacheKey: string;
   collected: string[]; // categories the user actually collects (from their binder)
 }
@@ -94,7 +95,7 @@ function newestCached(arc: Archive, today: string): string {
   return keys.length ? keys[keys.length - 1] : today;
 }
 
-export default function DigestView({ settings, players, wishlist, cacheKey, collected }: Props) {
+export default function DigestView({ settings, players, wishlist, wishPlayers, cacheKey, collected }: Props) {
   // Personalize the briefing to what the collector actually owns: when their
   // binder has cards, only cover those categories (so a no-Pokémon collector
   // never gets an all-Pokémon briefing). Fall back to their chosen digest
@@ -122,8 +123,8 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
     setBusy(true);
     setError(null);
     const got = force
-      ? await regenerateDigest(cacheKey, target, sportsFollowed, players, wishlist, settings)
-      : await ensureDigest(cacheKey, target, sportsFollowed, players, wishlist, settings);
+      ? await regenerateDigest(cacheKey, target, sportsFollowed, players, wishlist, wishPlayers, settings)
+      : await ensureDigest(cacheKey, target, sportsFollowed, players, wishlist, wishPlayers, settings);
     setBusy(false);
     if (got) {
       refresh();
@@ -140,7 +141,7 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
     let alive = true;
     const nothingToShow = !readDigestArchive(cacheKey)[date]; // first-ever open
     if (nothingToShow) setBusy(true);
-    ensureDigest(cacheKey, today, sportsFollowed, players, wishlist, settings).then((got) => {
+    ensureDigest(cacheKey, today, sportsFollowed, players, wishlist, wishPlayers, settings).then((got) => {
       if (!alive) return;
       if (nothingToShow) setBusy(false);
       if (got) {
@@ -242,7 +243,7 @@ export default function DigestView({ settings, players, wishlist, cacheKey, coll
 
       {digest && wishlist.length > 0 && digest.yourWishlist.length > 0 && (
         <div className="card digest-yours">
-          <h3 style={{ marginTop: 0 }}>♡ {t("From your wishlist")}</h3>
+          <h3 style={{ marginTop: 0 }}>♡ {t("In your wishlist")}</h3>
           <ul className="digest-yours-list">{digest.yourWishlist.map((it, i) => <li key={i}>{it}</li>)}</ul>
         </div>
       )}

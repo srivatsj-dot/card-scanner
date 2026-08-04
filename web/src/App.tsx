@@ -378,6 +378,20 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
     () => Array.from(new Set(wishlist.map((w) => (w.result ? describeCard(w.result) : w.text)).filter(Boolean))),
     [wishlist]
   );
+  // The PLAYERS behind those wishlist cards. A description like "2018 Topps
+  // Chrome Shohei Ohtani #150" never appears in a news line, so the server needs
+  // the bare names to tell which stories are about cards you're chasing.
+  const digestWishPlayers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          wishlist
+            .map((w) => w.result?.player && `${w.result.player}${w.result.sport ? ` (${w.result.sport})` : ""}`)
+            .filter((x): x is string => Boolean(x))
+        )
+      ),
+    [wishlist]
+  );
   const [refreshing, setRefreshing] = useState(false);
   // "3 / 25" progress while refreshing, so a big binder never looks frozen.
   const [refreshProgress, setRefreshProgress] = useState<{ done: number; total: number } | null>(null);
@@ -1075,7 +1089,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       for (const day of days) {
         if (day < LAUNCH || day > today) continue;
         try {
-          await ensureDigest(DIGEST_KEY, day, settings.digestSports, digestPlayers, digestWishlist, aiSettings);
+          await ensureDigest(DIGEST_KEY, day, settings.digestSports, digestPlayers, digestWishlist, digestWishPlayers, aiSettings);
         } catch { /* keep going; missing days retry next load */ }
       }
     })();
@@ -1093,7 +1107,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
       const d = new Date();
       const pad = (n: number) => String(n).padStart(2, "0");
       const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-      ensureDigest(DIGEST_KEY, today, settings.digestSports, digestPlayers, digestWishlist, aiSettings);
+      ensureDigest(DIGEST_KEY, today, settings.digestSports, digestPlayers, digestWishlist, digestWishPlayers, aiSettings);
     }, ms);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1189,7 +1203,7 @@ function MainApp({ user, onRequestLogin, onLogout, onDeleteAccount }: { user: st
         </>
       )}
       {view === "today" && (
-        <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} cacheKey={DIGEST_KEY} collected={collectedCategories} />
+        <DigestView settings={aiSettings} players={digestPlayers} wishlist={digestWishlist} wishPlayers={digestWishPlayers} cacheKey={DIGEST_KEY} collected={collectedCategories} />
       )}
       {view === "scan" && (
         <ErrorBoundary>

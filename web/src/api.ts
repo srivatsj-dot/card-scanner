@@ -162,12 +162,14 @@ export function getDigest(
   sports: string[],
   players: string[],
   wishlist: string[],
+  /** Player names behind the wishlist cards, so news can be matched to them. */
+  wishlistNames: string[],
   settings: Settings,
   refresh = false
 ): Promise<DigestResult> {
   // `refresh` tells the server to throw away the cached briefing for that day
   // and write it again — the way out of a briefing that came back badly.
-  return postJson<DigestResult>("/api/digest", { date, sports, players, wishlist, settings, refresh });
+  return postJson<DigestResult>("/api/digest", { date, sports, players, wishlist, wishlistNames, settings, refresh });
 }
 
 /** Set-completion checklist: base-set size + the notable cards still missing. */

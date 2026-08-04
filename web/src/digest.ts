@@ -75,11 +75,11 @@ function write(cacheKey: string, date: string, digest: DigestResult) {
 }
 
 async function generate(
-  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[], settings: Settings,
-  refresh = false
+  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[],
+  wishPlayers: string[], settings: Settings, refresh = false
 ): Promise<DigestResult | null> {
   try {
-    const d = await getDigest(date, sports, players, wishlist, settings, refresh);
+    const d = await getDigest(date, sports, players, wishlist, wishPlayers, settings, refresh);
     const withTime = { ...d, generatedAt: Date.now(), __v: DIGEST_VERSION, __gen: (d as { gen?: string }).gen ?? serverGen ?? undefined };
     // Never downgrade a good briefing to a blank one: if this regeneration came
     // back empty but we already had real content cached, keep the good one (just
@@ -107,7 +107,8 @@ async function generate(
 
 /** Return the cached briefing for a date, generating it once if missing. */
 export function ensureDigest(
-  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[], settings: Settings
+  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[],
+  wishPlayers: string[], settings: Settings
 ): Promise<DigestResult | null> {
   const existing = readDigestArchive(cacheKey)[date];
   if (isFresh(existing) && hasContent(existing)) return Promise.resolve(existing);
@@ -118,19 +119,20 @@ export function ensureDigest(
   // re-render — one failed briefing shouldn't turn into a burst of retries.
   const failedAt = emptyAt.get(key);
   if (failedAt && Date.now() - failedAt < EMPTY_RETRY_MS) return Promise.resolve(existing || null);
-  const p = generate(cacheKey, date, sports, players, wishlist, settings).finally(() => inflight.delete(key));
+  const p = generate(cacheKey, date, sports, players, wishlist, wishPlayers, settings).finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
 }
 
 /** Force a fresh briefing for a date, overwriting any cached one. */
 export function regenerateDigest(
-  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[], settings: Settings
+  cacheKey: string, date: string, sports: string[], players: string[], wishlist: string[],
+  wishPlayers: string[], settings: Settings
 ): Promise<DigestResult | null> {
   const key = `${cacheKey}|${date}`;
   // Force the SERVER to rebuild too — otherwise it just hands back the same
   // cached briefing and nothing actually changes.
-  const p = generate(cacheKey, date, sports, players, wishlist, settings, true).finally(() => inflight.delete(key));
+  const p = generate(cacheKey, date, sports, players, wishlist, wishPlayers, settings, true).finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
 }
